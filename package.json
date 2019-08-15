@@ -1,0 +1,15 @@
+{
+  "name": "NodejsConsoleApp1",
+  "version": "0.0.0",
+  "description": "NodejsConsoleApp1",
+  "main": "app",
+  "author": {
+    "name": "Foz",
+    "email": ""
+  },
+  "dependencies": {
+    "coinbase-exchange": "^0.2.2",
+    "express": "^4.17.1",
+    "vue": "^2.6.10"
+  }
+}
