@@ -49,12 +49,47 @@
                     rounded-lg 
                     shadow-sm 
                 " role="alert">
-                    <p id="messageDisplay">No functionality yet. Coming soon.</p>
                 </div>
+                <p id="messageDisplay">No functionality yet. Coming soon.</p>
             </div>
         
         
         </div>
                 
     </body>
+    <script>
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const response = await fetch('https://messages.xefig.com/');
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch messages');
+        }
+        
+        const messages = await response.json();
+        
+        let html = '<div class="space-y-4">'; // Initialize container for messages
+        
+        messages.forEach(message => {
+            html += `
+                <div class="p-3 border rounded-lg">
+                    <strong>${message.name}</strong>
+                    <p class="mt-1">
+                    <small>${message.rating}</small>
+                    ${message.message}</p>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        document.getElementById('result').innerHTML = html;
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('result').innerHTML = `
+            <p class="text-red-500">Failed to load messages. Please try again later.</p>
+        `;
+    }
+});
+    </script>
 </html>
