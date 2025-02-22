@@ -5,57 +5,24 @@
 
     </head>
     <body>
-        <div class="relative grid min-h-screen grid-cols-[1fr_2.5rem_auto_2.5rem_1fr] grid-rows-[10px_auto_10px] bg-white text-gray-950 dark:bg-gray-950 dark:text-white">
-            <div class="col-start-3 row-start-2 flex max-w-lg flex-col ">
-                <!-- Form -->
-                <form id="myForm" class="w-full">
-                    <textarea
-                        id="message"
-                        name="message"
-                        rows="3"
-                        placeholder="Type your message here..."
-                        class="
-                            w-full 
-                            p-2 
-                            border 
-                            rounded-lg 
-                            shadow-sm 
-                            focus:outline-none 
-                            resize-y
-                        "
-                    ></textarea>
-        
-                    <button type="submit" class="
-                        bg-blue-500 
-                        hover:bg-blue-700 
-                        text-white 
-                        dark:bg-blue-950
-                        dark:text-gray-200
-                        font-bold 
-                        py-2 
-                        px-4 
-                        rounded 
-                        w-full 
-                        mt-4
-                    ">
-                        Send Message
-                    </button>
-                </form>
-        
-                <div id="result" class="
-                    mt-8
-                    p-4 
-                    border 
-                    rounded-lg 
-                    shadow-sm 
-                " role="alert">
-                </div>
-                <p id="messageDisplay">No functionality yet. Coming soon.</p>
+        <div class="flex h-screen w-full flex-col overflow-hidden bg-white text-gray-950 dark:bg-gray-950 dark:text-white text-sm">
+            <div class="mx-auto max-w-full p-8">
+              <!-- Input Section -->
+              <div class="mb-4 flex flex-wrap items-center gap-2 md:justify-between">
+                <input type="text" placeholder="Name" class="focus:blue-500 w-full rounded-lg border px-2 py-1 sm:w-32" />
+          
+                <input type="text" placeholder="Message" class="focus:blue-500 flex-1 rounded-lg border px-2 py-1" />
+          
+                <button class="w-full rounded-lg bg-blue-500 px-3 py-1.5 font-bold text-white transition-colors duration-300 hover:bg-blue-600 sm:w-20">Send</button>
+              </div>
+          
+              <div id="result" class="max-h-[calc(100vh-100px)] grow overflow-y-auto">
+                <!-- Messages Section -->
+              </div>
+                &nbsp;
             </div>
-        
-        
-        </div>
-                
+          </div>
+          
     </body>
     <script>
 document.addEventListener('DOMContentLoaded', async function() {
@@ -68,15 +35,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         const messages = await response.json();
         
-        let html = '<div class="space-y-4">'; // Initialize container for messages
+        let html = '<div class="space-y-2">'; // Initialize container for messages
         
         messages.forEach(message => {
             html += `
-                <div class="p-3 border rounded-lg">
+                <div class="flex items-start space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
                     <strong>${message.name}</strong>
-                    <p class="mt-1">
-                    <small>${message.rating}</small>
-                    ${message.message}</p>
+                    <p>${message.message}</p>
                 </div>
             `;
         });
