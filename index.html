@@ -13,6 +13,7 @@
               <!-- Input Section -->
               <form id="message-form">
               <div class="mb-4 flex flex-wrap items-center gap-2 md:justify-between">
+                <img src="images/xefig.png" alt="Xefig Logo" class="p-2" />
                 <input id="name" type="text" placeholder="Name" required class="focus:blue-500 w-full rounded-lg border px-2 py-1 sm:w-32" />
 
                 <input id="message" type="text" placeholder="Message" required class="focus:blue-500 flex-1 rounded-lg border px-2 py-1" />
@@ -38,14 +39,27 @@ const sendButton = document.getElementById('send-button');
 const resultDiv = document.getElementById('result');
 
 function renderMessages(messages) {
-
-let html = '<div class="space-y-2">'; // Initialize container for messages
+    let html = '<div class="space-y-2">'; // Initialize container for messages
     
+    // Function to escape HTML special characters
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')   // Escape &
+            .replace(/</g, '&lt;')    // Escape <
+            .replace(/>/g, '&gt;')    // Escape >
+            .replace(/"/g, '&quot;')  // Escape "
+            .replace(/'/g, '&#39;');  // Escape '
+    }
+
     messages.forEach(message => {
+        // Escape both name and message
+        const escapedName = escapeHtml(message.name);
+        const escapedMessage = escapeHtml(message.message);
+
         html += `
             <div class="flex items-start space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
-                <strong>${message.name}</strong>
-                <p>${message.message}</p>
+                <strong>${escapedName}</strong>
+                <p>${escapedMessage}</p>
             </div>
         `;
     });
@@ -54,6 +68,7 @@ let html = '<div class="space-y-2">'; // Initialize container for messages
     
     document.getElementById('result').innerHTML = html;
 }
+
 
 const sendMessage = () => {
 const name = nameInput.value.trim();
