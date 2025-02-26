@@ -75,6 +75,8 @@ const name = nameInput.value.trim();
 const message = messageInput.value.trim();
 
 if (name && message) {
+  localStorage.setItem('name', name); // Save the username in localStorage
+
 const jsonData = JSON.stringify({ name, message });
 fetch('https://message.xefig.com', {
   method: 'POST',
@@ -93,6 +95,12 @@ messageInput.value = '';
 
 document.addEventListener('DOMContentLoaded', async function() {
     try {
+      const savedUsername = localStorage.getItem('name'); // Retrieve saved username
+
+      if (savedUsername) {
+                document.getElementById('name').value = savedUsername; // Pre-fill the username input
+            }
+
         const response = await fetch('https://messages.xefig.com/');
 
         if (!response.ok) {
