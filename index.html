@@ -66,6 +66,8 @@
   const imageFile = document.getElementById('imageFile');
   const image = document.getElementById('image');
   const reloadMessages = document.getElementById('reloadMessages');
+
+  // Default group of xefig logo
   var group = 'd4c2cf3835d5b7942e254015fc566efedd1cb82c';
 
   function fetchMessages() {
@@ -165,7 +167,8 @@
         document.getElementById('name').value = savedUsername; // Pre-fill the username input
       }
 
-      setGroup();
+      // default group is set to xefig logo
+      fetchMessages();
 
     } catch (error) {
       console.error('Error:', error);
