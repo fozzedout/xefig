@@ -10,7 +10,7 @@
 
 <body>
   <div class="flex h-screen w-full flex-col overflow-hidden bg-white text-gray-950 dark:bg-gray-950 dark:text-white">
-    <div class="mx-auto min-w-full p-8">
+    <div class="mx-auto min-w-full px-2 sm:px-8 pt-2">
 
       <!-- Input Section -->
       <form id="message-form">
@@ -47,11 +47,10 @@
             class="w-full rounded-lg bg-blue-500 px-3 py-1.5 font-bold text-white transition-colors duration-300 hover:bg-blue-600 sm:w-20">Send</button>
         </div>
       </form>
-
-      <div id="result" class="sm:max-h-[calc(100vh-100px)] max-h-[calc(100vh-220px)] grow overflow-y-auto space-y-2">
-        <!-- Messages Section -->
-      </div>
-      &nbsp;
+    </div>
+      
+    <div id="result" class="flex-1 min-h-0 overflow-y-auto space-y-2 px-2 sm:px-8">
+      <!-- Messages Section -->
     </div>
   </div>
 
