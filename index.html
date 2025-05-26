@@ -17,20 +17,22 @@
         <div class="mb-4 flex flex-wrap items-center gap-2 md:justify-between">
 
           <div class="flex items-center justify-center">
-            <label for="imageFile" class="flex flex-row items-center justify-center w-16 h-8 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600">
-                    <svg width="16" height="16" class="w-3 h-3 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" fill="none" viewBox="0 0 20 16">
-                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
-                    </svg>
-                    <input
-                    type="file" 
-                    id="imageFile" 
-                    accept="image/*" 
-                    class="hidden" />
-                    <img id="image" src="" alt="Group" class="w-8 h-8" />
-            </label>
+            <div class="drop-zone flex flex-row items-center justify-center w-16 h-8 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600">
+                    <label for="imageFile" class="flex flex-row items-center justify-center w-full h-full">
+                        <svg width="16" height="16" class="w-3 h-3 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" fill="none" viewBox="0 0 20 16">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                        </svg>
+                        <input
+                        type="file" 
+                        id="imageFile" 
+                        accept="image/*" 
+                        class="hidden" />
+                        <img id="image" src="" alt="Group" class="w-8 h-8" />
+                    </label>
+            </div>
         </div>
 
-        <img src="images/xefig.png" alt="Xefig Logo" class="w-8 h-8" />
+        <img src="images/xefig.png" alt="Xefig Logo" class="w-8 h-8" draggable="true" />
 
         <svg id="reloadMessages" width="32" height="32" class="w-8 h-8 mr-2 text-gray-500 dark:text-gray-400 cursor-pointer rounded-lg bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M7.37756 11.6296H6.62756H7.37756ZM7.37756 12.5556L6.81609 13.0528C6.95137 13.2056 7.14306 13.2966 7.34695 13.3049C7.55084 13.3133 7.74932 13.2382 7.89662 13.0969L7.37756 12.5556ZM9.51905 11.5414C9.81805 11.2547 9.82804 10.7799 9.54137 10.4809C9.2547 10.182 8.77994 10.172 8.48095 10.4586L9.51905 11.5414ZM6.56148 10.5028C6.28686 10.1927 5.81286 10.1639 5.50277 10.4385C5.19267 10.7131 5.16391 11.1871 5.43852 11.4972L6.56148 10.5028ZM14.9317 9.0093C15.213 9.31337 15.6875 9.33184 15.9915 9.05055C16.2956 8.76927 16.3141 8.29476 16.0328 7.9907L14.9317 9.0093ZM12.0437 6.25C9.05802 6.25 6.62756 8.653 6.62756 11.6296H8.12756C8.12756 9.49251 9.87531 7.75 12.0437 7.75V6.25ZM6.62756 11.6296L6.62756 12.5556H8.12756L8.12756 11.6296H6.62756ZM7.89662 13.0969L9.51905 11.5414L8.48095 10.4586L6.85851 12.0142L7.89662 13.0969ZM7.93904 12.0583L6.56148 10.5028L5.43852 11.4972L6.81609 13.0528L7.93904 12.0583ZM16.0328 7.9907C15.0431 6.9209 13.6212 6.25 12.0437 6.25V7.75C13.1879 7.75 14.2154 8.23504 14.9317 9.0093L16.0328 7.9907Z" fill="currentcolor"/>
@@ -59,8 +61,8 @@
   </div>
 
 </body>
+<script src="xefig.js"></script>
 <script>
-
   const form = document.getElementById('message-form');
   const nameInput = document.getElementById('name');
   const messageInput = document.getElementById('message');
@@ -70,163 +72,103 @@
   const image = document.getElementById('image');
   const reloadMessages = document.getElementById('reloadMessages');
 
-  // Default group of xefig logo
-  var group = ''; //'d4c2cf3835d5b7942e254015fc566efedd1cb82c';
-
-  function fetchMessages() {
-    if (group === "" || group === "1ceaf73df40e531df3bfb26b4fb7cd95fb7bff1d") {
-      document.getElementById('result').innerHTML = `<p class="text-red-500">Invalid image group</p>`;
-      return;
-    }
-
-    fetch('https://messages.xefig.workers.dev?g=' + group)
-      .then((response) => response.json())
-      .then((data) => {
-        renderMessages(data);
-      })
-      .catch((error) => console.error(error));
-  }
-
-  function renderMessages(messages) {
-    let html = ''; // Initialize container for messages
-
-    // Function to escape HTML special characters
-    function escapeHtml(str) {
-      return str
-        .replace(/&/g, '&amp;')   // Escape &
-        .replace(/</g, '&lt;')    // Escape <
-        .replace(/>/g, '&gt;')    // Escape >
-        .replace(/"/g, '&quot;')  // Escape "
-        .replace(/'/g, '&#39;');  // Escape '
-    }
-
-    messages.forEach(message => {
-      // Escape both name and message
-      const escapedName = escapeHtml(message.name);
-      const escapedMessage = escapeHtml(message.message);
-
-      html += `
-            <div class="flex items-start space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
-                <strong>${escapedName}</strong>
-                <p>${escapedMessage}</p>
-            </div>
-        `;
-    });
-
-    document.getElementById('result').innerHTML = html;
-  }
-
-  async function hash(sourceBytes) {
-    const digest = await crypto.subtle.digest("SHA-1", sourceBytes);
-    const resultBytes = [...new Uint8Array(digest)];
-    return resultBytes.map(x => x.toString(16).padStart(2, '0')).join("");
-}
-
-  const sendMessage = () => {
-    if (group === "" || group === "1ceaf73df40e531df3bfb26b4fb7cd95fb7bff1d") {
-      document.getElementById('result').innerHTML = `<p class="text-red-500">Invalid image group</p>`;
-      return;
-    }
-
-    const name = nameInput.value.trim();
-    const message = messageInput.value.trim();
-
-    if (name && message) {
-      localStorage.setItem('name', name); // Save the username in localStorage
-
-      const jsonData = JSON.stringify({ name, message });
-      fetch('https://messages.xefig.workers.dev?g=' + group, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonData,
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          renderMessages(data);
-        })
-        .catch((error) => console.error(error));
-
-      messageInput.value = '';
-    }
-  };
-
-  function setGroup() {
-    var image = document.getElementById("image");
-
-    const canvas = document.createElement('canvas');
-    var ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-    // Set canvas dimensions matching the image
-    canvas.width = image.width;
-    canvas.height = image.height;
-
-    // Draw the image on the canvas
-    ctx.drawImage(image, 0, 0);
-
-    // Get the image data (returns an ImageData object)
-    var imgData = ctx.getImageData(0, 0, image.width, image.height);
-
-    hash(imgData.data)
-      .then((hash) => group = hash)
-      .then(() => fetchMessages() );
-
-  }
-
-  document.addEventListener('DOMContentLoaded', async function () {
-    try {
-      const savedUsername = localStorage.getItem('name'); // Retrieve saved username
-
-      if (savedUsername) {
-        document.getElementById('name').value = savedUsername; // Pre-fill the username input
-      }
-
-    } catch (error) {
-      console.error('Error:', error);
-      document.getElementById('result').innerHTML = `
-            <p class="text-red-500">Failed to load messages. Please try again later.</p>
-        `;
-    }
-  });
-
-  image.addEventListener('load', () => {
-      setGroup();
+  image.addEventListener('load', async () => {
+    await setGroupFromImage(image);
+    fetchMessages('result');
   });
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    sendMessage();
+    sendMessage(nameInput.value.trim(), messageInput.value.trim(), 'result');
+    messageInput.value = '';
   });
 
   messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      sendMessage();
+      e.preventDefault();
+      sendMessage(nameInput.value.trim(), messageInput.value.trim(), 'result');
+      messageInput.value = '';
     }
   });
 
-  sendButton.addEventListener('click', () => {
-    sendMessage();
-  });
+  function handleDrop(event) {
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        var image = document.getElementById("image");
+        image.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
 
   imageFile.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        var reader = new FileReader();
-  
-        reader.onload = function (e) {
-          var image = document.getElementById("image");
-          image.src = e.target.result;
-
-          setGroup();
-        };
-
-        reader.readAsDataURL(e.target.files[0]);
-      }
+    if (e.target.files && e.target.files[0]) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var image = document.getElementById("image");
+        image.src = e.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
   });
 
   reloadMessages.addEventListener('click', () => {
-    fetchMessages();
+    fetchMessages('result');
   });
 
+  document.addEventListener('DOMContentLoaded', async function () {
+    try {
+      const savedUsername = localStorage.getItem('name');
+      if (savedUsername) {
+        document.getElementById('name').value = savedUsername;
+      }
 
+      document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, false);
+
+      document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }, false);
+
+      const dropZone = document.querySelector('.drop-zone');
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('border-blue-500');
+        return false;
+      }, false);
+
+      dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-blue-500');
+        return false;
+      }, false);
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-blue-500');
+        handleDrop(e);
+        return false;
+      }, false);
+
+      setInterval(() => fetchMessages('result'), 30000);
+
+    } catch (error) {
+      console.error('Error:', error);
+      document.getElementById('result').innerHTML = `
+        <p class="text-red-500">Failed to load messages. Please try again later.</p>
+      `;
+    }
+  });
 </script>
 
 </html>
