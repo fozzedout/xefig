@@ -160,7 +160,48 @@
         return false;
       }, false);
 
-      setInterval(() => fetchMessages('result'), 30000);
+      let pollInterval;
+      let inactivityTimeout;
+      const INACTIVITY_DELAY = 5 * 60 * 1000; // 5 minutes
+      const POLL_INTERVAL = 30000; // 30 seconds
+
+      function startPolling() {
+        if (!pollInterval) {
+          pollInterval = setInterval(() => fetchMessages('result'), POLL_INTERVAL);
+        }
+      }
+
+      function stopPolling() {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      }
+
+      function resetInactivityTimer() {
+        if (inactivityTimeout) {
+          clearTimeout(inactivityTimeout);
+        }
+        inactivityTimeout = setTimeout(() => {
+          stopPolling();
+        }, INACTIVITY_DELAY);
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          stopPolling();
+        } else {
+          startPolling();
+          resetInactivityTimer();
+        }
+      });
+
+      document.addEventListener('mousemove', resetInactivityTimer);
+      document.addEventListener('keypress', resetInactivityTimer);
+      document.addEventListener('click', resetInactivityTimer);
+
+      startPolling();
+      resetInactivityTimer();
 
     } catch (error) {
       console.error('Error:', error);
