@@ -267,4 +267,14 @@ async function vote(id, direction) {
   } catch (error) {
     console.error('Vote error:', error);
   }
-} 
+}
+
+image.addEventListener('load', async () => {
+  lastMessageId = 0;
+  await setGroupFromImage(image);
+});
+
+reloadMessages.addEventListener('click', () => {
+  lastMessageId = 0;
+  fetchMessages('result');
+}); 
