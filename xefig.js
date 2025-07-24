@@ -100,7 +100,7 @@ function linkify(text) {
   // This regex matches http/https links
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   return text.replace(urlRegex, url =>
-  `<a href="${url}" class="text-blue-600 underline" target="_blank" rel="noopener noreferrer">${url}</a>`
+  `<a href="${url}" class="text-blue-700 dark:text-blue-300 underline" target="_blank" rel="noopener noreferrer">${url}</a>`
   );
 }
 
