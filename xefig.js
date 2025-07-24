@@ -96,6 +96,14 @@ async function setGroupFromImage(image) {
   return group;
 }
 
+function linkify(text) {
+  // This regex matches http/https links
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.replace(urlRegex, url =>
+  `<a href="${url}" class="text-blue-600 underline" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return str
@@ -112,7 +120,7 @@ function renderMessages(messages, containerId) {
 
   messages.forEach(message => {
     const escapedName = escapeHtml(message?.name);
-    const escapedMessage = escapeHtml(message?.message);
+    const escapedMessage = linkify(escapeHtml(message?.message));
     const rating = message?.rating || 0;
     const id = message?.id;
     console.log('Message:', { id, rating, name: message?.name, message: message?.message });
@@ -198,7 +206,7 @@ async function fetchMessages(containerId) {
       const newMessages = decryptedMessages.map(msg => `
       <div class="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
       <strong>${escapeHtml(msg.name)}:</strong>
-      <p class="flex-1">${escapeHtml(msg.message)}</p>
+      <p class="flex-1">${linkify(escapeHtml(msg.message))}</p>
       ${
         msg.rating <= 100
         ? `<div class="flex items-center space-x-1">
