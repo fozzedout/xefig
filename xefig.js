@@ -121,19 +121,23 @@ function renderMessages(messages, containerId) {
       <div class="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
         <strong>${escapedName}:</strong>
         <p class="flex-1">${escapedMessage}</p>
-        <div class="flex items-center space-x-1">
+        ${
+          rating <= 100
+          ? `<div class="flex items-center space-x-1">
           <button onclick="vote('${id}', 'up')" class="text-gray-500 hover:text-blue-500 p-1">
-            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-            </svg>
+          <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
           </button>
           <span class="text-sm">${rating}</span>
           <button onclick="vote('${id}', 'down')" class="text-gray-500 hover:text-blue-500 p-1">
-            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
+          <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
           </button>
-        </div>
+          </div>`
+          : ''
+        }
       </div>
     `;
   });
@@ -192,24 +196,29 @@ async function fetchMessages(containerId) {
     } else {
       const existingMessages = document.getElementById(containerId).innerHTML;
       const newMessages = decryptedMessages.map(msg => `
-        <div class="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
-          <strong>${escapeHtml(msg.name)}:</strong>
-          <p class="flex-1">${escapeHtml(msg.message)}</p>
-          <div class="flex items-center space-x-1">
-            <button onclick="vote('${msg.id}', 'up')" class="text-gray-500 hover:text-blue-500 p-1">
-              <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-              </svg>
-            </button>
-            <span class="text-sm">${msg.rating}</span>
-            <button onclick="vote('${msg.id}', 'down')" class="text-gray-500 hover:text-blue-500 p-1">
-              <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+      <div class="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
+      <strong>${escapeHtml(msg.name)}:</strong>
+      <p class="flex-1">${escapeHtml(msg.message)}</p>
+      ${
+        msg.rating <= 100
+        ? `<div class="flex items-center space-x-1">
+        <button onclick="vote('${msg.id}', 'up')" class="text-gray-500 hover:text-blue-500 p-1">
+        <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+        </svg>
+        </button>
+        <span class="text-sm">${msg.rating}</span>
+        <button onclick="vote('${msg.id}', 'down')" class="text-gray-500 hover:text-blue-500 p-1">
+        <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+        </button>
+        </div>`
+        : ''
+      }
+      </div>
       `).join('');
+
       document.getElementById(containerId).innerHTML = newMessages + existingMessages;
     }
   } catch (error) {
