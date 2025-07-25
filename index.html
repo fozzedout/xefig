@@ -130,10 +130,6 @@
     }
   });
 
-  reloadMessages.addEventListener('click', () => {
-    fetchMessages('result');
-  });
-
   document.addEventListener('DOMContentLoaded', async function () {
     try {
       const savedUsername = localStorage.getItem('name');
