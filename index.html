@@ -46,6 +46,7 @@
                         class="hidden" />
                         <img id="image" src="" alt="Group" class="w-8 h-8" />
                     </label>
+                    <button id="set-group-btn" class="mt-2 px-3 py-1 rounded bg-blue-500 text-white">Set Group</button>
             </div>
         </div>
 
@@ -151,6 +152,11 @@
       };
       reader.readAsDataURL(e.target.files[0]);
     }
+  });
+
+    document.getElementById('set-group-btn').addEventListener('click', async () => {
+    await setGroupFromImage(document.getElementById('image'));
+    fetchMessages('result');
   });
 
 
