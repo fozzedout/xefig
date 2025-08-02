@@ -92,8 +92,10 @@ function testCanvasExtraction(img) {
     canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
-    // Try to extract data
-    canvas.toDataURL();
+    var rv = canvas.toDataURL();
+    // Check for 1x1 transparent PNG
+    const blank = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2bYAAAAASUVORK5CYII=";
+    if (rv === blank) return false;
     return true;
   } catch (e) {
     return false;
