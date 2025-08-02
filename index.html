@@ -18,11 +18,12 @@
 
     <!-- Sidebar: a scrollable column of icons/images -->
     <aside class="flex flex-col items-center p-2 space-y-2 bg-gray-100 dark:bg-gray-900 overflow-y-auto">
-      <button id="set-group-btn" class="mt-2 px-1 py-1 rounded bg-blue-500 text-white">Set</button>
+      <button id="set-group-btn" class="hidden mt-2 px-2 py-1 rounded bg-blue-500 text-white">Set</button>
       <!-- Example images – add as many as you need -->
       <img src="images/xefig.png" alt="Xefig Logo" class="w-8 h-8 sidebar-img" draggable="true" />
       <img src="images/links.png" alt="Links" class="w-8 h-8 sidebar-img" draggable="true"/>
       <img src="images/onion.png" alt="Links" class="w-8 h-8 sidebar-img" draggable="true"/>
+      <img src="images/i2p.png" alt="Links" class="w-8 h-8 sidebar-img" draggable="true"/>
       <!-- … -->
     </aside>
 
@@ -84,34 +85,50 @@
 <script src="xefig.js"></script>
 <script>
 
-  function handleDrop(event) {
-    const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const image = document.getElementById("image");
-        image.src = e.target.result;
-
-        reloadMessages.classList.remove("hidden");
-        nameInput.classList.remove("hidden");
-        messageInput.classList.remove("hidden");
-        sendButton.classList.remove("hidden");
-      };
-      reader.readAsDataURL(file);
-    }
+function testCanvasExtraction(img) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    // Try to extract data
+    canvas.toDataURL();
+    return true;
+  } catch (e) {
+    return false;
   }
+}
 
-  // Add this after your other DOMContentLoaded logic
-  document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('message-form');
-    const nameInput = document.getElementById('name');
-    const messageInput = document.getElementById('message');
-    const sendButton = document.getElementById('send-button');
-    const resultDiv = document.getElementById('result');
-    const imageFile = document.getElementById('imageFile');
-    const image = document.getElementById('image');
-    const reloadMessages = document.getElementById('reloadMessages');
-    const sidebarImages = document.querySelectorAll('.sidebar-img');
+function handleDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const image = document.getElementById("image");
+      image.src = e.target.result;
+
+      reloadMessages.classList.remove("hidden");
+      nameInput.classList.remove("hidden");
+      messageInput.classList.remove("hidden");
+      sendButton.classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+// Add this after your other DOMContentLoaded logic
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('message-form');
+  const nameInput = document.getElementById('name');
+  const messageInput = document.getElementById('message');
+  const sendButton = document.getElementById('send-button');
+  const resultDiv = document.getElementById('result');
+  const imageFile = document.getElementById('imageFile');
+  const image = document.getElementById('image');
+  const reloadMessages = document.getElementById('reloadMessages');
+  const sidebarImages = document.querySelectorAll('.sidebar-img');
+  const setGroupBtn = document.getElementById('set-group-btn');
 
     sidebarImages.forEach(img => {
       img.addEventListener('click', function () {
@@ -123,11 +140,23 @@
       });
     });
 
-
-  image.addEventListener('load', async () => {
+  setGroupBtn.addEventListener('click', async () => {
     await setGroupFromImage(image);
     fetchMessages('result');
+    setGroupBtn.classList.add('hidden');
   });
+
+
+  image.addEventListener('load', async () => {
+    // Try canvas extraction
+    if (testCanvasExtraction(image)) {
+      setGroupBtn.classList.add('hidden');
+      await setGroupFromImage(image);
+      fetchMessages('result');
+    } else {
+      setGroupBtn.classList.remove('hidden');
+    }
+    });
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -154,10 +183,6 @@
     }
   });
 
-    document.getElementById('set-group-btn').addEventListener('click', async () => {
-    await setGroupFromImage(document.getElementById('image'));
-    fetchMessages('result');
-  });
 
 
     try {
