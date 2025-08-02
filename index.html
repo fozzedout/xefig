@@ -93,8 +93,8 @@ function testCanvasExtraction(img) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     var rv = canvas.toDataURL();
-    // Check for 1x1 transparent PNG
-    const blank = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2bYAAAAASUVORK5CYII=";
+    // Check for blank PNG
+    const blank = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAW0lEQVRYR2P0jHK+f0mNe3a79eRtAR8Ox/1Z2GCq9vX340S1vYx3NZxbv59W2UxLecZRB4yGwGgIjIbAaAiMhsBoCIyGwGgIjIbAaAiMhsBoCIyGwGgIDHQIAAAi+mYZengj3AAAAABJRU5ErkJggg==";
     if (rv === blank) return false;
     return true;
   } catch (e) {
