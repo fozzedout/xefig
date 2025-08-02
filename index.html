@@ -148,13 +148,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
   image.addEventListener('load', async () => {
+    // Always show the button first
+  setGroupBtn.classList.remove('hidden');
+
     // Try canvas extraction
     if (testCanvasExtraction(image)) {
       setGroupBtn.classList.add('hidden');
       await setGroupFromImage(image);
       fetchMessages('result');
-    } else {
-      setGroupBtn.classList.remove('hidden');
     }
     });
 
