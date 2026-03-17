@@ -1,0 +1,22 @@
+{
+  "name": "xefig",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm run build:web && wrangler dev --config wrangler.toml",
+    "build:web": "npm --prefix ../web run build",
+    "deploy:dry": "npm run build:web && wrangler deploy --dry-run --config wrangler.toml",
+    "deploy": "npm run build:web && wrangler deploy --config wrangler.toml",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "wrangler": "^4.74.0"
+  },
+  "dependencies": {
+    "hono": "^4.12.8"
+  }
+}

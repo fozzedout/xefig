@@ -1,0 +1,23 @@
+name = "xefig"
+main = "src/index.ts"
+compatibility_date = "2024-03-15"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "../web/dist"
+binding = "STATIC_ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"
+
+[[r2_buckets]]
+binding = "assets"
+bucket_name = "assets"
+
+[[kv_namespaces]]
+binding = "metadata"
+id = "2e5bd934d9304ca69fa36a71e5ea1a25"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily_puzzles"
+database_id = "d15bf548-6546-4a58-9d90-a1697b19af08"

@@ -1,1 +1,7 @@
+node_modules/
+.wrangler/
+apps/*/.wrangler/
+apps/*/dist/
+apps/*/node_modules/
+*.log
 .DS_Store
