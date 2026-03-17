@@ -659,14 +659,16 @@ export class JigsawPuzzle {
       return
     }
 
-    if (drop.distance <= this.snapDistance) {
+    const clamped = this.clampBoardPosition(drop.boardX, drop.boardY)
+    const clampedDistance = Math.hypot(clamped.x - piece.targetX, clamped.y - piece.targetY)
+
+    if (clampedDistance <= this.snapDistance) {
       piece.x = piece.targetX
       piece.y = piece.targetY
       this.mountPieceOnBoard(piece, { locked: true })
       this.playSnapSound()
       this.checkCompletion()
     } else {
-      const clamped = this.clampBoardPosition(drop.boardX, drop.boardY)
       piece.x = clamped.x
       piece.y = clamped.y
       this.mountPieceOnBoard(piece, { locked: false })

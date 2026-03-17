@@ -122,9 +122,10 @@ h1 {
 }
 
 .game-shell {
+  height: 100%;
   min-height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.45rem;
   padding: 0.45rem;
 }
@@ -215,6 +216,7 @@ h1 {
   height: 100%;
   min-height: 0;
   display: grid;
+  overflow: hidden;
 }
 
 .puzzle-mount {
@@ -222,6 +224,7 @@ h1 {
   min-height: 0;
   display: grid;
   align-content: stretch;
+  overflow: hidden;
 }
 
 .jigsaw-root {
@@ -393,14 +396,14 @@ h1 {
     height: 100%;
     min-height: 0;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: scroll;
     touch-action: pan-y;
   }
 
   .jigsaw-carousel-track {
     flex-direction: column;
     align-items: center;
-    min-height: min-content;
+    height: max-content;
     gap: 0.3rem;
   }
 }
