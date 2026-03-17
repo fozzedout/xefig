@@ -315,9 +315,11 @@ h1 {
 .jigsaw-carousel {
   border-top: 1px solid var(--line);
   padding-top: 0.4rem;
+  min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
   touch-action: pan-x;
+  overscroll-behavior: contain;
 }
 
 .jigsaw-carousel-track {
@@ -388,14 +390,17 @@ h1 {
     padding-top: 0;
     padding-left: 0.45rem;
     padding-right: 0.15rem;
+    height: 100%;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    touch-action: pan-y;
   }
 
   .jigsaw-carousel-track {
     flex-direction: column;
     align-items: center;
-    min-height: 100%;
+    min-height: min-content;
     gap: 0.3rem;
   }
 }

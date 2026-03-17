@@ -43,6 +43,7 @@ export class JigsawPuzzle {
     this.handleStagePointerDown = (event) => this.onStagePointerDown(event)
     this.handleStagePointerMove = (event) => this.onStagePointerMove(event)
     this.handleStagePointerUp = (event) => this.onStagePointerUp(event)
+    this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
   }
 
   async init() {
@@ -72,6 +73,9 @@ export class JigsawPuzzle {
       this.stage.removeEventListener('pointermove', this.handleStagePointerMove)
       this.stage.removeEventListener('pointerup', this.handleStagePointerUp)
       this.stage.removeEventListener('pointercancel', this.handleStagePointerUp)
+    }
+    if (this.carousel) {
+      this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
     }
 
     if (this.pieces?.length) {
@@ -176,6 +180,7 @@ export class JigsawPuzzle {
     this.stage.addEventListener('pointermove', this.handleStagePointerMove)
     this.stage.addEventListener('pointerup', this.handleStagePointerUp)
     this.stage.addEventListener('pointercancel', this.handleStagePointerUp)
+    this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
   }
 
   calculateBoardSize() {
@@ -867,6 +872,26 @@ export class JigsawPuzzle {
     if (this.stageContent) {
       this.updateStageTransform()
     }
+  }
+
+  onCarouselWheel(event) {
+    if (!this.isLandscapeDesktop() || !this.carousel) {
+      return
+    }
+
+    if (this.carousel.scrollHeight <= this.carousel.clientHeight) {
+      return
+    }
+
+    const delta =
+      Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (!delta) {
+      return
+    }
+
+    this.carousel.scrollTop += delta
+    event.preventDefault()
+    event.stopPropagation()
   }
 
   setReferenceVisible(visible) {
