@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-03-15"
 compatibility_flags = ["nodejs_compat"]
 
+[[routes]]
+pattern = "xefig.com"
+custom_domain = true
+
 [assets]
 directory = "../web/dist"
 binding = "STATIC_ASSETS"

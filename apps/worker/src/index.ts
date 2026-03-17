@@ -183,7 +183,7 @@ const DESCRIPTOR_POOL = [
   'fresh snowfall powder',
   'stormy ocean spray',
   'tranquil lake mirror',
-  'puzzle-friendly object spacing',
+  'clear object spacing',
   'distinct color zoning',
   'strong landmark anchors',
   'visually varied sub-regions',
@@ -205,7 +205,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
     composition:
       'Use a wide scene with layered depth and many distinct local details spread across the full frame.',
     qualityTarget:
-      'Favor rich texture variety and many recognizable sub-regions so pieces feel unique while assembling.',
+      'Favor rich texture variety and many recognizable sub-regions with strong visual distinction.',
   },
   slider: {
     title: 'Slider',
@@ -217,16 +217,16 @@ const CATEGORY_PROMPT_INTENTS: Record<
   swap: {
     title: 'Swap',
     composition:
-      'Use segmented visual zones with clear boundaries, varied objects, and crisp separation between neighboring areas.',
+      'Use one unified scene with distinct in-scene regions, varied objects, and crisp separation between neighboring areas while keeping a continuous environment.',
     qualityTarget:
-      'Favor high local contrast and tile-friendly regions so swaps are noticeable without looking noisy.',
+      'Favor high local contrast and clear region boundaries without creating split panels or collage-style layouts.',
   },
   polygram: {
     title: 'Polygram',
     composition:
       'Use bold large silhouettes, simple shape clusters, and clear figure-ground separation.',
     qualityTarget:
-      'Favor readable geometry and strong contour language for shape-based puzzle solving.',
+      'Favor readable geometry and strong contour language for shape-based recognition.',
   },
 }
 
@@ -701,7 +701,7 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
 
   const jigsawDescriptors = descriptorsByCategory.jigsaw
   const keywords = [...usedInPack].slice(0, 12)
-  const themeSubject = jigsawDescriptors[0] ?? 'daily puzzle'
+  const themeSubject = jigsawDescriptors[0] ?? 'daily scene'
   const themeColor = jigsawDescriptors[1] ?? 'wide variety'
   const themeName = `${capitalizeWords(themeSubject)} - ${capitalizeWords(themeColor)}`
 
