@@ -33,6 +33,13 @@ function getIsoDate(value) {
   return value.toISOString().slice(0, 10)
 }
 
+function getInteractionHint() {
+  const isLandscapeDesktop = window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
+  return isLandscapeDesktop
+    ? 'Scroll the right tray and drag pieces onto the board.'
+    : 'Swipe tray left/right. Drag up on a piece to pick it up.'
+}
+
 function renderLauncher() {
   destroyPuzzle()
 
@@ -171,6 +178,8 @@ function renderGame() {
           <span>Back</span>
         </button>
 
+        <p id="status" class="status toolbar-status">Loading puzzle...</p>
+
         <div class="toolbar-actions">
           <button id="view-btn" class="toolbar-btn icon-btn" type="button" aria-label="Toggle reference image" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -180,8 +189,6 @@ function renderGame() {
           <button id="reset-view-btn" class="toolbar-btn" type="button">Reset View</button>
         </div>
       </header>
-
-      <p id="status" class="status">Loading puzzle...</p>
 
       <section class="workspace">
         <div id="puzzle-mount" class="puzzle-mount"></div>
@@ -197,7 +204,7 @@ function renderGame() {
 
   const setStatus = (message, variant = '') => {
     statusEl.textContent = message
-    statusEl.className = `status ${variant}`.trim()
+    statusEl.className = `status toolbar-status ${variant}`.trim()
   }
 
   backBtn.addEventListener('click', () => {
@@ -233,7 +240,7 @@ function renderGame() {
       const puzzleLabel = state.puzzle
         ? `${state.puzzle.date} · ${state.puzzle.theme}`
         : 'Puzzle ready'
-      setStatus(`${puzzleLabel}. Swipe carousel left/right. Drag up on a piece to pick it up.`, 'ok')
+      setStatus(`${puzzleLabel}. ${getInteractionHint()}`, 'ok')
     } catch (error) {
       console.error(error)
       setStatus('Failed to load puzzle image.', 'error')

@@ -6,6 +6,8 @@ const DIFFICULTY_TO_GRID = {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+const MIN_BOARD_RATIO = 9 / 16
+const MAX_BOARD_RATIO = 16 / 10
 
 export class JigsawPuzzle {
   constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete }) {
@@ -105,9 +107,10 @@ export class JigsawPuzzle {
   }
 
   setupLayout() {
-    const { width, height } = this.calculateBoardSize()
+    const { width, height, crop } = this.calculateBoardSize()
     this.boardWidth = width
     this.boardHeight = height
+    this.imageCrop = crop
 
     this.pieceWidth = this.boardWidth / this.cols
     this.pieceHeight = this.boardHeight / this.rows
@@ -117,7 +120,8 @@ export class JigsawPuzzle {
     this.pieceCanvasHeight = Math.ceil(this.pieceHeight + this.bleed * 2)
 
     const maxPieceDimension = Math.max(this.pieceCanvasWidth, this.pieceCanvasHeight)
-    this.carouselScale = Math.min(1, 92 / maxPieceDimension)
+    const trayPieceTarget = this.isLandscapeDesktop() ? 112 : 92
+    this.carouselScale = Math.min(1, trayPieceTarget / maxPieceDimension)
 
     this.root = document.createElement('section')
     this.root.className = 'jigsaw-root'
@@ -175,23 +179,57 @@ export class JigsawPuzzle {
   }
 
   calculateBoardSize() {
-    const availableWidth = Math.max(280, this.container.clientWidth || window.innerWidth - 16)
-    const maxWidth = Math.min(availableWidth, 980)
-    const maxHeight = Math.min(window.innerHeight * 0.58, 760)
-    const imageRatio = this.image.width / this.image.height
+    const isLandscapeDesktop = this.isLandscapeDesktop()
+    const containerWidth = this.container.clientWidth || window.innerWidth - 16
+    const containerHeight = this.container.clientHeight || window.innerHeight
+    const sideTrayReserve = isLandscapeDesktop ? 152 : 0
+    const bottomTrayReserve = isLandscapeDesktop ? 0 : window.innerWidth <= 640 ? 142 : 122
+
+    const availableWidth = Math.max(280, containerWidth - sideTrayReserve)
+    const availableHeight = Math.max(220, containerHeight - bottomTrayReserve)
+    const maxWidth = Math.min(availableWidth, isLandscapeDesktop ? 1560 : 1100)
+    const maxHeight = Math.min(availableHeight, isLandscapeDesktop ? 980 : 760)
+    const desiredRatio = clamp(maxWidth / maxHeight, MIN_BOARD_RATIO, MAX_BOARD_RATIO)
 
     let width = maxWidth
-    let height = Math.round(width / imageRatio)
-
+    let height = Math.round(width / desiredRatio)
     if (height > maxHeight) {
       height = Math.round(maxHeight)
-      width = Math.round(height * imageRatio)
+      width = Math.round(height * desiredRatio)
     }
 
+    width = Math.max(260, width)
+    height = Math.max(200, height)
+
     return {
-      width: Math.max(260, width),
-      height: Math.max(200, height),
+      width,
+      height,
+      crop: this.calculateImageCrop(width / height),
     }
+  }
+
+  isLandscapeDesktop() {
+    return window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
+  }
+
+  calculateImageCrop(targetRatio) {
+    const sourceWidth = this.image.width
+    const sourceHeight = this.image.height
+    const sourceRatio = sourceWidth / sourceHeight
+
+    if (sourceRatio > targetRatio) {
+      const width = Math.round(sourceHeight * targetRatio)
+      const x = Math.round((sourceWidth - width) / 2)
+      return { x, y: 0, width, height: sourceHeight }
+    }
+
+    if (sourceRatio < targetRatio) {
+      const height = Math.round(sourceWidth / targetRatio)
+      const y = Math.round((sourceHeight - height) / 2)
+      return { x: 0, y, width: sourceWidth, height }
+    }
+
+    return { x: 0, y: 0, width: sourceWidth, height: sourceHeight }
   }
 
   generateEdgeMaps() {
@@ -376,11 +414,16 @@ export class JigsawPuzzle {
     const ctx = piece.canvas.getContext('2d')
     const piecePath = new Path2D(piece.pathData)
     ctx.clearRect(0, 0, piece.canvas.width, piece.canvas.height)
+    const crop = this.imageCrop
 
     ctx.save()
     ctx.clip(piecePath)
     ctx.drawImage(
       this.image,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
       -piece.col * this.pieceWidth + this.bleed,
       -piece.row * this.pieceHeight + this.bleed,
       this.boardWidth,
@@ -406,7 +449,18 @@ export class JigsawPuzzle {
     const ctx = this.ghostCanvas.getContext('2d')
     ctx.clearRect(0, 0, this.boardWidth, this.boardHeight)
     ctx.globalAlpha = 0.1
-    ctx.drawImage(this.image, 0, 0, this.boardWidth, this.boardHeight)
+    const crop = this.imageCrop
+    ctx.drawImage(
+      this.image,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      0,
+      0,
+      this.boardWidth,
+      this.boardHeight,
+    )
     ctx.globalAlpha = 1
   }
 
