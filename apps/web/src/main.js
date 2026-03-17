@@ -129,7 +129,7 @@ function renderLauncher() {
       state.imageUrl = resolveAssetUrl(payload.categories?.jigsaw?.imageUrl)
 
       previewImage.src = state.imageUrl
-      previewMeta.textContent = `${payload.date} · ${payload.theme} · ${payload.difficulty}`
+      previewMeta.textContent = `${payload.date} · ${payload.theme}`
       startBtn.disabled = false
     } catch (error) {
       if (currentRequest !== requestId) {

@@ -23,6 +23,7 @@ type PuzzleAsset = {
 type PuzzleRecord = {
   date: string
   theme: string
+  tags: string[]
   difficulty: string
   categories: Record<PuzzleCategory, PuzzleAsset>
   createdAt: string
@@ -304,8 +305,7 @@ app.post('/api/admin/puzzles', async (c) => {
     }
 
     const date = getStringField(body.date)?.trim()
-    const providedTheme = getStringField(body.theme)?.trim()
-    const difficulty = getStringField(body.difficulty)?.trim()
+    const providedTags = parseTagList(getStringField(body.tags))
 
     if (!date || !isValidDateKey(date)) {
       return c.json({ error: 'Date is required in YYYY-MM-DD format.' }, 400)
@@ -316,19 +316,18 @@ app.post('/api/admin/puzzles', async (c) => {
     }
 
     let generatedPack: PromptPack | null = null
-    let theme = providedTheme ?? ''
-    if (!theme) {
+    let tags = providedTags
+    if (tags.length === 0) {
       const packs = await generatePromptPacks(c.env.metadata, 1)
       generatedPack = packs[0] ?? null
-      theme = generatedPack?.themeName ?? ''
+      tags = normalizeTags(generatedPack?.keywords ?? [])
     }
-    if (!theme) {
-      return c.json({ error: 'Unable to generate a theme name.' }, 500)
+    if (tags.length === 0) {
+      return c.json({ error: 'Unable to determine puzzle tags.' }, 500)
     }
+    const theme = generatedPack?.themeName ?? formatThemeFromTags(tags)
 
-    if (!difficulty) {
-      return c.json({ error: 'Difficulty Level is required.' }, 400)
-    }
+    const difficulty = 'adaptive'
 
     const existing = await getPuzzleByDate(c.env.metadata, date)
     const nextCategories = {} as Record<PuzzleCategory, PuzzleAsset>
@@ -368,6 +367,7 @@ app.post('/api/admin/puzzles', async (c) => {
     const record: PuzzleRecord = {
       date,
       theme,
+      tags,
       difficulty,
       categories: nextCategories,
       createdAt: existing?.createdAt ?? now,
@@ -393,9 +393,9 @@ app.post('/api/admin/prompts/generate', async (c) => {
     return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
   }
 
-  let body: { password?: string; count?: number } | null = null
+  let body: { password?: string } | null = null
   try {
-    body = (await c.req.json()) as { password?: string; count?: number }
+    body = (await c.req.json()) as { password?: string }
   } catch {
     return c.json({ error: 'Invalid JSON body.' }, 400)
   }
@@ -405,8 +405,7 @@ app.post('/api/admin/prompts/generate', async (c) => {
     return c.json({ error: 'Invalid admin password.' }, 401)
   }
 
-  const count = Math.min(6, Math.max(1, Number(body?.count ?? 1)))
-  const prompts = await generatePromptPacks(c.env.metadata, count)
+  const prompts = await generatePromptPacks(c.env.metadata, 1)
   return c.json({
     ok: true,
     prompts,
@@ -469,15 +468,15 @@ async function getPuzzleByDate(kv: KVNamespace, date: string): Promise<PuzzleRec
 
   try {
     const parsed = JSON.parse(raw) as unknown
-    return isPuzzleRecord(parsed) ? parsed : null
+    return toPuzzleRecord(parsed)
   } catch {
     return null
   }
 }
 
-function isPuzzleRecord(value: unknown): value is PuzzleRecord {
+function toPuzzleRecord(value: unknown): PuzzleRecord | null {
   if (!value || typeof value !== 'object') {
-    return false
+    return null
   }
 
   const candidate = value as Partial<PuzzleRecord>
@@ -489,9 +488,10 @@ function isPuzzleRecord(value: unknown): value is PuzzleRecord {
     typeof candidate.createdAt !== 'string' ||
     typeof candidate.updatedAt !== 'string'
   ) {
-    return false
+    return null
   }
 
+  const normalizedCategories = {} as Record<PuzzleCategory, PuzzleAsset>
   for (const category of CATEGORIES) {
     const asset = candidate.categories[category]
     if (
@@ -501,11 +501,27 @@ function isPuzzleRecord(value: unknown): value is PuzzleRecord {
       typeof asset.contentType !== 'string' ||
       typeof asset.fileName !== 'string'
     ) {
-      return false
+      return null
+    }
+
+    normalizedCategories[category] = {
+      imageKey: asset.imageKey,
+      imageUrl: asset.imageUrl,
+      contentType: asset.contentType,
+      fileName: asset.fileName,
     }
   }
 
-  return true
+  const tags = normalizeTags((candidate as { tags?: unknown }).tags)
+  return {
+    date: candidate.date,
+    theme: candidate.theme,
+    tags: tags.length > 0 ? tags : normalizeTags(candidate.theme.split(/\s*-\s*/)),
+    difficulty: candidate.difficulty,
+    categories: normalizedCategories,
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
+  }
 }
 
 function getUtcDateKey(): string {
@@ -529,6 +545,65 @@ function getStringField(value?: FormValue): string | undefined {
     return typeof first === 'string' ? first : undefined
   }
   return undefined
+}
+
+function parseTagList(raw?: string): string[] {
+  if (!raw) {
+    return []
+  }
+
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return []
+  }
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown
+      return normalizeTags(parsed)
+    } catch {
+      // Fall back to comma parsing.
+    }
+  }
+
+  return normalizeTags(
+    trimmed
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  )
+}
+
+function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const tags: string[] = []
+  for (const rawTag of value) {
+    if (typeof rawTag !== 'string') {
+      continue
+    }
+    const tag = rawTag.trim().toLowerCase()
+    if (!tag || seen.has(tag)) {
+      continue
+    }
+    seen.add(tag)
+    tags.push(tag)
+    if (tags.length >= 24) {
+      break
+    }
+  }
+  return tags
+}
+
+function formatThemeFromTags(tags: string[]): string {
+  if (tags.length === 0) {
+    return 'Daily Puzzle'
+  }
+  const [first = 'Daily', second = 'Puzzle'] = tags
+  return `${capitalizeWords(first)} - ${capitalizeWords(second)}`
 }
 
 function getFileField(value?: FormValue): File | undefined {
@@ -653,7 +728,6 @@ function buildImagePrompt(category: PuzzleCategory, descriptors: string[]): stri
   const intent = CATEGORY_PROMPT_INTENTS[category]
   const descriptorText = descriptors.join(', ')
   return [
-    `Create one original ${intent.title} puzzle image.`,
     intent.composition,
     `Use these descriptors: ${descriptorText}.`,
     `Quality target: ${intent.qualityTarget}`,
@@ -910,7 +984,7 @@ function renderHomePage(): string {
           }
 
           statusEl.remove()
-          summaryEl.textContent = payload.date + " - " + payload.theme + " (" + payload.difficulty + ")"
+          summaryEl.textContent = payload.date + " - " + payload.theme
 
           for (const key of Object.keys(CATEGORY_LABELS)) {
             const category = key
@@ -1172,7 +1246,7 @@ function renderAdminPage(): string {
         <h1>Xefig Admin</h1>
         <p class="lead">Workflow: generate prompts, make images externally, then upload the package for a date.</p>
         <ol class="flow">
-          <li><strong>1.</strong>Generate prompt packs and choose one.</li>
+          <li><strong>1.</strong>Generate the daily prompt pack.</li>
           <li><strong>2.</strong>Use each per-image prompt in your image model and export files.</li>
           <li><strong>3.</strong>Upload all four images to publish the day.</li>
         </ol>
@@ -1181,32 +1255,24 @@ function renderAdminPage(): string {
       <div class="layout">
         <section class="step" aria-label="Step 1 Prompt generation">
           <h2>Step 1: Generate Copy/Paste Prompts</h2>
-          <p class="sub">Each pack gives four full prompts (Jigsaw, Slider, Swap, Polygram). Choose a pack, then copy prompts per image.</p>
+          <p class="sub">Generate one daily pack with four full prompts (Jigsaw, Slider, Swap, Polygram), then copy prompts per image.</p>
           <div class="row">
             <label>
               Admin Password
               <input id="admin-password" type="password" autocomplete="current-password" required />
             </label>
-            <label>
-              Pack Count
-              <input id="prompt-count" type="number" min="1" max="6" value="3" />
-            </label>
           </div>
           <div class="actions">
-            <button type="button" id="generate-prompt-btn" class="secondary">Generate Prompt Packs</button>
-            <label style="min-width: 250px;">
-              Select Pack
-              <select id="pack-select" disabled></select>
-            </label>
-            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy Selected Pack</button>
+            <button type="button" id="generate-prompt-btn" class="secondary">Generate Daily Prompt Pack</button>
+            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy Full Prompt Pack</button>
           </div>
           <div class="meta-grid">
             <label>
-              Selected Theme
+              Pack Label
               <input id="selected-theme" type="text" readonly />
             </label>
             <label>
-              Selected Keywords
+              Tags
               <input id="selected-keywords" type="text" readonly />
             </label>
           </div>
@@ -1244,25 +1310,22 @@ function renderAdminPage(): string {
 
         <section class="step" aria-label="Step 2 Upload generated images">
           <h2>Step 2: Upload Generated Images</h2>
-          <p class="sub">After generating images from prompts, upload all four files for one date.</p>
+          <p class="sub">After generating images from prompts, upload all four files for one date. Tags are attached from Step 1 for future filtering/search.</p>
           <form id="admin-form">
             <input id="form-password" name="password" type="hidden" />
+            <input id="tags-hidden" name="tags" type="hidden" />
 
             <div class="row">
               <label>
                 Date
                 <input name="date" id="date" type="date" required />
               </label>
-              <label>
-                Difficulty Level
-                <input name="difficulty" type="text" placeholder="e.g. Medium" required />
-              </label>
             </div>
 
             <div class="row">
               <label>
-                Theme Name
-                <input name="theme" id="theme-input" type="text" placeholder="Comes from selected pack, but editable" />
+                Tags For This Day
+                <input id="upload-tags" type="text" readonly placeholder="Generate a daily prompt pack to populate tags" />
               </label>
             </div>
 
@@ -1302,13 +1365,12 @@ function renderAdminPage(): string {
       const dateInput = document.getElementById("date")
       const passwordInput = document.getElementById("admin-password")
       const hiddenPasswordInput = document.getElementById("form-password")
+      const hiddenTagsInput = document.getElementById("tags-hidden")
       const generateBtn = document.getElementById("generate-prompt-btn")
-      const promptCountInput = document.getElementById("prompt-count")
-      const packSelect = document.getElementById("pack-select")
       const copyPackBtn = document.getElementById("copy-pack-btn")
       const selectedThemeInput = document.getElementById("selected-theme")
       const selectedKeywordsInput = document.getElementById("selected-keywords")
-      const themeInput = document.getElementById("theme-input")
+      const uploadTagsInput = document.getElementById("upload-tags")
 
       const promptFields = {
         jigsaw: document.getElementById("prompt-jigsaw"),
@@ -1320,8 +1382,7 @@ function renderAdminPage(): string {
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
       dateInput.value = tomorrow
 
-      let promptPacks = []
-      let selectedPackIndex = 0
+      let promptPack = null
 
       function setStatus(text, type) {
         status.textContent = text
@@ -1338,6 +1399,8 @@ function renderAdminPage(): string {
         }
         selectedThemeInput.value = ""
         selectedKeywordsInput.value = ""
+        uploadTagsInput.value = ""
+        hiddenTagsInput.value = ""
       }
 
       async function copyText(text, label) {
@@ -1354,36 +1417,20 @@ function renderAdminPage(): string {
         }
       }
 
-      function renderSelectedPack(index) {
-        if (!Array.isArray(promptPacks) || promptPacks.length === 0) {
+      function renderPromptPack(pack) {
+        if (!pack) {
           clearPromptFields()
           return
         }
 
-        const safeIndex = Math.max(0, Math.min(index, promptPacks.length - 1))
-        selectedPackIndex = safeIndex
-        const pack = promptPacks[safeIndex]
-
         selectedThemeInput.value = pack.themeName || ""
         selectedKeywordsInput.value = Array.isArray(pack.keywords) ? pack.keywords.join(", ") : ""
-        themeInput.value = pack.themeName || ""
+        uploadTagsInput.value = Array.isArray(pack.keywords) ? pack.keywords.join(", ") : ""
+        hiddenTagsInput.value = JSON.stringify(Array.isArray(pack.keywords) ? pack.keywords : [])
         promptFields.jigsaw.value = pack.prompts?.jigsaw || ""
         promptFields.slider.value = pack.prompts?.slider || ""
         promptFields.swap.value = pack.prompts?.swap || ""
         promptFields.polygram.value = pack.prompts?.polygram || ""
-      }
-
-      function populatePackSelector() {
-        packSelect.innerHTML = ""
-        for (let i = 0; i < promptPacks.length; i += 1) {
-          const pack = promptPacks[i]
-          const option = document.createElement("option")
-          option.value = String(i)
-          option.textContent = "Pack " + (i + 1) + " - " + (pack.themeName || "Untitled")
-          packSelect.appendChild(option)
-        }
-        packSelect.disabled = promptPacks.length === 0
-        copyPackBtn.disabled = promptPacks.length === 0
       }
 
       passwordInput.addEventListener("input", syncPasswordIntoForm)
@@ -1397,88 +1444,71 @@ function renderAdminPage(): string {
         }
 
         generateBtn.disabled = true
-        packSelect.disabled = true
         copyPackBtn.disabled = true
-        setStatus("Generating prompt packs...", "note")
-
-        const rawCount = Number.parseInt(promptCountInput.value, 10)
-        const count = Number.isFinite(rawCount) ? Math.min(6, Math.max(1, rawCount)) : 1
+        setStatus("Generating daily prompt pack...", "note")
 
         try {
           const response = await fetch("/api/admin/prompts/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password, count }),
+            body: JSON.stringify({ password }),
           })
 
           const payload = await response.json()
           if (!response.ok) {
             setStatus(payload.error || "Prompt generation failed.", "error")
-            promptPacks = []
+            promptPack = null
             clearPromptFields()
-            populatePackSelector()
             return
           }
 
           const packs = Array.isArray(payload.prompts) ? payload.prompts : []
-          if (packs.length === 0) {
-            setStatus("No prompt packs were returned.", "error")
-            promptPacks = []
+          const firstPack = packs[0] || null
+          if (!firstPack) {
+            setStatus("No prompt pack was returned.", "error")
+            promptPack = null
             clearPromptFields()
-            populatePackSelector()
             return
           }
 
-          promptPacks = packs
-          populatePackSelector()
-          packSelect.value = "0"
-          renderSelectedPack(0)
-          setStatus("Prompt packs ready. Generate your images, then continue to Step 2.", "ok")
+          promptPack = firstPack
+          renderPromptPack(firstPack)
+          copyPackBtn.disabled = false
+          setStatus("Daily prompt pack ready. Generate images, then continue to Step 2.", "ok")
         } catch (error) {
           setStatus("Network error while generating prompts.", "error")
-          promptPacks = []
+          promptPack = null
           clearPromptFields()
-          populatePackSelector()
         } finally {
           generateBtn.disabled = false
         }
       })
 
-      packSelect.addEventListener("change", () => {
-        const nextIndex = Number.parseInt(packSelect.value, 10)
-        if (!Number.isFinite(nextIndex)) {
-          return
-        }
-        renderSelectedPack(nextIndex)
-        setStatus("Selected prompt pack " + (nextIndex + 1) + ".", "note")
-      })
-
       copyPackBtn.addEventListener("click", async () => {
-        if (!Array.isArray(promptPacks) || promptPacks.length === 0) {
-          setStatus("Generate prompt packs first.", "error")
+        if (!promptPack) {
+          setStatus("Generate the daily prompt pack first.", "error")
           return
         }
 
-        const pack = promptPacks[selectedPackIndex]
         const combined = [
-          "PACK " + (selectedPackIndex + 1),
-          "Theme: " + (pack.themeName || ""),
-          "Keywords: " + (Array.isArray(pack.keywords) ? pack.keywords.join(", ") : ""),
+          "DAILY PACK",
+          "Label: " + (promptPack.themeName || ""),
+          "Tags: " + (Array.isArray(promptPack.keywords) ? promptPack.keywords.join(", ") : ""),
           "",
           "JIGSAW PROMPT:",
-          pack.prompts?.jigsaw || "",
+          promptPack.prompts?.jigsaw || "",
           "",
           "SLIDER PROMPT:",
-          pack.prompts?.slider || "",
+          promptPack.prompts?.slider || "",
           "",
           "SWAP PROMPT:",
-          pack.prompts?.swap || "",
+          promptPack.prompts?.swap || "",
           "",
           "POLYGRAM PROMPT:",
-          pack.prompts?.polygram || "",
+          promptPack.prompts?.polygram || "",
         ].join("\\n")
 
-        await copyText(combined, "Selected pack")
+        await copyText(combined, "Full prompt pack")
       })
 
       document.querySelectorAll(".copy-btn").forEach((button) => {
@@ -1523,8 +1553,8 @@ function renderAdminPage(): string {
             return
           }
 
-          const generatedTheme = payload.generatedTheme ? " Auto-generated theme: " + payload.generatedTheme + "." : ""
-          setStatus((payload.message || "Puzzle package saved.") + generatedTheme, "ok")
+          const generatedLabel = payload.generatedTheme ? " Auto-generated label: " + payload.generatedTheme + "." : ""
+          setStatus((payload.message || "Puzzle package saved.") + generatedLabel, "ok")
         } catch (error) {
           setStatus("Network error while saving package.", "error")
         } finally {
