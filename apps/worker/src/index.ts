@@ -12,6 +12,8 @@ type Bindings = {
 const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram'] as const
 type PuzzleCategory = (typeof CATEGORIES)[number]
 type FormValue = string | File | Array<string | File>
+const LEADERBOARD_DIFFICULTIES = ['easy', 'medium', 'hard', 'extreme'] as const
+type LeaderboardDifficulty = (typeof LEADERBOARD_DIFFICULTIES)[number]
 
 type PuzzleAsset = {
   imageKey: string
@@ -412,6 +414,147 @@ app.post('/api/admin/prompts/generate', async (c) => {
   })
 })
 
+app.get('/api/leaderboard/:date', async (c) => {
+  const date = c.req.param('date')
+  if (!isValidDateKey(date)) {
+    return c.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, 400)
+  }
+
+  const difficultyRaw = c.req.query('difficulty') || 'easy'
+  if (!isLeaderboardDifficulty(difficultyRaw)) {
+    return c.json({ error: 'Invalid difficulty.' }, 400)
+  }
+
+  const limitRaw = Number(c.req.query('limit') || 20)
+  const limit = Math.max(1, Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 20))
+
+  try {
+    await ensureLeaderboardTable(c.env.DB)
+    const rows = await c.env.DB.prepare(
+      `
+      SELECT player_guid, elapsed_ms, submitted_at
+      FROM puzzle_leaderboard
+      WHERE puzzle_date = ? AND difficulty = ?
+      ORDER BY elapsed_ms ASC, submitted_at ASC
+      LIMIT ?
+      `,
+    )
+      .bind(date, difficultyRaw, limit)
+      .all<{
+        player_guid: string
+        elapsed_ms: number
+        submitted_at: string
+      }>()
+
+    const entries = (rows.results || []).map((entry, index) => ({
+      rank: index + 1,
+      playerGuid: entry.player_guid,
+      elapsedMs: entry.elapsed_ms,
+      submittedAt: entry.submitted_at,
+    }))
+
+    return c.json({
+      ok: true,
+      date,
+      difficulty: difficultyRaw,
+      entries,
+    })
+  } catch (error) {
+    console.error('Leaderboard fetch failed', error)
+    return c.json({ error: 'Unable to load leaderboard.' }, 500)
+  }
+})
+
+app.post('/api/leaderboard/submit', async (c) => {
+  let body:
+    | {
+        puzzleDate?: string
+        difficulty?: string
+        playerGuid?: string
+        elapsedMs?: number
+      }
+    | null = null
+  try {
+    body = (await c.req.json()) as {
+      puzzleDate?: string
+      difficulty?: string
+      playerGuid?: string
+      elapsedMs?: number
+    }
+  } catch {
+    return c.json({ error: 'Invalid JSON body.' }, 400)
+  }
+
+  const puzzleDate = (body?.puzzleDate || '').trim()
+  const difficulty = (body?.difficulty || '').trim()
+  const playerGuid = (body?.playerGuid || '').trim()
+  const elapsedMs = Number(body?.elapsedMs)
+
+  if (!isValidDateKey(puzzleDate)) {
+    return c.json({ error: 'Invalid puzzleDate. Use YYYY-MM-DD.' }, 400)
+  }
+  if (!isLeaderboardDifficulty(difficulty)) {
+    return c.json({ error: 'Invalid difficulty.' }, 400)
+  }
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+    return c.json({ error: 'Invalid playerGuid.' }, 400)
+  }
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || elapsedMs > 24 * 60 * 60 * 1000) {
+    return c.json({ error: 'Invalid elapsedMs.' }, 400)
+  }
+
+  try {
+    await ensureLeaderboardTable(c.env.DB)
+    await c.env.DB.prepare(
+      `
+      INSERT INTO puzzle_leaderboard (puzzle_date, difficulty, player_guid, elapsed_ms)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(puzzle_date, difficulty, player_guid)
+      DO UPDATE SET
+        elapsed_ms = MIN(excluded.elapsed_ms, puzzle_leaderboard.elapsed_ms),
+        submitted_at = datetime('now')
+      `,
+    )
+      .bind(puzzleDate, difficulty, playerGuid, Math.round(elapsedMs))
+      .run()
+
+    const personal = await c.env.DB.prepare(
+      `
+      SELECT elapsed_ms
+      FROM puzzle_leaderboard
+      WHERE puzzle_date = ? AND difficulty = ? AND player_guid = ?
+      LIMIT 1
+      `,
+    )
+      .bind(puzzleDate, difficulty, playerGuid)
+      .first<{ elapsed_ms: number }>()
+
+    const bestMs = personal?.elapsed_ms ?? Math.round(elapsedMs)
+
+    const rankRow = await c.env.DB.prepare(
+      `
+      SELECT 1 + COUNT(*) AS rank
+      FROM puzzle_leaderboard
+      WHERE puzzle_date = ? AND difficulty = ? AND elapsed_ms < ?
+      `,
+    )
+      .bind(puzzleDate, difficulty, bestMs)
+      .first<{ rank: number }>()
+
+    return c.json({
+      ok: true,
+      puzzleDate,
+      difficulty,
+      playerGuid,
+      bestMs,
+      rank: Number(rankRow?.rank || 1),
+    })
+  } catch (error) {
+    console.error('Leaderboard submit failed', error)
+    return c.json({ error: 'Unable to submit leaderboard entry.' }, 500)
+  }
+})
+
 app.get('/cdn/*', async (c) => {
   const pathname = new URL(c.req.url).pathname
   const encodedKey = pathname.replace(/^\/cdn\//, '')
@@ -545,6 +688,41 @@ function getStringField(value?: FormValue): string | undefined {
     return typeof first === 'string' ? first : undefined
   }
   return undefined
+}
+
+let leaderboardTableReady = false
+
+async function ensureLeaderboardTable(db: D1Database): Promise<void> {
+  if (leaderboardTableReady) {
+    return
+  }
+
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS puzzle_leaderboard (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        puzzle_date TEXT NOT NULL,
+        difficulty TEXT NOT NULL,
+        player_guid TEXT NOT NULL,
+        elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
+        submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (puzzle_date, difficulty, player_guid)
+      )`,
+    )
+    .run()
+
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_puzzle_leaderboard_daily
+       ON puzzle_leaderboard (puzzle_date, difficulty, elapsed_ms, submitted_at)`,
+    )
+    .run()
+
+  leaderboardTableReady = true
+}
+
+function isLeaderboardDifficulty(value: string): value is LeaderboardDifficulty {
+  return LEADERBOARD_DIFFICULTIES.includes(value as LeaderboardDifficulty)
 }
 
 function parseTagList(raw?: string): string[] {

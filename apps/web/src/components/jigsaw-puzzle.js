@@ -10,7 +10,7 @@ const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
 
 export class JigsawPuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete }) {
+  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress }) {
     if (!container) {
       throw new Error('JigsawPuzzle requires a container element.')
     }
@@ -20,6 +20,7 @@ export class JigsawPuzzle {
     this.difficulty = difficulty
     this.snapDistance = snapDistance
     this.onComplete = onComplete
+    this.onProgress = onProgress
 
     this.instanceId = `jigsaw-${Math.random().toString(36).slice(2, 10)}`
     this.zIndexCounter = 10
@@ -655,6 +656,7 @@ export class JigsawPuzzle {
 
     if (droppedInCarousel) {
       this.mountPieceInCarousel(piece)
+      this.emitProgress()
       this.stopDragging()
       return
     }
@@ -674,6 +676,7 @@ export class JigsawPuzzle {
       this.mountPieceOnBoard(piece, { locked: false })
     }
 
+    this.emitProgress()
     this.stopDragging()
   }
 
@@ -758,9 +761,106 @@ export class JigsawPuzzle {
     }
 
     this.completed = true
+    this.emitProgress()
     if (typeof this.onComplete === 'function') {
-      this.onComplete()
+      this.onComplete({
+        lockedCount: this.pieces.length,
+        totalCount: this.pieces.length,
+      })
     }
+  }
+
+  getProgressState() {
+    return {
+      zoom: this.zoom,
+      panX: this.panX,
+      panY: this.panY,
+      referenceVisible: this.referenceVisible,
+      pieces: this.pieces.map((piece) => ({
+        row: piece.row,
+        col: piece.col,
+        x: piece.x,
+        y: piece.y,
+        locked: piece.locked,
+        inCarousel: piece.inCarousel,
+      })),
+    }
+  }
+
+  applyProgressState(state) {
+    if (!state || typeof state !== 'object') {
+      return
+    }
+
+    const payload = state
+    if (!Array.isArray(payload.pieces)) {
+      return
+    }
+
+    const pieceByKey = new Map()
+    for (const piece of this.pieces) {
+      pieceByKey.set(`${piece.row}:${piece.col}`, piece)
+    }
+
+    for (const rawPiece of payload.pieces) {
+      if (!rawPiece || typeof rawPiece !== 'object') {
+        continue
+      }
+
+      const row = Number(rawPiece.row)
+      const col = Number(rawPiece.col)
+      const piece = pieceByKey.get(`${row}:${col}`)
+      if (!piece) {
+        continue
+      }
+
+      const inCarousel = Boolean(rawPiece.inCarousel)
+      const locked = Boolean(rawPiece.locked)
+      if (inCarousel) {
+        this.mountPieceInCarousel(piece)
+        continue
+      }
+
+      const rawX = Number(rawPiece.x)
+      const rawY = Number(rawPiece.y)
+      const x = Number.isFinite(rawX) ? rawX : piece.targetX
+      const y = Number.isFinite(rawY) ? rawY : piece.targetY
+      const clamped = this.clampBoardPosition(x, y)
+      piece.x = locked ? piece.targetX : clamped.x
+      piece.y = locked ? piece.targetY : clamped.y
+      this.mountPieceOnBoard(piece, { locked })
+    }
+
+    const rawZoom = Number(payload.zoom)
+    const zoom = Number.isFinite(rawZoom) ? clamp(rawZoom, 1, 4) : 1
+    const rawPanX = Number(payload.panX)
+    const rawPanY = Number(payload.panY)
+    this.zoom = zoom
+    const clampedPan = this.clampPan(
+      Number.isFinite(rawPanX) ? rawPanX : 0,
+      Number.isFinite(rawPanY) ? rawPanY : 0,
+      zoom,
+    )
+    this.panX = clampedPan.x
+    this.panY = clampedPan.y
+    this.updateStageTransform()
+    this.setReferenceVisible(Boolean(payload.referenceVisible))
+
+    const lockedCount = this.pieces.filter((piece) => piece.locked).length
+    this.completed = lockedCount === this.pieces.length
+  }
+
+  emitProgress() {
+    if (typeof this.onProgress !== 'function') {
+      return
+    }
+
+    this.onProgress({
+      completed: this.completed,
+      lockedCount: this.pieces.filter((piece) => piece.locked).length,
+      totalCount: this.pieces.length,
+      state: this.getProgressState(),
+    })
   }
 
   onStagePointerDown(event) {
@@ -874,6 +974,7 @@ export class JigsawPuzzle {
     if (this.stageContent) {
       this.updateStageTransform()
     }
+    this.emitProgress()
   }
 
   onCarouselWheel(event) {
@@ -901,6 +1002,7 @@ export class JigsawPuzzle {
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
     }
+    this.emitProgress()
     return this.referenceVisible
   }
 
