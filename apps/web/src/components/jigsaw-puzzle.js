@@ -37,6 +37,7 @@ export class JigsawPuzzle {
     this.pendingLift = null
     this.referenceVisible = false
     this.audioContext = null
+    this.renderScale = this.resolveRenderScale()
 
     this.handleWindowPointerMove = (event) => this.onWindowPointerMove(event)
     this.handleWindowPointerUp = (event) => this.onWindowPointerUp(event)
@@ -111,6 +112,14 @@ export class JigsawPuzzle {
     return DIFFICULTY_TO_GRID.easy
   }
 
+  resolveRenderScale() {
+    const dpr =
+      typeof window !== 'undefined' && Number.isFinite(window.devicePixelRatio)
+        ? window.devicePixelRatio
+        : 1
+    return clamp(dpr, 1, 2)
+  }
+
   setupLayout() {
     const { width, height, crop } = this.calculateBoardSize()
     this.boardWidth = width
@@ -146,8 +155,7 @@ export class JigsawPuzzle {
 
     this.ghostCanvas = document.createElement('canvas')
     this.ghostCanvas.className = 'jigsaw-ghost'
-    this.ghostCanvas.width = this.boardWidth
-    this.ghostCanvas.height = this.boardHeight
+    configureHiDpiCanvas(this.ghostCanvas, this.boardWidth, this.boardHeight, this.renderScale)
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'jigsaw-reference'
@@ -279,8 +287,12 @@ export class JigsawPuzzle {
 
         const canvas = document.createElement('canvas')
         canvas.className = 'jigsaw-piece'
-        canvas.width = this.pieceCanvasWidth
-        canvas.height = this.pieceCanvasHeight
+        configureHiDpiCanvas(
+          canvas,
+          this.pieceCanvasWidth,
+          this.pieceCanvasHeight,
+          this.renderScale,
+        )
         canvas.style.clipPath = `url(#${clipId})`
         canvas.style.webkitClipPath = `url(#${clipId})`
 
@@ -418,8 +430,15 @@ export class JigsawPuzzle {
 
   paintPiece(piece) {
     const ctx = piece.canvas.getContext('2d')
+    if (!ctx) {
+      return
+    }
     const piecePath = new Path2D(piece.pathData)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, piece.canvas.width, piece.canvas.height)
+    ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     const crop = this.imageCrop
 
     ctx.save()
@@ -453,7 +472,14 @@ export class JigsawPuzzle {
 
   paintGhostImage() {
     const ctx = this.ghostCanvas.getContext('2d')
-    ctx.clearRect(0, 0, this.boardWidth, this.boardHeight)
+    if (!ctx) {
+      return
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, this.ghostCanvas.width, this.ghostCanvas.height)
+    ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     ctx.globalAlpha = 0.1
     const crop = this.imageCrop
     ctx.drawImage(
@@ -593,6 +619,7 @@ export class JigsawPuzzle {
     piece.dragOffsetY = event.clientY - rect.top
     piece.dragLeft = rect.left
     piece.dragTop = rect.top
+    piece.dragScale = Math.max(0.1, rect.width / this.pieceCanvasWidth)
 
     piece.canvas.classList.add('is-dragging')
     piece.canvas.style.position = 'fixed'
@@ -600,7 +627,8 @@ export class JigsawPuzzle {
     piece.canvas.style.top = `${piece.dragTop}px`
     piece.canvas.style.width = `${this.pieceCanvasWidth}px`
     piece.canvas.style.height = `${this.pieceCanvasHeight}px`
-    piece.canvas.style.transform = ''
+    piece.canvas.style.transformOrigin = 'top left'
+    piece.canvas.style.transform = `scale(${piece.dragScale})`
     piece.canvas.style.zIndex = `${++this.zIndexCounter}`
 
     document.body.append(piece.canvas)
@@ -1049,6 +1077,14 @@ export class JigsawPuzzle {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
+}
+
+function configureHiDpiCanvas(canvas, width, height, scale) {
+  const internalScale = Number.isFinite(scale) ? Math.max(1, scale) : 1
+  canvas.width = Math.round(width * internalScale)
+  canvas.height = Math.round(height * internalScale)
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
 }
 
 function loadImage(url) {
