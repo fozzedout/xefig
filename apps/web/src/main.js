@@ -2,6 +2,8 @@ import './style.css'
 import sampleImage from './assets/hero.png'
 import { JigsawPuzzle } from './components/jigsaw-puzzle.js'
 import { SlidingTilePuzzle } from './components/sliding-tile-puzzle.js'
+import { PictureSwapPuzzle } from './components/picture-swap-puzzle.js'
+import { PolygramPuzzle } from './components/polygram-puzzle.js'
 
 const app = document.querySelector('#app')
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : ''
@@ -9,6 +11,8 @@ const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
+const GAME_MODE_SWAP = 'swap'
+const GAME_MODE_POLYGRAM = 'polygram'
 const DIFFICULTY_LABELS = {
   [GAME_MODE_JIGSAW]: {
     easy: 'Easy (8x8)',
@@ -22,6 +26,18 @@ const DIFFICULTY_LABELS = {
     hard: 'Hard (6x6)',
     extreme: 'Extreme (7x7)',
   },
+  [GAME_MODE_SWAP]: {
+    easy: 'Easy (4x4)',
+    medium: 'Medium (6x6)',
+    hard: 'Hard (8x8)',
+    extreme: 'Extreme (10x10)',
+  },
+  [GAME_MODE_POLYGRAM]: {
+    easy: 'Easy (16-20 shards)',
+    medium: 'Medium (25-30 shards)',
+    hard: 'Hard (36-42 shards)',
+    extreme: 'Extreme (52-60 shards)',
+  },
 }
 const DIFFICULTY_BUTTON_LABELS = {
   easy: 'Easy',
@@ -32,11 +48,15 @@ const DIFFICULTY_BUTTON_LABELS = {
 const MODE_LABELS = {
   [GAME_MODE_JIGSAW]: 'Jigsaw',
   [GAME_MODE_SLIDING]: 'Sliding Tile',
+  [GAME_MODE_SWAP]: 'Picture Swap',
+  [GAME_MODE_POLYGRAM]: 'Polygram',
 }
 const DIFFICULTY_ORDER = ['easy', 'medium', 'hard', 'extreme']
 const GAME_MODE_TO_PUZZLE_CATEGORY = {
   [GAME_MODE_JIGSAW]: 'jigsaw',
   [GAME_MODE_SLIDING]: 'slider',
+  [GAME_MODE_SWAP]: 'swap',
+  [GAME_MODE_POLYGRAM]: 'polygram',
 }
 
 const state = {
@@ -75,12 +95,27 @@ function getIsoDate(value) {
 }
 
 function normalizeGameMode(mode) {
-  return mode === GAME_MODE_SLIDING ? GAME_MODE_SLIDING : GAME_MODE_JIGSAW
+  if (mode === GAME_MODE_SLIDING) {
+    return GAME_MODE_SLIDING
+  }
+  if (mode === GAME_MODE_SWAP) {
+    return GAME_MODE_SWAP
+  }
+  if (mode === GAME_MODE_POLYGRAM) {
+    return GAME_MODE_POLYGRAM
+  }
+  return GAME_MODE_JIGSAW
 }
 
 function getInteractionHint(gameMode = state.gameMode) {
   if (gameMode === GAME_MODE_SLIDING) {
     return 'Tap or swipe a tile adjacent to the empty space to slide it.'
+  }
+  if (gameMode === GAME_MODE_SWAP) {
+    return 'Tap one square, then another to swap their positions.'
+  }
+  if (gameMode === GAME_MODE_POLYGRAM) {
+    return 'Tap a shard to rotate. Drag from the tray and drop near the matching spot to snap it in.'
   }
 
   const isLandscapeDesktop = window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
@@ -91,7 +126,8 @@ function getInteractionHint(gameMode = state.gameMode) {
 
 function getGameModeOfDay(dateKey = getIsoDate(new Date())) {
   const seed = Number(dateKey.replaceAll('-', ''))
-  return seed % 2 === 0 ? GAME_MODE_JIGSAW : GAME_MODE_SLIDING
+  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+  return modes[Math.abs(seed) % modes.length]
 }
 
 function resolvePuzzleImageUrl(puzzlePayload, gameMode) {
@@ -328,7 +364,7 @@ function renderLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING]
+    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
@@ -469,7 +505,7 @@ function renderArchiveLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING]
+    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
@@ -685,7 +721,14 @@ function renderGame({ resumeRun = null } = {}) {
       startActiveTimer(currentRun.elapsedActiveMs)
       bindGameActivity(() => persistActiveRun())
 
-      const PuzzleClass = gameMode === GAME_MODE_SLIDING ? SlidingTilePuzzle : JigsawPuzzle
+      const PuzzleClass =
+        gameMode === GAME_MODE_SLIDING
+          ? SlidingTilePuzzle
+          : gameMode === GAME_MODE_SWAP
+            ? PictureSwapPuzzle
+            : gameMode === GAME_MODE_POLYGRAM
+              ? PolygramPuzzle
+            : JigsawPuzzle
       const puzzleConfig = {
         container: mount,
         imageUrl: state.imageUrl,

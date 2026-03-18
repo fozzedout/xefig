@@ -14,7 +14,7 @@ type PuzzleCategory = (typeof CATEGORIES)[number]
 type FormValue = string | File | Array<string | File>
 const LEADERBOARD_DIFFICULTIES = ['easy', 'medium', 'hard', 'extreme'] as const
 type LeaderboardDifficulty = (typeof LEADERBOARD_DIFFICULTIES)[number]
-const LEADERBOARD_GAME_MODES = ['jigsaw', 'sliding'] as const
+const LEADERBOARD_GAME_MODES = ['jigsaw', 'sliding', 'swap', 'polygram'] as const
 type LeaderboardGameMode = (typeof LEADERBOARD_GAME_MODES)[number]
 
 type PuzzleAsset = {
@@ -801,8 +801,10 @@ async function ensureLeaderboardTable(db: D1Database): Promise<void> {
     const hasModeScopedUnique = /UNIQUE\s*\(\s*puzzle_date\s*,\s*difficulty\s*,\s*game_mode\s*,\s*player_guid\s*\)/i.test(
       table.sql || '',
     )
+    const hasSwapGameMode = /game_mode\s+IN\s*\([^)]*'swap'/i.test(table.sql || '')
+    const hasPolygramGameMode = /game_mode\s+IN\s*\([^)]*'polygram'/i.test(table.sql || '')
 
-    if (!hasGameMode || !hasModeScopedUnique) {
+    if (!hasGameMode || !hasModeScopedUnique || !hasSwapGameMode || !hasPolygramGameMode) {
       await db.prepare(`DROP TABLE IF EXISTS puzzle_leaderboard_next`).run()
       await createLeaderboardTable(db, 'puzzle_leaderboard_next')
       const selectGameModeExpr = hasGameMode ? `COALESCE(game_mode, 'jigsaw')` : `'jigsaw'`
@@ -849,7 +851,7 @@ async function createLeaderboardTable(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         puzzle_date TEXT NOT NULL,
         difficulty TEXT NOT NULL,
-        game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding')),
+        game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram')),
         player_guid TEXT NOT NULL,
         elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
         submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
