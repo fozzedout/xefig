@@ -27,11 +27,12 @@ CREATE TABLE IF NOT EXISTS puzzle_leaderboard (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     puzzle_date TEXT NOT NULL,
     difficulty TEXT NOT NULL,
+    game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding')),
     player_guid TEXT NOT NULL,
     elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
     submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (puzzle_date, difficulty, player_guid)
+    UNIQUE (puzzle_date, difficulty, game_mode, player_guid)
 );
 
 CREATE INDEX IF NOT EXISTS idx_puzzle_leaderboard_daily
-ON puzzle_leaderboard (puzzle_date, difficulty, elapsed_ms, submitted_at);
+ON puzzle_leaderboard (puzzle_date, difficulty, game_mode, elapsed_ms, submitted_at);

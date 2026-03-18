@@ -1,15 +1,48 @@
 import './style.css'
 import sampleImage from './assets/hero.png'
 import { JigsawPuzzle } from './components/jigsaw-puzzle.js'
+import { SlidingTilePuzzle } from './components/sliding-tile-puzzle.js'
 
 const app = document.querySelector('#app')
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
+const GAME_MODE_JIGSAW = 'jigsaw'
+const GAME_MODE_SLIDING = 'sliding'
+const DIFFICULTY_LABELS = {
+  [GAME_MODE_JIGSAW]: {
+    easy: 'Easy (8x8)',
+    medium: 'Medium (10x10)',
+    hard: 'Hard (12x12)',
+    extreme: 'Extreme (15x15)',
+  },
+  [GAME_MODE_SLIDING]: {
+    easy: 'Easy (3x3)',
+    medium: 'Medium (4x4)',
+    hard: 'Hard (6x6)',
+    extreme: 'Extreme (7x7)',
+  },
+}
+const DIFFICULTY_BUTTON_LABELS = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+  extreme: 'Extreme',
+}
+const MODE_LABELS = {
+  [GAME_MODE_JIGSAW]: 'Jigsaw',
+  [GAME_MODE_SLIDING]: 'Sliding Tile',
+}
+const DIFFICULTY_ORDER = ['easy', 'medium', 'hard', 'extreme']
+const GAME_MODE_TO_PUZZLE_CATEGORY = {
+  [GAME_MODE_JIGSAW]: 'jigsaw',
+  [GAME_MODE_SLIDING]: 'slider',
+}
 
 const state = {
   imageUrl: sampleImage,
-  difficulty: 'easy',
+  gameMode: GAME_MODE_JIGSAW,
+  difficulty: 'medium',
   sourceMode: 'today',
   archiveDate: getIsoDate(new Date()),
   puzzle: null,
@@ -41,11 +74,32 @@ function getIsoDate(value) {
   return value.toISOString().slice(0, 10)
 }
 
-function getInteractionHint() {
+function normalizeGameMode(mode) {
+  return mode === GAME_MODE_SLIDING ? GAME_MODE_SLIDING : GAME_MODE_JIGSAW
+}
+
+function getInteractionHint(gameMode = state.gameMode) {
+  if (gameMode === GAME_MODE_SLIDING) {
+    return 'Tap or swipe a tile adjacent to the empty space to slide it.'
+  }
+
   const isLandscapeDesktop = window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
   return isLandscapeDesktop
     ? 'Scroll the right tray and drag pieces onto the board.'
     : 'Swipe tray left/right. Drag up on a piece to pick it up.'
+}
+
+function getGameModeOfDay(dateKey = getIsoDate(new Date())) {
+  const seed = Number(dateKey.replaceAll('-', ''))
+  return seed % 2 === 0 ? GAME_MODE_JIGSAW : GAME_MODE_SLIDING
+}
+
+function resolvePuzzleImageUrl(puzzlePayload, gameMode) {
+  const normalizedMode = normalizeGameMode(gameMode)
+  const categoryKey = GAME_MODE_TO_PUZZLE_CATEGORY[normalizedMode] || 'jigsaw'
+  const categoryImage = puzzlePayload?.categories?.[categoryKey]?.imageUrl
+  const fallbackImage = puzzlePayload?.categories?.jigsaw?.imageUrl
+  return resolveAssetUrl(categoryImage || fallbackImage)
 }
 
 function readJsonStorage(key) {
@@ -104,7 +158,10 @@ function getResumableRun() {
   if (!run.puzzleDate || !run.imageUrl || !run.difficulty) {
     return null
   }
-  return run
+  return {
+    ...run,
+    gameMode: normalizeGameMode(run.gameMode),
+  }
 }
 
 function getNowMs() {
@@ -226,6 +283,7 @@ async function submitLeaderboard(run) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       puzzleDate: run.puzzleDate,
+      gameMode: normalizeGameMode(run.gameMode),
       difficulty: run.difficulty,
       playerGuid: playerGuid,
       elapsedMs: run.elapsedActiveMs,
@@ -239,163 +297,302 @@ async function submitLeaderboard(run) {
   return payload
 }
 
+async function fetchPuzzlePayload({ date = null } = {}) {
+  const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
+  const response = await fetch(apiUrl(endpoint))
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(payload.error || 'Puzzle not found.')
+  }
+  return payload
+}
+
 function renderLauncher() {
   destroyPuzzle()
 
   const resumableRun = getResumableRun()
+  const todayDate = getIsoDate(new Date())
+  state.sourceMode = 'today'
+  state.archiveDate = todayDate
+  state.gameMode = getGameModeOfDay(todayDate)
+  state.difficulty = state.difficulty || 'medium'
+
+  const renderDifficultyOptions = (selected) => {
+    return DIFFICULTY_ORDER
+      .map((d) => {
+        const isSelected = d === selected ? ' is-selected' : ''
+        const label = DIFFICULTY_BUTTON_LABELS[d] || d
+        return `<button type="button" class="difficulty-option${isSelected}" data-difficulty="${d}">${label}</button>`
+      })
+      .join('')
+  }
+
+  const renderModeCards = (puzzlePayload) => {
+    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING]
+      .map((mode) => {
+        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const title = MODE_LABELS[mode]
+        const isPick = mode === getGameModeOfDay(todayDate)
+        const badge = isPick ? '<span class="mode-card-badge">Daily Pick</span>' : ''
+
+        return `
+          <button type="button" class="mode-card" data-mode="${mode}">
+            ${badge}
+            <div class="mode-card-image-wrapper">
+              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
+              <div class="mode-card-play-overlay">
+                <div class="play-icon">
+                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="mode-card-info">
+              <span class="mode-card-title">${title}</span>
+            </div>
+          </button>
+        `
+      })
+      .join('')
+  }
 
   app.innerHTML = `
     <main class="launcher-shell">
       <section class="launcher-main">
-        <p class="eyebrow">Puzzle Launcher</p>
-        <h1>Jigsaw</h1>
-        <p class="launcher-copy">Choose current day or archive day, then launch game mode.</p>
+        <header class="launcher-header">
+          <p class="eyebrow">Xefig Daily</p>
+          <h1>Pick a Puzzle</h1>
+          <p id="preview-meta" class="launcher-copy">Loading today's puzzle...</p>
+        </header>
 
-        <img id="preview-image" class="preview-image" src="${state.imageUrl}" alt="Puzzle preview" />
-        <p id="preview-meta" class="launcher-copy">Loading puzzle preview...</p>
+        <section class="choice-group">
+          <p class="choice-heading">Difficulty</p>
+          <div id="difficulty-segmented" class="difficulty-segmented">
+            ${renderDifficultyOptions(state.difficulty)}
+          </div>
+        </section>
 
-        <form id="launcher-form" class="launcher-form">
-          <label>
-            Puzzle Day
-            <select id="source-mode" ${resumableRun ? 'disabled' : ''}>
-              <option value="today" ${state.sourceMode === 'today' ? 'selected' : ''}>Current Day</option>
-              <option value="archive" ${state.sourceMode === 'archive' ? 'selected' : ''}>Archived Day</option>
-            </select>
-          </label>
+        <div id="mode-cards" class="mode-cards-grid">
+          <div class="mode-card-skeleton" style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--muted);">
+            Loading puzzles...
+          </div>
+        </div>
 
-          <label>
-            Archive Date
-            <input id="archive-date" type="date" value="${state.archiveDate}" ${state.sourceMode === 'today' || resumableRun ? 'disabled' : ''} />
-          </label>
-
-          <label>
-            Difficulty
-            <select id="difficulty" ${resumableRun ? 'disabled' : ''}>
-              <option value="easy" ${state.difficulty === 'easy' ? 'selected' : ''}>Easy (8x8)</option>
-              <option value="medium" ${state.difficulty === 'medium' ? 'selected' : ''}>Medium (10x10)</option>
-              <option value="hard" ${state.difficulty === 'hard' ? 'selected' : ''}>Hard (12x12)</option>
-              <option value="extreme" ${state.difficulty === 'extreme' ? 'selected' : ''}>Extreme (15x15)</option>
-            </select>
-          </label>
-
-          <button id="start-btn" type="submit" disabled>${resumableRun ? 'Resume Puzzle' : 'Start Jigsaw'}</button>
-        </form>
+        <footer class="launcher-footer">
+          ${resumableRun ? '<button id="resume-btn" class="launcher-secondary-btn" type="button">Resume Last Run</button>' : ''}
+          <button id="archive-nav-btn" class="launcher-secondary-btn" type="button">Browse Archive</button>
+        </footer>
       </section>
     </main>
   `
 
-  const sourceMode = document.querySelector('#source-mode')
-  const archiveDate = document.querySelector('#archive-date')
-  const difficultyInput = document.querySelector('#difficulty')
-  const startBtn = document.querySelector('#start-btn')
-  const previewImage = document.querySelector('#preview-image')
+  const modeCardsContainer = document.querySelector('#mode-cards')
+  const difficultySegmented = document.querySelector('#difficulty-segmented')
   const previewMeta = document.querySelector('#preview-meta')
-  const form = document.querySelector('#launcher-form')
+  const archiveNavBtn = document.querySelector('#archive-nav-btn')
+  const resumeBtn = document.querySelector('#resume-btn')
 
-  let requestId = 0
-
-  const setLoading = (message) => {
-    previewMeta.textContent = message
-    startBtn.disabled = true
+  const bindDifficultyEvents = () => {
+    const buttons = difficultySegmented.querySelectorAll('[data-difficulty]')
+    for (const btn of buttons) {
+      btn.addEventListener('click', () => {
+        state.difficulty = btn.dataset.difficulty
+        difficultySegmented.innerHTML = renderDifficultyOptions(state.difficulty)
+        bindDifficultyEvents()
+      })
+    }
   }
 
-  const refreshPreview = async () => {
-    const currentRequest = ++requestId
+  const bindModeEvents = () => {
+    const cards = modeCardsContainer.querySelectorAll('.mode-card')
+    for (const card of cards) {
+      card.addEventListener('click', () => {
+        state.gameMode = normalizeGameMode(card.dataset.mode)
+        state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+        renderGame()
+      })
+    }
+  }
 
-    state.sourceMode = sourceMode.value
-    state.archiveDate = archiveDate.value || state.archiveDate
-    state.difficulty = difficultyInput.value
+  archiveNavBtn.addEventListener('click', () => {
+    renderArchiveLauncher()
+  })
 
-    archiveDate.disabled = state.sourceMode === 'today' || Boolean(resumableRun)
-
-    if (resumableRun) {
+  if (resumeBtn && resumableRun) {
+    resumeBtn.addEventListener('click', () => {
+      state.gameMode = normalizeGameMode(resumableRun.gameMode)
       state.difficulty = resumableRun.difficulty
       state.imageUrl = resolveAssetUrl(resumableRun.imageUrl)
       state.puzzle = {
         date: resumableRun.puzzleDate,
-        theme: resumableRun.theme || 'Resumable Puzzle',
       }
-      previewImage.src = state.imageUrl
-      previewMeta.textContent = `Resume ${resumableRun.puzzleDate} · ${resumableRun.theme || 'Saved run'} · ${resumableRun.difficulty}`
-      startBtn.disabled = false
-      return
-    }
+      renderGame({ resumeRun: resumableRun })
+    })
+  }
 
-    const targetDate = state.sourceMode === 'today' ? null : archiveDate.value
-    if (state.sourceMode === 'archive' && !targetDate) {
-      setLoading('Pick an archive date to load the puzzle.')
-      return
-    }
+  bindDifficultyEvents()
 
-    setLoading('Loading puzzle preview...')
-
+  ;(async () => {
     try {
-      const endpoint =
-        state.sourceMode === 'today'
-          ? '/api/puzzles/today'
-          : `/api/puzzles/${encodeURIComponent(targetDate)}`
-
-      const response = await fetch(apiUrl(endpoint))
-      const payload = await response.json()
-
-      if (currentRequest !== requestId) {
-        return
-      }
-
-      if (!response.ok) {
-        throw new Error(payload.error || 'Puzzle not found for selected date.')
-      }
-
+      const payload = await fetchPuzzlePayload()
       state.puzzle = payload
-      state.imageUrl = resolveAssetUrl(payload.categories?.jigsaw?.imageUrl)
-
-      previewImage.src = state.imageUrl
-      previewMeta.textContent = `${payload.date} · ${payload.theme}`
-      startBtn.disabled = false
+      previewMeta.textContent = `${payload.date}`
+      modeCardsContainer.innerHTML = renderModeCards(payload)
+      bindModeEvents()
     } catch (error) {
-      if (currentRequest !== requestId) {
-        return
-      }
+      previewMeta.textContent = error.message || 'Unable to load daily puzzle.'
+      modeCardsContainer.innerHTML = `
+        <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--error);">
+          Failed to load today's puzzles.
+        </div>
+      `
+    }
+  })()
+}
 
-      state.puzzle = null
-      previewImage.src = sampleImage
-      previewMeta.textContent = error.message || 'Unable to load puzzle preview.'
-      startBtn.disabled = true
+function renderArchiveLauncher() {
+  destroyPuzzle()
+
+  const todayDate = getIsoDate(new Date())
+  state.sourceMode = 'archive'
+  state.archiveDate = state.archiveDate || todayDate
+  state.gameMode = normalizeGameMode(state.gameMode || getGameModeOfDay(state.archiveDate))
+  state.difficulty = state.difficulty || 'medium'
+
+  const renderDifficultyOptions = (selected) => {
+    return DIFFICULTY_ORDER
+      .map((d) => {
+        const isSelected = d === selected ? ' is-selected' : ''
+        const label = DIFFICULTY_BUTTON_LABELS[d] || d
+        return `<button type="button" class="difficulty-option${isSelected}" data-difficulty="${d}">${label}</button>`
+      })
+      .join('')
+  }
+
+  const renderModeCards = (puzzlePayload) => {
+    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING]
+      .map((mode) => {
+        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const title = MODE_LABELS[mode]
+        return `
+          <button type="button" class="mode-card" data-mode="${mode}">
+            <div class="mode-card-image-wrapper">
+              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
+              <div class="mode-card-play-overlay">
+                <div class="play-icon">
+                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="mode-card-info">
+              <span class="mode-card-title">${title}</span>
+            </div>
+          </button>
+        `
+      })
+      .join('')
+  }
+
+  app.innerHTML = `
+    <main class="launcher-shell">
+      <section class="launcher-main">
+        <header class="launcher-header">
+          <p class="eyebrow">Archive Mode</p>
+          <h1>Pick Any Day</h1>
+          <p id="archive-preview-meta" class="launcher-copy">Select a date to load a puzzle.</p>
+        </header>
+
+        <label class="archive-date-label">
+          Archive Date
+          <input id="archive-date-input" type="date" value="${state.archiveDate}" max="${todayDate}" />
+        </label>
+
+        <section class="choice-group">
+          <p class="choice-heading">Difficulty</p>
+          <div id="archive-difficulty-segmented" class="difficulty-segmented">
+            ${renderDifficultyOptions(state.difficulty)}
+          </div>
+        </section>
+
+        <div id="archive-mode-cards" class="mode-cards-grid">
+           <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--muted);">
+            Select a date to see puzzles...
+          </div>
+        </div>
+
+        <footer class="launcher-footer">
+          <button id="archive-back-btn" class="launcher-secondary-btn" type="button">Back To Daily</button>
+        </footer>
+      </section>
+    </main>
+  `
+
+  const dateInput = document.querySelector('#archive-date-input')
+  const previewMeta = document.querySelector('#archive-preview-meta')
+  const modeCardsContainer = document.querySelector('#archive-mode-cards')
+  const difficultySegmented = document.querySelector('#archive-difficulty-segmented')
+  const backBtn = document.querySelector('#archive-back-btn')
+
+  const bindDifficultyEvents = () => {
+    const buttons = difficultySegmented.querySelectorAll('[data-difficulty]')
+    for (const btn of buttons) {
+      btn.addEventListener('click', () => {
+        state.difficulty = btn.dataset.difficulty
+        difficultySegmented.innerHTML = renderDifficultyOptions(state.difficulty)
+        bindDifficultyEvents()
+      })
     }
   }
 
-  sourceMode.addEventListener('change', refreshPreview)
-  archiveDate.addEventListener('change', refreshPreview)
-  difficultyInput.addEventListener('change', () => {
-    state.difficulty = difficultyInput.value
-  })
+  const bindModeEvents = () => {
+    const cards = modeCardsContainer.querySelectorAll('.mode-card')
+    for (const card of cards) {
+      card.addEventListener('click', () => {
+        state.gameMode = normalizeGameMode(card.dataset.mode)
+        state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+        renderGame()
+      })
+    }
+  }
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault()
-    if (startBtn.disabled) {
+  const loadArchivePreview = async () => {
+    if (!dateInput.value) {
+      previewMeta.textContent = 'Choose an archive date.'
       return
     }
 
-    const run = getResumableRun()
-    if (run) {
-      state.difficulty = run.difficulty
-      state.imageUrl = resolveAssetUrl(run.imageUrl)
-      state.puzzle = {
-        date: run.puzzleDate,
-        theme: run.theme || 'Saved run',
-      }
-      renderGame({ resumeRun: run })
-      return
-    }
+    state.archiveDate = dateInput.value
+    previewMeta.textContent = 'Loading archive puzzle...'
 
-    state.difficulty = difficultyInput.value
-    renderGame()
+    try {
+      const payload = await fetchPuzzlePayload({ date: state.archiveDate })
+      state.puzzle = payload
+      previewMeta.textContent = `${payload.date}`
+      modeCardsContainer.innerHTML = renderModeCards(payload)
+      bindModeEvents()
+    } catch (error) {
+      state.puzzle = null
+      previewMeta.textContent = error.message || 'Unable to load archive puzzle.'
+      modeCardsContainer.innerHTML = `
+        <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--error);">
+          Failed to load archive puzzles.
+        </div>
+      `
+    }
+  }
+
+  dateInput.addEventListener('change', loadArchivePreview)
+  backBtn.addEventListener('click', () => {
+    renderLauncher()
   })
 
-  refreshPreview()
+  bindDifficultyEvents()
+  loadArchivePreview()
 }
 
 function renderGame({ resumeRun = null } = {}) {
+  const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
+  state.gameMode = gameMode
+
   app.innerHTML = `
     <main class="game-shell">
       <header class="game-toolbar">
@@ -458,20 +655,23 @@ function renderGame({ resumeRun = null } = {}) {
       destroyPuzzle()
 
       if (resumeRun) {
+        state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)
         state.difficulty = resumeRun.difficulty || state.difficulty
         state.imageUrl = resolveAssetUrl(resumeRun.imageUrl || state.imageUrl)
         state.puzzle = {
           date: resumeRun.puzzleDate,
-          theme: resumeRun.theme || 'Saved run',
         }
-        currentRun = { ...resumeRun }
+        currentRun = {
+          ...resumeRun,
+          gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
+        }
       } else {
         currentRun = {
           version: 1,
           runId: createGuid(),
           playerGuid,
+          gameMode,
           puzzleDate: state.puzzle?.date || getIsoDate(new Date()),
-          theme: state.puzzle?.theme || 'Daily Puzzle',
           difficulty: state.difficulty,
           imageUrl: state.imageUrl,
           startedAt: new Date().toISOString(),
@@ -485,11 +685,11 @@ function renderGame({ resumeRun = null } = {}) {
       startActiveTimer(currentRun.elapsedActiveMs)
       bindGameActivity(() => persistActiveRun())
 
-      puzzle = new JigsawPuzzle({
+      const PuzzleClass = gameMode === GAME_MODE_SLIDING ? SlidingTilePuzzle : JigsawPuzzle
+      const puzzleConfig = {
         container: mount,
         imageUrl: state.imageUrl,
         difficulty: state.difficulty,
-        snapDistance: 10,
         onProgress: ({ completed, state: progressState }) => {
           if (currentRun) {
             currentRun.completed = Boolean(completed)
@@ -510,19 +710,32 @@ function renderGame({ resumeRun = null } = {}) {
           removeStorage(ACTIVE_RUN_KEY)
 
           const durationLabel = formatDuration(currentRun.elapsedActiveMs)
-          setStatus(`Completed in ${durationLabel}. Submitting leaderboard...`, 'ok')
+
+          setStatus(
+            `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Submitting leaderboard...`,
+            'ok',
+          )
 
           try {
             const result = await submitLeaderboard(currentRun)
             setStatus(
-              `Completed in ${durationLabel}. Rank #${result.rank} on ${result.difficulty}.`,
+              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${result.rank} on ${result.difficulty}.`,
               'ok',
             )
           } catch (error) {
-            setStatus(`Completed in ${durationLabel}. Leaderboard submit failed.`, 'error')
+            setStatus(
+              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Leaderboard submit failed.`,
+              'error',
+            )
           }
         },
-      })
+      }
+
+      if (gameMode === GAME_MODE_JIGSAW) {
+        puzzleConfig.snapDistance = 10
+      }
+
+      puzzle = new PuzzleClass(puzzleConfig)
 
       await puzzle.init()
 
@@ -532,11 +745,12 @@ function renderGame({ resumeRun = null } = {}) {
 
       persistActiveRun(puzzle.getProgressState())
 
-      const puzzleLabel = state.puzzle
-        ? `${state.puzzle.date} · ${state.puzzle.theme}`
-        : 'Puzzle ready'
+      const puzzleLabel = state.puzzle ? `${state.puzzle.date}` : 'Puzzle ready'
       const elapsedLabel = formatDuration(getActiveElapsedMs())
-      setStatus(`${puzzleLabel}. ${getInteractionHint()} Active ${elapsedLabel}.`, 'ok')
+      setStatus(
+        `${puzzleLabel}. ${MODE_LABELS[gameMode]} mode. ${getInteractionHint(gameMode)} Active ${elapsedLabel}.`,
+        'ok',
+      )
     } catch (error) {
       console.error(error)
       setStatus('Failed to load puzzle image.', 'error')
@@ -554,15 +768,4 @@ function destroyPuzzle() {
   }
 }
 
-const resumableAtBoot = getResumableRun()
-if (resumableAtBoot) {
-  state.difficulty = resumableAtBoot.difficulty
-  state.imageUrl = resolveAssetUrl(resumableAtBoot.imageUrl)
-  state.puzzle = {
-    date: resumableAtBoot.puzzleDate,
-    theme: resumableAtBoot.theme || 'Saved run',
-  }
-  renderGame({ resumeRun: resumableAtBoot })
-} else {
-  renderLauncher()
-}
+renderLauncher()
