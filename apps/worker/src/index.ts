@@ -114,7 +114,7 @@ const DESCRIPTOR_POOL = [
   'tileable visual rhythm',
   'clear foreground middle background',
   'strong depth perspective',
-  'centered focal subject',
+  'subject placement variety',
   'rule of thirds framing',
   'symmetrical composition',
   'diagonal leading lines',
@@ -187,11 +187,47 @@ const DESCRIPTOR_POOL = [
   'tranquil lake mirror',
   'clear object spacing',
   'distinct color zoning',
-  'strong landmark anchors',
+  'varied points of interest',
   'visually varied sub-regions',
   'cohesive narrative scene',
-  'no text signage',
-  'no watermark artifacts',
+  'wildlife close-up portrait',
+  'flock of birds in motion',
+  'fox in snowy woodland',
+  'wolf pack at dusk',
+  'jaguar in rainforest shade',
+  'elephants at watering hole',
+  'whale breaching ocean surface',
+  'dolphins in crystal surf',
+  'jellyfish bloom underwater',
+  'owl in moonlit branches',
+  'butterfly macro on wildflower',
+  'dragonfly wing macro detail',
+  'koi pond surface ripples',
+  'reef fish color burst',
+  'farmyard morning routine',
+  'street market portrait moment',
+  'cozy kitchen still life',
+  'workbench tools still life',
+  'vintage camera close-up',
+  'mechanical watch macro gears',
+  'weathered doorway textures',
+  'ceramic pottery shelf study',
+  'bookshop corner ambiance',
+  'train cabin interior scene',
+  'road trip desert stop',
+  'coastal village rooftops',
+  'foggy moorland trail',
+  'savanna grassland horizon',
+  'jungle canopy sunlight',
+  'volcanic shoreline basalt columns',
+  'iceberg field at noon',
+  'carnival parade motion blur',
+  'skate park action frame',
+  'ballroom dance freeze moment',
+  'abstract fluid ink marbling',
+  'geometric paper collage style',
+  'minimal still-life composition',
+  'maximalist color explosion',
 ] as const
 
 const CATEGORY_PROMPT_INTENTS: Record<
@@ -205,32 +241,68 @@ const CATEGORY_PROMPT_INTENTS: Record<
   jigsaw: {
     title: 'Jigsaw',
     composition:
-      'Use a wide scene with layered depth and many distinct local details spread across the full frame.',
+      'Allow any subject direction (scenery, wildlife, architecture, objects, daily life, or abstract) with broad visual variety across the frame.',
     qualityTarget:
       'Favor rich texture variety and many recognizable sub-regions with strong visual distinction.',
   },
   slider: {
     title: 'Slider',
     composition:
-      'Use one dominant focal landmark with clear directional structure and strong context around it.',
+      'Allow any subject direction (scenery, landmarks, animals, objects, or abstract) while keeping directional flow readable from one side of the frame to the other.',
     qualityTarget:
-      'Favor clean visual progression and obvious anchor points so position changes are readable.',
+      'Favor clean visual progression and clear continuity cues so position changes are readable.',
   },
   swap: {
     title: 'Swap',
     composition:
-      'Use one unified scene with distinct in-scene regions, varied objects, and crisp separation between neighboring areas while keeping a continuous environment.',
+      'Use one unified image with distinct in-image regions, varied objects, and crisp separation between neighboring areas.',
     qualityTarget:
-      'Favor high local contrast and clear region boundaries without creating split panels or collage-style layouts.',
+      'Favor high local contrast and clear region boundaries within a single coherent image.',
   },
   polygram: {
     title: 'Polygram',
     composition:
-      'Use bold large silhouettes, simple shape clusters, and clear figure-ground separation.',
+      'Allow any subject direction but emphasize bold silhouettes, simple shape clusters, and clear figure-ground separation.',
     qualityTarget:
       'Favor readable geometry and strong contour language for shape-based recognition.',
   },
 }
+
+const PROMPT_LEAD_TEMPLATES = [
+  'Creative direction:',
+  'Art direction:',
+  'Visual brief:',
+  'Scene direction:',
+  'Image direction:',
+] as const
+
+const PROMPT_QUALITY_TEMPLATES = [
+  'Quality target: {quality}',
+  'Quality guidance: {quality}',
+  'Quality focus: {quality}',
+  'Rendering target: {quality}',
+] as const
+
+const PROMPT_OUTPUT_TEMPLATES = [
+  'Output requirements: single image, landscape 4:3, high detail, clean edges, coherent lighting.',
+  'Output format: one image only, 4:3 landscape framing, strong detail clarity, clean edge fidelity, coherent lighting.',
+  'Final output: single 4:3 landscape image with crisp detail and consistent lighting across the frame.',
+  'Deliver one landscape 4:3 image with high detail, clean contours, and stable lighting continuity.',
+] as const
+
+const PROMPT_COHERENCE_TEMPLATES = [
+  'Compose one cohesive moment in one continuous environment with one consistent visual style.',
+  'Keep the frame unified as a single scene with consistent style and continuous spatial logic.',
+  'Treat this as one coherent image, not multiple separate concepts.',
+  'Build one continuous visual narrative with a single unified composition.',
+] as const
+
+const PROMPT_SENTENCE_ORDERS = [
+  [0, 1, 2, 3, 4],
+  [1, 0, 2, 3, 4],
+  [0, 2, 1, 3, 4],
+  [1, 2, 0, 3, 4],
+] as const
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -379,13 +451,13 @@ app.post('/api/admin/puzzles', async (c) => {
     await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(record))
     return c.json({
       ok: true,
-      message: `Puzzle package for ${date} saved.`,
+      message: `Puzzle images for ${date} saved.`,
       generatedTheme: generatedPack?.themeName ?? null,
       puzzle: record,
     })
   } catch (error) {
     console.error('Admin upload failed', error)
-    return c.json({ error: 'Unable to save puzzle package.' }, 500)
+    return c.json({ error: 'Unable to save puzzle images.' }, 500)
   }
 })
 
@@ -904,13 +976,22 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
 
 function buildImagePrompt(category: PuzzleCategory, descriptors: string[]): string {
   const intent = CATEGORY_PROMPT_INTENTS[category]
-  const descriptorText = descriptors.join(', ')
-  return [
-    intent.composition,
-    `Use these descriptors: ${descriptorText}.`,
-    `Quality target: ${intent.qualityTarget}`,
-    'Output requirements: single image, landscape 4:3, high detail, clean edges, coherent lighting, no text, no letters, no logos, no watermark, no borders, no UI overlays.',
-  ].join(' ')
+  const randomized = shuffleCopy(descriptors)
+  const primaryDescriptor = randomized[0] || 'visually distinctive subject'
+  const supportingDescriptors = randomized.slice(1, 4)
+  const descriptorText = supportingDescriptors.join(', ')
+  const lead = `${pickRandom(PROMPT_LEAD_TEMPLATES)} ${intent.composition}`
+  const descriptorLine =
+    supportingDescriptors.length > 0
+      ? `Primary cue: ${primaryDescriptor}. Supporting cues: ${descriptorText}.`
+      : `Primary cue: ${primaryDescriptor}.`
+  const qualityLine = pickRandom(PROMPT_QUALITY_TEMPLATES).replace('{quality}', intent.qualityTarget)
+  const outputLine = pickRandom(PROMPT_OUTPUT_TEMPLATES)
+  const coherenceLine = pickRandom(PROMPT_COHERENCE_TEMPLATES)
+  const lines = [lead, descriptorLine, qualityLine, outputLine, coherenceLine]
+  const order = pickRandom(PROMPT_SENTENCE_ORDERS)
+
+  return order.map((index) => lines[index]).join(' ')
 }
 
 function normalizePromptHistoryItem(raw: unknown): PromptHistoryItem | null {
@@ -1025,6 +1106,20 @@ function capitalizeWords(value: string): string {
   return value.replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function pickRandom<T>(values: readonly T[]): T {
+  const index = Math.floor(Math.random() * values.length)
+  return values[index] as T
+}
+
+function shuffleCopy<T>(values: readonly T[]): T[] {
+  const copy = [...values]
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    ;[copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]]
+  }
+  return copy
+}
+
 function renderHomePage(): string {
   return `<!doctype html>
 <html lang="en">
@@ -1130,7 +1225,7 @@ function renderHomePage(): string {
       <section class="top">
         <div>
           <h1>Xefig</h1>
-          <p class="meta" id="summary">Loading today's puzzle package...</p>
+          <p class="meta" id="summary">Loading today's puzzle images...</p>
         </div>
         <a class="admin-link" href="/admin-portal">Admin Portal</a>
       </section>
@@ -1155,9 +1250,9 @@ function renderHomePage(): string {
           const payload = await res.json()
 
           if (!res.ok) {
-            statusEl.textContent = payload.error || "No puzzle package scheduled for today."
+            statusEl.textContent = payload.error || "No puzzle images scheduled for today."
             statusEl.classList.add("error")
-            summaryEl.textContent = "No daily package found."
+            summaryEl.textContent = "No daily images found."
             return
           }
 
@@ -1188,7 +1283,7 @@ function renderHomePage(): string {
             cardsEl.append(card)
           }
         } catch (error) {
-          statusEl.textContent = "Failed to load today's package."
+          statusEl.textContent = "Failed to load today's images."
           statusEl.classList.add("error")
           summaryEl.textContent = "KV lookup failed."
         }
@@ -1442,18 +1537,18 @@ function renderAdminPage(): string {
     <section class="panel">
       <header class="top">
         <h1>Xefig Admin</h1>
-        <p class="lead">Workflow: generate prompts, make images externally, then upload the package for a date.</p>
+        <p class="lead">Workflow: generate prompts, make images externally, then upload four unique images (one per game type) for a date.</p>
         <ol class="flow">
-          <li><strong>1.</strong>Generate the daily prompt pack.</li>
+          <li><strong>1.</strong>Generate daily prompts.</li>
           <li><strong>2.</strong>Use each per-image prompt in your image model and export files.</li>
-          <li><strong>3.</strong>Upload all four images to publish the day.</li>
+          <li><strong>3.</strong>Upload all four unique images to publish the day.</li>
         </ol>
       </header>
 
       <div class="layout">
         <section class="step" aria-label="Daily setup">
           <h2>Daily Setup</h2>
-          <p class="sub">Generate one prompt pack, then follow the same loop in each image card: copy prompt, generate externally, upload the result.</p>
+          <p class="sub">Generate one set of prompts, then follow the same loop in each image card: copy prompt, generate externally, upload the result.</p>
           <div class="row">
             <label>
               Admin Password
@@ -1465,8 +1560,8 @@ function renderAdminPage(): string {
             </label>
           </div>
           <div class="actions">
-            <button type="button" id="generate-prompt-btn" class="secondary">Generate Daily Prompt Pack</button>
-            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy Full Prompt Pack</button>
+            <button type="button" id="generate-prompt-btn" class="secondary">Generate Daily Prompts</button>
+            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy All Prompts</button>
           </div>
           <div class="meta-grid">
             <label>
@@ -1491,7 +1586,7 @@ function renderAdminPage(): string {
             <div class="row">
               <label>
                 Tags For This Day
-                <input id="upload-tags" type="text" readonly placeholder="Generate a daily prompt pack to populate tags" />
+                <input id="upload-tags" type="text" readonly placeholder="Generate daily prompts to populate tags" />
               </label>
             </div>
 
@@ -1535,13 +1630,13 @@ function renderAdminPage(): string {
             </div>
 
             <div class="actions">
-              <button type="submit" id="submit-btn">Save Puzzle Package</button>
+              <button type="submit" id="submit-btn">Save Daily Images</button>
             </div>
           </form>
         </section>
       </div>
 
-      <div id="status" class="status note">Ready. Generate a daily prompt pack first.</div>
+      <div id="status" class="status note">Ready. Generate daily prompts first.</div>
     </section>
 
     <script>
@@ -1673,7 +1768,7 @@ function renderAdminPage(): string {
 
         generateBtn.disabled = true
         copyPackBtn.disabled = true
-        setStatus("Generating daily prompt pack...", "note")
+        setStatus("Generating daily prompts...", "note")
 
         try {
           const response = await fetch("/api/admin/prompts/generate", {
@@ -1693,7 +1788,7 @@ function renderAdminPage(): string {
           const packs = Array.isArray(payload.prompts) ? payload.prompts : []
           const firstPack = packs[0] || null
           if (!firstPack) {
-            setStatus("No prompt pack was returned.", "error")
+            setStatus("No prompts were returned.", "error")
             promptPack = null
             clearPromptFields()
             return
@@ -1702,7 +1797,7 @@ function renderAdminPage(): string {
           promptPack = firstPack
           renderPromptPack(firstPack)
           copyPackBtn.disabled = false
-          setStatus("Daily prompt pack ready. For each type: copy prompt -> generate image -> upload image.", "ok")
+          setStatus("Daily prompts ready. For each type: copy prompt -> generate image -> upload image.", "ok")
         } catch (error) {
           setStatus("Network error while generating prompts.", "error")
           promptPack = null
@@ -1714,12 +1809,12 @@ function renderAdminPage(): string {
 
       copyPackBtn.addEventListener("click", async () => {
         if (!promptPack) {
-          setStatus("Generate the daily prompt pack before copying prompts.", "error")
+          setStatus("Generate daily prompts before copying.", "error")
           return
         }
 
         const combined = [
-          "DAILY PACK",
+          "DAILY PROMPTS",
           "Label: " + (promptPack.themeName || ""),
           "Tags: " + (Array.isArray(promptPack.keywords) ? promptPack.keywords.join(", ") : ""),
           "",
@@ -1736,7 +1831,7 @@ function renderAdminPage(): string {
           promptPack.prompts?.polygram || "",
         ].join("\\n")
 
-        await copyText(combined, "Full prompt pack")
+        await copyText(combined, "All prompts")
       })
 
       document.querySelectorAll(".copy-btn").forEach((button) => {
@@ -1766,7 +1861,7 @@ function renderAdminPage(): string {
 
         const submitBtn = document.getElementById("submit-btn")
         submitBtn.disabled = true
-        setStatus("Uploading puzzle package...", "note")
+        setStatus("Uploading daily images...", "note")
 
         try {
           const formData = new FormData(form)
@@ -1786,14 +1881,14 @@ function renderAdminPage(): string {
 
           const payload = await response.json()
           if (!response.ok) {
-            setStatus(payload.error || "Unable to save package.", "error")
+            setStatus(payload.error || "Unable to save daily images.", "error")
             return
           }
 
           const generatedLabel = payload.generatedTheme ? " Auto-generated label: " + payload.generatedTheme + "." : ""
-          setStatus((payload.message || "Puzzle package saved.") + generatedLabel, "ok")
+          setStatus((payload.message || "Daily images saved.") + generatedLabel, "ok")
         } catch (error) {
-          setStatus("Network error while saving package.", "error")
+          setStatus("Network error while saving daily images.", "error")
         } finally {
           submitBtn.disabled = false
         }
