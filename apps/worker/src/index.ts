@@ -148,15 +148,15 @@ const DESCRIPTOR_POOL = [
   'swirling fog layers',
   'sparkling dust motes',
   'distant mountain silhouettes',
-  'foreground framing elements',
+  'foreground depth elements',
   'balanced negative space',
   'readable large shapes',
-  'clear edge separation',
+  'clear shape separation',
   'high micro-contrast',
   'smooth gradient transitions',
   'subtle film grain',
   'clean polished rendering',
-  'handcrafted tactile finish',
+  'clean finish',
   'futuristic retro fusion',
   'ancient technology motif',
   'solar-punk infrastructure',
@@ -222,10 +222,10 @@ const DESCRIPTOR_POOL = [
   'volcanic shoreline basalt columns',
   'iceberg field at noon',
   'carnival parade motion blur',
-  'skate park action frame',
+  'skate park action moment',
   'ballroom dance freeze moment',
   'abstract fluid ink marbling',
-  'geometric paper collage style',
+  'geometric layered abstract style',
   'minimal still-life composition',
   'maximalist color explosion',
 ] as const
@@ -241,14 +241,14 @@ const CATEGORY_PROMPT_INTENTS: Record<
   jigsaw: {
     title: 'Jigsaw',
     composition:
-      'Allow any subject direction (scenery, wildlife, architecture, objects, daily life, or abstract) with broad visual variety across the frame.',
+      'Allow any subject direction (scenery, wildlife, architecture, objects, daily life, or abstract) with broad visual variety throughout the image.',
     qualityTarget:
       'Favor rich texture variety and many recognizable sub-regions with strong visual distinction.',
   },
   slider: {
     title: 'Slider',
     composition:
-      'Allow any subject direction (scenery, landmarks, animals, objects, or abstract) while keeping directional flow readable from one side of the frame to the other.',
+      'Allow any subject direction (scenery, landmarks, animals, objects, or abstract) while keeping directional flow readable across the full image.',
     qualityTarget:
       'Favor clean visual progression and clear continuity cues so position changes are readable.',
   },
@@ -284,15 +284,15 @@ const PROMPT_QUALITY_TEMPLATES = [
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES = [
-  'Output requirements: single image, landscape 4:3, high detail, clean edges, coherent lighting.',
-  'Output format: one image only, 4:3 landscape framing, strong detail clarity, clean edge fidelity, coherent lighting.',
-  'Final output: single 4:3 landscape image with crisp detail and consistent lighting across the frame.',
+  'Output requirements: single image, landscape 4:3, high detail, coherent lighting, continuous composition.',
+  'Output format: one image only, 4:3 landscape format, strong detail clarity, coherent lighting, continuous composition.',
+  'Final output: single 4:3 landscape image with crisp detail, consistent lighting, and a continuous scene.',
   'Deliver one landscape 4:3 image with high detail, clean contours, and stable lighting continuity.',
 ] as const
 
 const PROMPT_COHERENCE_TEMPLATES = [
   'Compose one cohesive moment in one continuous environment with one consistent visual style.',
-  'Keep the frame unified as a single scene with consistent style and continuous spatial logic.',
+  'Keep the image unified as a single scene with consistent style and continuous spatial logic.',
   'Treat this as one coherent image, not multiple separate concepts.',
   'Build one continuous visual narrative with a single unified composition.',
 ] as const
