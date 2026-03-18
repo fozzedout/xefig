@@ -1359,7 +1359,19 @@ function renderAdminPage(): string {
         gap: 0.7rem;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       }
+      .workflow-grid {
+        display: grid;
+        gap: 0.7rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        margin-bottom: 0.8rem;
+      }
       .prompt-card {
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        padding: 0.65rem;
+        background: rgba(9, 21, 34, 0.65);
+      }
+      .workflow-card {
         border: 1px solid var(--line);
         border-radius: 0.65rem;
         padding: 0.65rem;
@@ -1374,6 +1386,14 @@ function renderAdminPage(): string {
       .prompt-head h3 {
         margin: 0;
         font-size: 0.95rem;
+      }
+      .workflow-order {
+        margin: 0 0 0.45rem;
+        color: var(--muted);
+        font-size: 0.83rem;
+      }
+      .upload-label {
+        margin-top: 0.5rem;
       }
       .upload-grid {
         display: grid;
@@ -1431,13 +1451,17 @@ function renderAdminPage(): string {
       </header>
 
       <div class="layout">
-        <section class="step" aria-label="Step 1 Prompt generation">
-          <h2>Step 1: Generate Copy/Paste Prompts</h2>
-          <p class="sub">Generate one daily pack with four full prompts (Jigsaw, Slider, Swap, Polygram), then copy prompts per image.</p>
+        <section class="step" aria-label="Daily setup">
+          <h2>Daily Setup</h2>
+          <p class="sub">Generate one prompt pack, then follow the same loop in each image card: copy prompt, generate externally, upload the result.</p>
           <div class="row">
             <label>
               Admin Password
               <input id="admin-password" type="password" autocomplete="current-password" required />
+            </label>
+            <label>
+              Date
+              <input name="date" id="date" type="date" form="admin-form" required />
             </label>
           </div>
           <div class="actions">
@@ -1454,51 +1478,15 @@ function renderAdminPage(): string {
               <input id="selected-keywords" type="text" readonly />
             </label>
           </div>
-          <div class="prompt-grid">
-            <article class="prompt-card">
-              <div class="prompt-head">
-                <h3>Jigsaw Prompt</h3>
-                <button type="button" class="ghost copy-btn" data-target="prompt-jigsaw">Copy</button>
-              </div>
-              <textarea id="prompt-jigsaw" readonly></textarea>
-            </article>
-            <article class="prompt-card">
-              <div class="prompt-head">
-                <h3>Slider Prompt</h3>
-                <button type="button" class="ghost copy-btn" data-target="prompt-slider">Copy</button>
-              </div>
-              <textarea id="prompt-slider" readonly></textarea>
-            </article>
-            <article class="prompt-card">
-              <div class="prompt-head">
-                <h3>Swap Prompt</h3>
-                <button type="button" class="ghost copy-btn" data-target="prompt-swap">Copy</button>
-              </div>
-              <textarea id="prompt-swap" readonly></textarea>
-            </article>
-            <article class="prompt-card">
-              <div class="prompt-head">
-                <h3>Polygram Prompt</h3>
-                <button type="button" class="ghost copy-btn" data-target="prompt-polygram">Copy</button>
-              </div>
-              <textarea id="prompt-polygram" readonly></textarea>
-            </article>
-          </div>
         </section>
 
-        <section class="step" aria-label="Step 2 Upload generated images">
-          <h2>Step 2: Upload Generated Images</h2>
-          <p class="sub">After generating images from prompts, upload all four files for one date. Tags are attached from Step 1 for future filtering/search.</p>
+        <section class="step" aria-label="Per-image workflow">
+          <h2>Per-Image Workflow</h2>
+          <p class="sub">For each type: 1) copy prompt, 2) generate externally, 3) upload image.</p>
+
           <form id="admin-form">
             <input id="form-password" name="password" type="hidden" />
             <input id="tags-hidden" name="tags" type="hidden" />
-
-            <div class="row">
-              <label>
-                Date
-                <input name="date" id="date" type="date" required />
-              </label>
-            </div>
 
             <div class="row">
               <label>
@@ -1507,22 +1495,42 @@ function renderAdminPage(): string {
               </label>
             </div>
 
-            <div class="upload-grid">
-              <article class="file-card">
-                <label>Jigsaw Image <input name="jigsaw" type="file" accept="image/*" required /></label>
-                <p>Use the Jigsaw prompt above.</p>
+            <div class="workflow-grid">
+              <article class="workflow-card">
+                <div class="prompt-head">
+                  <h3>Jigsaw</h3>
+                  <button type="button" class="ghost copy-btn" data-target="prompt-jigsaw">Copy Prompt</button>
+                </div>
+                <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
+                <textarea id="prompt-jigsaw" readonly></textarea>
+                <label class="upload-label">Upload Jigsaw Image <input name="jigsaw" type="file" accept="image/*" required /></label>
               </article>
-              <article class="file-card">
-                <label>Slider Image <input name="slider" type="file" accept="image/*" required /></label>
-                <p>Use the Slider prompt above.</p>
+              <article class="workflow-card">
+                <div class="prompt-head">
+                  <h3>Slider</h3>
+                  <button type="button" class="ghost copy-btn" data-target="prompt-slider">Copy Prompt</button>
+                </div>
+                <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
+                <textarea id="prompt-slider" readonly></textarea>
+                <label class="upload-label">Upload Slider Image <input name="slider" type="file" accept="image/*" required /></label>
               </article>
-              <article class="file-card">
-                <label>Swap Image <input name="swap" type="file" accept="image/*" required /></label>
-                <p>Use the Swap prompt above.</p>
+              <article class="workflow-card">
+                <div class="prompt-head">
+                  <h3>Swap</h3>
+                  <button type="button" class="ghost copy-btn" data-target="prompt-swap">Copy Prompt</button>
+                </div>
+                <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
+                <textarea id="prompt-swap" readonly></textarea>
+                <label class="upload-label">Upload Swap Image <input name="swap" type="file" accept="image/*" required /></label>
               </article>
-              <article class="file-card">
-                <label>Polygram Image <input name="polygram" type="file" accept="image/*" required /></label>
-                <p>Use the Polygram prompt above.</p>
+              <article class="workflow-card">
+                <div class="prompt-head">
+                  <h3>Polygram (Polynomial)</h3>
+                  <button type="button" class="ghost copy-btn" data-target="prompt-polygram">Copy Prompt</button>
+                </div>
+                <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
+                <textarea id="prompt-polygram" readonly></textarea>
+                <label class="upload-label">Upload Polygram Image <input name="polygram" type="file" accept="image/*" required /></label>
               </article>
             </div>
 
@@ -1533,7 +1541,7 @@ function renderAdminPage(): string {
         </section>
       </div>
 
-      <div id="status" class="status note">Ready. Start with Step 1.</div>
+      <div id="status" class="status note">Ready. Generate a daily prompt pack first.</div>
     </section>
 
     <script>
@@ -1694,7 +1702,7 @@ function renderAdminPage(): string {
           promptPack = firstPack
           renderPromptPack(firstPack)
           copyPackBtn.disabled = false
-          setStatus("Daily prompt pack ready. Generate images, then continue to Step 2.", "ok")
+          setStatus("Daily prompt pack ready. For each type: copy prompt -> generate image -> upload image.", "ok")
         } catch (error) {
           setStatus("Network error while generating prompts.", "error")
           promptPack = null
@@ -1706,7 +1714,7 @@ function renderAdminPage(): string {
 
       copyPackBtn.addEventListener("click", async () => {
         if (!promptPack) {
-          setStatus("Generate the daily prompt pack first.", "error")
+          setStatus("Generate the daily prompt pack before copying prompts.", "error")
           return
         }
 
