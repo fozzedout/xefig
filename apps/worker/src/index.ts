@@ -1595,6 +1595,48 @@ function renderAdminPage(): string {
         }
       }
 
+      async function convertImageFileToJpeg(file) {
+        const objectUrl = URL.createObjectURL(file)
+        try {
+          const image = new Image()
+          image.decoding = "async"
+          image.src = objectUrl
+          await image.decode()
+
+          const canvas = document.createElement("canvas")
+          canvas.width = image.naturalWidth
+          canvas.height = image.naturalHeight
+          const ctx = canvas.getContext("2d")
+          if (!ctx) {
+            throw new Error("Canvas context unavailable")
+          }
+
+          ctx.fillStyle = "#ffffff"
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(image, 0, 0)
+
+          const blob = await new Promise((resolve, reject) => {
+            canvas.toBlob((result) => {
+              if (!result) {
+                reject(new Error("JPEG conversion failed"))
+                return
+              }
+              resolve(result)
+            }, "image/jpeg", 0.8)
+          })
+
+          const safeBaseName = (file.name || "image")
+            .replace(/[.][^/.]+$/, "")
+            .replace(/[^a-zA-Z0-9._-]/g, "_")
+          return new File([blob], safeBaseName + ".jpg", {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          })
+        } finally {
+          URL.revokeObjectURL(objectUrl)
+        }
+      }
+
       function renderPromptPack(pack) {
         if (!pack) {
           clearPromptFields()
@@ -1720,6 +1762,15 @@ function renderAdminPage(): string {
 
         try {
           const formData = new FormData(form)
+          for (const category of CATEGORIES) {
+            const file = formData.get(category)
+            if (!(file instanceof File) || file.size === 0) {
+              setStatus("Missing image file for " + category + ".", "error")
+              return
+            }
+            const jpegFile = await convertImageFileToJpeg(file)
+            formData.set(category, jpegFile, jpegFile.name)
+          }
           const response = await fetch("/api/admin/puzzles", {
             method: "POST",
             body: formData,
