@@ -39,8 +39,9 @@ export function createApp() {
     }),
   )
 
-  app.get('/admin', (c) => c.redirect('/admin.html'))
-  app.get('/admin-portal', (c) => c.redirect('/admin.html'))
+  app.get('/admin', (c) => c.redirect('/admin-panel'))
+  app.get('/admin.html', (c) => c.redirect('/admin-panel'))
+  app.get('/admin-portal', (c) => c.redirect('/admin-panel'))
 
   app.get('/api/health', (c) =>
     c.json({

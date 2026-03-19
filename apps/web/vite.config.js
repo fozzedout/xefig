@@ -5,7 +5,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
-        admin: 'admin.html',
+        adminPanel: 'admin-panel.html',
       },
     },
   },

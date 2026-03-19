@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xefig | Admin Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/admin.css" />
+  </head>
+  <body>
+
+    <div class="chrome">
+      <nav class="topbar">
+        <div class="brand">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+            <path d="M11 2L19.5 7V15L11 20L2.5 15V7L11 2Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M11 7L15.33 9.5V14.5L11 17L6.67 14.5V9.5L11 7Z" fill="currentColor" opacity=".35"/>
+          </svg>
+          <span>Xefig Admin</span>
+        </div>
+
+        <div class="topbar-date-cluster">
+          <button type="button" id="prev-day-btn" class="icon-btn" title="Previous day">
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="date-pill">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <rect x="1" y="2" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M4 1v2M9 1v2M1 5h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            <input name="date" id="date" type="date" form="admin-form" required />
+          </div>
+          <button type="button" id="next-day-btn" class="icon-btn" title="Next day">
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 2l5 5-5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" id="load-date-btn" class="btn-sm btn-outline">Inspect</button>
+          <button type="button" id="next-empty-btn" class="btn-sm btn-ghost">Next Empty</button>
+          <div id="record-badge" class="record-badge" data-state="idle">—</div>
+        </div>
+
+        <label class="password-field" title="Admin password">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <rect x="2.5" y="6" width="8" height="5.5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M4.5 6V4.5a2 2 0 0 1 4 0V6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <input id="admin-password" type="password" autocomplete="current-password" placeholder="password" required />
+        </label>
+      </nav>
+
+      <div class="workspace">
+        <aside class="step-rail">
+          <div class="step-indicator active" data-step="1">
+            <div class="step-dot"><span>1</span></div>
+            <div class="step-label">Date &amp; Meta</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-indicator" data-step="2">
+            <div class="step-dot"><span>2</span></div>
+            <div class="step-label">Prompts</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-indicator" data-step="3">
+            <div class="step-dot"><span>3</span></div>
+            <div class="step-label">Images</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-indicator" data-step="4">
+            <div class="step-dot"><span>4</span></div>
+            <div class="step-label">Save</div>
+          </div>
+        </aside>
+
+        <main class="main-content">
+          <div id="status" class="status-bar" data-type="idle">
+            <div class="status-dot"></div>
+            <span id="status-text">Ready. Select a date to begin.</span>
+          </div>
+
+          <section class="content-section" id="section-meta">
+            <div class="section-header">
+              <h2><span class="section-num">01</span>Date Metadata</h2>
+              <p>Theme and tags for this puzzle date. Load a date to inspect what exists, or start fresh for a new one.</p>
+            </div>
+
+            <div class="meta-fields">
+              <label class="field-group">
+                <span class="field-label">Theme</span>
+                <input id="selected-theme" name="theme" form="admin-form" type="text" placeholder="e.g. Deep Sea Bioluminescence" class="field-input" />
+              </label>
+              <label class="field-group">
+                <span class="field-label">Tags <em>(comma-separated)</em></span>
+                <input id="upload-tags" name="tags" form="admin-form" type="text" placeholder="ocean, light, dark, nature" class="field-input" />
+              </label>
+            </div>
+          </section>
+
+          <section class="content-section" id="section-prompts">
+            <div class="section-header">
+              <h2><span class="section-num">02</span>Image Prompts</h2>
+              <p>Generate a prompt pack, then copy each prompt into your image tool.</p>
+            </div>
+
+            <div class="prompt-actions">
+              <button type="button" id="generate-prompt-btn" class="btn-primary">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.93 2.93l1.41 1.41M9.66 9.66l1.41 1.41M2.93 11.07l1.41-1.41M9.66 4.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                Generate Prompts
+              </button>
+              <button type="button" id="copy-pack-btn" class="btn-outline" disabled>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <rect x="4" y="4" width="7.5" height="7.5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+                  <path d="M9 4V2.5a1 1 0 0 0-1-1H2.5a1 1 0 0 0-1 1V8a1 1 0 0 0 1 1H4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
+                Copy All
+              </button>
+            </div>
+
+            <div class="prompt-grid">
+              <div class="prompt-card" data-mode="jigsaw">
+                <div class="prompt-card-head">
+                  <div class="mode-tag">Jigsaw</div>
+                  <button type="button" class="copy-btn btn-micro" data-target="prompt-jigsaw">Copy</button>
+                </div>
+                <textarea id="prompt-jigsaw" readonly placeholder="Prompt will appear here after generation…"></textarea>
+              </div>
+
+              <div class="prompt-card" data-mode="slider">
+                <div class="prompt-card-head">
+                  <div class="mode-tag">Slider</div>
+                  <button type="button" class="copy-btn btn-micro" data-target="prompt-slider">Copy</button>
+                </div>
+                <textarea id="prompt-slider" readonly placeholder="Prompt will appear here after generation…"></textarea>
+              </div>
+
+              <div class="prompt-card" data-mode="swap">
+                <div class="prompt-card-head">
+                  <div class="mode-tag">Swap</div>
+                  <button type="button" class="copy-btn btn-micro" data-target="prompt-swap">Copy</button>
+                </div>
+                <textarea id="prompt-swap" readonly placeholder="Prompt will appear here after generation…"></textarea>
+              </div>
+
+              <div class="prompt-card" data-mode="polygram">
+                <div class="prompt-card-head">
+                  <div class="mode-tag">Polygram</div>
+                  <button type="button" class="copy-btn btn-micro" data-target="prompt-polygram">Copy</button>
+                </div>
+                <textarea id="prompt-polygram" readonly placeholder="Prompt will appear here after generation…"></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="content-section" id="section-images">
+            <div class="section-header">
+              <h2><span class="section-num">03</span>Upload Images</h2>
+              <p id="image-rule">Load a date first to determine which uploads are required.</p>
+            </div>
+
+            <form id="admin-form">
+              <input id="form-password" name="password" type="hidden" />
+
+              <div class="upload-grid">
+                <div class="upload-card" data-mode="jigsaw">
+                  <div class="upload-card-header">
+                    <div class="mode-tag">Jigsaw</div>
+                    <div id="existing-jigsaw" class="existing-indicator">—</div>
+                  </div>
+                  <label class="drop-zone" id="drop-jigsaw">
+                    <input name="jigsaw" type="file" accept="image/*" class="drop-input" />
+                    <div class="drop-inner">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-name"></span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="upload-card" data-mode="slider">
+                  <div class="upload-card-header">
+                    <div class="mode-tag">Slider</div>
+                    <div id="existing-slider" class="existing-indicator">—</div>
+                  </div>
+                  <label class="drop-zone" id="drop-slider">
+                    <input name="slider" type="file" accept="image/*" class="drop-input" />
+                    <div class="drop-inner">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-name"></span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="upload-card" data-mode="swap">
+                  <div class="upload-card-header">
+                    <div class="mode-tag">Swap</div>
+                    <div id="existing-swap" class="existing-indicator">—</div>
+                  </div>
+                  <label class="drop-zone" id="drop-swap">
+                    <input name="swap" type="file" accept="image/*" class="drop-input" />
+                    <div class="drop-inner">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-name"></span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="upload-card" data-mode="polygram">
+                  <div class="upload-card-header">
+                    <div class="mode-tag">Polygram</div>
+                    <div id="existing-polygram" class="existing-indicator">—</div>
+                  </div>
+                  <label class="drop-zone" id="drop-polygram">
+                    <input name="polygram" type="file" accept="image/*" class="drop-input" />
+                    <div class="drop-inner">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-name"></span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="save-row">
+                <div class="save-note">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                    <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.2"/>
+                    <path d="M6.5 5.5v4M6.5 4h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                  </svg>
+                  <span id="save-hint">Existing images are kept if no file is selected for that mode.</span>
+                </div>
+                <button type="submit" id="submit-btn" class="btn-save">
+                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                    <path d="M2 8l4 4 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span id="submit-label">Save Puzzle</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin.js"></script>
+  </body>
+</html>
