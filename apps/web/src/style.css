@@ -893,6 +893,27 @@ h1 {
   z-index: 3;
 }
 
+.polygram-snap-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border: 2px dashed color-mix(in oklab, #ffb347 70%, var(--line));
+  background: color-mix(in oklab, #ffb347 14%, transparent);
+  opacity: 0;
+  z-index: 4;
+  transition: opacity 80ms ease, border-color 80ms ease, background-color 80ms ease;
+}
+
+.polygram-snap-hint.is-visible {
+  opacity: 1;
+}
+
+.polygram-snap-hint.is-ready {
+  border-color: color-mix(in oklab, var(--ok) 82%, #8fe1b2);
+  background: color-mix(in oklab, var(--ok) 22%, transparent);
+}
+
 .polygram-tray {
   min-height: 0;
   border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
@@ -943,7 +964,7 @@ h1 {
   padding: 0;
   background-repeat: no-repeat;
   background-color: transparent;
-  transform-origin: top left;
+  transform-origin: center center;
   cursor: grab;
   touch-action: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
@@ -952,6 +973,10 @@ h1 {
 
 .polygram-piece.is-active {
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.33));
+}
+
+.polygram-piece.is-ready-to-snap {
+  filter: drop-shadow(0 0 0.35rem color-mix(in oklab, var(--ok) 78%, transparent));
 }
 
 .polygram-piece.is-dragging {
