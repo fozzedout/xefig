@@ -9,6 +9,7 @@ const app = document.querySelector('#app')
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
+const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
 const GAME_MODE_SWAP = 'swap'
@@ -164,6 +165,58 @@ function removeStorage(key) {
   } catch {
     // Best effort local persistence.
   }
+}
+
+function getCompletedRunsByDate() {
+  const completedRuns = readJsonStorage(COMPLETED_RUNS_KEY)
+  if (!completedRuns || typeof completedRuns !== 'object' || Array.isArray(completedRuns)) {
+    return {}
+  }
+  return completedRuns
+}
+
+function getCompletedModesForDate(puzzleDate) {
+  if (!puzzleDate) {
+    return new Set()
+  }
+
+  const completedRunsByDate = getCompletedRunsByDate()
+  const dateRuns = completedRunsByDate[puzzleDate]
+  if (!dateRuns || typeof dateRuns !== 'object' || Array.isArray(dateRuns)) {
+    return new Set()
+  }
+
+  return new Set(Object.keys(dateRuns).map((mode) => normalizeGameMode(mode)))
+}
+
+function recordCompletedRun(run) {
+  if (!run?.puzzleDate) {
+    return
+  }
+
+  const completedRunsByDate = getCompletedRunsByDate()
+  const puzzleDate = run.puzzleDate
+  const mode = normalizeGameMode(run.gameMode)
+  const dateRuns =
+    completedRunsByDate[puzzleDate] &&
+    typeof completedRunsByDate[puzzleDate] === 'object' &&
+    !Array.isArray(completedRunsByDate[puzzleDate])
+      ? completedRunsByDate[puzzleDate]
+      : {}
+  const previousEntry =
+    dateRuns[mode] && typeof dateRuns[mode] === 'object' && !Array.isArray(dateRuns[mode]) ? dateRuns[mode] : null
+  const elapsedMs = Math.max(0, Number(run.elapsedActiveMs) || 0)
+  const previousBestMs = previousEntry ? Math.max(0, Number(previousEntry.bestElapsedMs) || elapsedMs) : elapsedMs
+
+  dateRuns[mode] = {
+    completedAt: new Date().toISOString(),
+    difficulty: run.difficulty || null,
+    elapsedActiveMs: elapsedMs,
+    bestElapsedMs: Math.min(previousBestMs, elapsedMs),
+  }
+
+  completedRunsByDate[puzzleDate] = dateRuns
+  writeJsonStorage(COMPLETED_RUNS_KEY, completedRunsByDate)
 }
 
 function createGuid() {
@@ -364,16 +417,24 @@ function renderLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
+    const completedModes = getCompletedModesForDate(puzzlePayload?.date || todayDate)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isPick = mode === getGameModeOfDay(todayDate)
-        const badge = isPick ? '<span class="mode-card-badge">Daily Pick</span>' : ''
+        const badges = []
+        if (isPick) {
+          badges.push('<span class="mode-card-badge mode-card-badge-pick">Daily Pick</span>')
+        }
+        if (completedModes.has(mode)) {
+          badges.push('<span class="mode-card-badge mode-card-badge-completed">completed</span>')
+        }
+        const badgeMarkup = badges.join('')
 
         return `
           <button type="button" class="mode-card" data-mode="${mode}">
-            ${badge}
+            ${badgeMarkup}
             <div class="mode-card-image-wrapper">
               <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
               <div class="mode-card-play-overlay">
@@ -505,12 +566,17 @@ function renderArchiveLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
+    const completedModes = getCompletedModesForDate(puzzlePayload?.date || state.archiveDate)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
+        const completionBadge = completedModes.has(mode)
+          ? '<span class="mode-card-badge mode-card-badge-completed">completed</span>'
+          : ''
         return `
           <button type="button" class="mode-card" data-mode="${mode}">
+            ${completionBadge}
             <div class="mode-card-image-wrapper">
               <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
               <div class="mode-card-play-overlay">
@@ -749,6 +815,7 @@ function renderGame({ resumeRun = null } = {}) {
           currentRun.elapsedActiveMs = getActiveElapsedMs()
           currentRun.completed = true
           currentRun.updatedAt = new Date().toISOString()
+          recordCompletedRun(currentRun)
           writeJsonStorage(ACTIVE_RUN_KEY, currentRun)
           removeStorage(ACTIVE_RUN_KEY)
 

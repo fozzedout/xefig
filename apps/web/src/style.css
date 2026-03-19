@@ -307,8 +307,6 @@ h1 {
 .mode-card-badge {
   position: absolute;
   top: 0.5rem;
-  right: 0.5rem;
-  background: var(--accent);
   color: white;
   font-size: 0.6rem;
   font-weight: 800;
@@ -318,6 +316,17 @@ h1 {
   letter-spacing: 0.05em;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   z-index: 2;
+}
+
+.mode-card-badge-pick {
+  right: 0.5rem;
+  background: var(--accent);
+}
+
+.mode-card-badge-completed {
+  left: 0.5rem;
+  background: var(--ok);
+  text-transform: none;
 }
 
 .launcher-footer {
