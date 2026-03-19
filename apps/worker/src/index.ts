@@ -361,6 +361,37 @@ app.get('/api/puzzles/:date', async (c) => {
   return c.json(puzzle)
 })
 
+app.get('/api/admin/puzzles/next-empty', async (c) => {
+  const configuredPassword = c.env.ADMIN_PASSWORD
+  if (!configuredPassword) {
+    return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
+  }
+
+  const password = (c.req.header('x-admin-password') || '').trim()
+  if (!password || password !== configuredPassword) {
+    return c.json({ error: 'Invalid admin password.' }, 401)
+  }
+
+  const requestedFrom = (c.req.query('from') || '').trim()
+  const today = getUtcDateKey()
+  const fromDate = requestedFrom || today
+  if (!isValidDateKey(fromDate)) {
+    return c.json({ error: 'Invalid from date. Use YYYY-MM-DD.' }, 400)
+  }
+
+  const scanFrom = fromDate < today ? today : fromDate
+  const nextEmptyDate = await findNextUnscheduledDate(c.env.metadata, scanFrom, 3650)
+  if (!nextEmptyDate) {
+    return c.json({ error: 'Unable to find an unscheduled date within the next 3650 days.' }, 404)
+  }
+
+  return c.json({
+    ok: true,
+    from: scanFrom,
+    nextEmptyDate,
+  })
+})
+
 app.post('/api/admin/puzzles', async (c) => {
   const configuredPassword = c.env.ADMIN_PASSWORD
   if (!configuredPassword) {
@@ -391,27 +422,39 @@ app.post('/api/admin/puzzles', async (c) => {
       return c.json({ error: 'Cannot schedule puzzles for past dates.' }, 400)
     }
 
+    const existing = await getPuzzleByDate(c.env.metadata, date)
+    const providedTheme = getStringField(body.theme)?.trim() || ''
     let generatedPack: PromptPack | null = null
     let tags = providedTags
     if (tags.length === 0) {
-      const packs = await generatePromptPacks(c.env.metadata, 1)
-      generatedPack = packs[0] ?? null
-      tags = normalizeTags(generatedPack?.keywords ?? [])
+      tags = normalizeTags(existing?.tags ?? [])
+      if (tags.length === 0) {
+        const packs = await generatePromptPacks(c.env.metadata, 1)
+        generatedPack = packs[0] ?? null
+        tags = normalizeTags(generatedPack?.keywords ?? [])
+      }
     }
     if (tags.length === 0) {
       return c.json({ error: 'Unable to determine puzzle tags.' }, 500)
     }
-    const theme = generatedPack?.themeName ?? formatThemeFromTags(tags)
+    const theme = providedTheme || existing?.theme || generatedPack?.themeName || formatThemeFromTags(tags)
 
     const difficulty = 'adaptive'
 
-    const existing = await getPuzzleByDate(c.env.metadata, date)
     const nextCategories = {} as Record<PuzzleCategory, PuzzleAsset>
 
     for (const category of CATEGORIES) {
       const file = getFileField(body[category])
       if (!file || file.size === 0) {
-        return c.json({ error: `Missing image file for "${category}".` }, 400)
+        const existingAsset = existing?.categories?.[category]
+        if (!existingAsset) {
+          return c.json(
+            { error: `Missing image file for "${category}". Upload all images for new dates.` },
+            400,
+          )
+        }
+        nextCategories[category] = existingAsset
+        continue
       }
 
       const extension = getFileExtension(file)
@@ -453,7 +496,7 @@ app.post('/api/admin/puzzles', async (c) => {
     await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(record))
     return c.json({
       ok: true,
-      message: `Puzzle images for ${date} saved.`,
+      message: `Puzzle details for ${date} saved.`,
       generatedTheme: generatedPack?.themeName ?? null,
       puzzle: record,
     })
@@ -756,6 +799,27 @@ function toPuzzleRecord(value: unknown): PuzzleRecord | null {
 
 function getUtcDateKey(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function addDaysToDateKey(date: string, days: number): string {
+  const base = Date.parse(`${date}T00:00:00.000Z`)
+  return new Date(base + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+async function findNextUnscheduledDate(
+  kv: KVNamespace,
+  fromDate: string,
+  maxDaysToScan: number,
+): Promise<string | null> {
+  let candidate = fromDate
+  for (let index = 0; index < maxDaysToScan; index += 1) {
+    const exists = await kv.get(toPuzzleKey(candidate))
+    if (!exists) {
+      return candidate
+    }
+    candidate = addDaysToDateKey(candidate, 1)
+  }
+  return null
 }
 
 function isValidDateKey(value: string): boolean {
@@ -1571,6 +1635,36 @@ function renderAdminPage(): string {
         color: var(--muted);
         font-size: 0.84rem;
       }
+      .file-meta {
+        margin: 0.45rem 0 0;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .file-meta a {
+        color: #9bd4ff;
+      }
+      .hint {
+        margin: 0.15rem 0 0.7rem;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .record-state {
+        margin: 0.1rem 0 0.8rem;
+        padding: 0.52rem 0.62rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--line);
+        background: rgba(7, 18, 30, 0.65);
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .record-state.new {
+        color: #d0e6ff;
+        border-color: #3d6182;
+      }
+      .record-state.existing {
+        color: var(--ok);
+        border-color: #396e56;
+      }
       .status {
         margin-top: 0.8rem;
         border-radius: 0.6rem;
@@ -1601,18 +1695,18 @@ function renderAdminPage(): string {
     <section class="panel">
       <header class="top">
         <h1>Xefig Admin</h1>
-        <p class="lead">Workflow: generate prompts, make images externally, then upload four unique images (one per game type) for a date.</p>
+        <p class="lead">Pick a date, load it, then either create it (upload all images) or edit it (replace only what changed).</p>
         <ol class="flow">
-          <li><strong>1.</strong>Generate daily prompts.</li>
-          <li><strong>2.</strong>Use each per-image prompt in your image model and export files.</li>
-          <li><strong>3.</strong>Upload all four unique images to publish the day.</li>
+          <li><strong>1.</strong>Choose a date and load existing details.</li>
+          <li><strong>2.</strong>Edit theme/tags and optional prompt text.</li>
+          <li><strong>3.</strong>Save the date and upload only required files.</li>
         </ol>
       </header>
 
       <div class="layout">
         <section class="step" aria-label="Daily setup">
-          <h2>Daily Setup</h2>
-          <p class="sub">Generate one set of prompts, then follow the same loop in each image card: copy prompt, generate externally, upload the result.</p>
+          <h2>1) Date And Metadata</h2>
+          <p class="sub">Load a date first. New dates require all four images. Existing dates let you replace only selected images.</p>
           <div class="row">
             <label>
               Admin Password
@@ -1624,35 +1718,35 @@ function renderAdminPage(): string {
             </label>
           </div>
           <div class="actions">
-            <button type="button" id="generate-prompt-btn" class="secondary">Generate Daily Prompts</button>
-            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy All Prompts</button>
+            <button type="button" id="prev-day-btn" class="ghost">Prev Day</button>
+            <button type="button" id="next-day-btn" class="ghost">Next Day</button>
+            <button type="button" id="load-date-btn" class="secondary">Load Date Details</button>
+            <button type="button" id="next-empty-btn" class="ghost">Next Empty Date</button>
           </div>
+          <div id="record-state" class="record-state new">Date status: not loaded.</div>
           <div class="meta-grid">
             <label>
-              Pack Label
-              <input id="selected-theme" type="text" readonly />
+              Theme
+              <input id="selected-theme" name="theme" form="admin-form" type="text" placeholder="Theme for this date" />
             </label>
             <label>
               Tags
-              <input id="selected-keywords" type="text" readonly />
+              <input id="upload-tags" name="tags" form="admin-form" type="text" placeholder="comma-separated tags" />
             </label>
           </div>
         </section>
 
         <section class="step" aria-label="Per-image workflow">
-          <h2>Per-Image Workflow</h2>
-          <p class="sub">For each type: 1) copy prompt, 2) generate externally, 3) upload image.</p>
+          <h2>2) Prompts And Images</h2>
+          <p class="sub">Use prompts if needed. Upload files only for modes you want to change.</p>
+          <div class="actions">
+            <button type="button" id="generate-prompt-btn" class="secondary">Generate Daily Prompts</button>
+            <button type="button" id="copy-pack-btn" class="ghost" disabled>Copy All Prompts</button>
+          </div>
 
           <form id="admin-form">
             <input id="form-password" name="password" type="hidden" />
-            <input id="tags-hidden" name="tags" type="hidden" />
-
-            <div class="row">
-              <label>
-                Tags For This Day
-                <input id="upload-tags" type="text" readonly placeholder="Generate daily prompts to populate tags" />
-              </label>
-            </div>
+            <p id="image-rule" class="hint">Load a date first to determine required uploads.</p>
 
             <div class="workflow-grid">
               <article class="workflow-card">
@@ -1662,7 +1756,8 @@ function renderAdminPage(): string {
                 </div>
                 <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
                 <textarea id="prompt-jigsaw" readonly></textarea>
-                <label class="upload-label">Upload Jigsaw Image <input name="jigsaw" type="file" accept="image/*" required /></label>
+                <label class="upload-label">Upload Jigsaw Image <input name="jigsaw" type="file" accept="image/*" /></label>
+                <p id="existing-jigsaw" class="file-meta">No existing image loaded.</p>
               </article>
               <article class="workflow-card">
                 <div class="prompt-head">
@@ -1671,7 +1766,8 @@ function renderAdminPage(): string {
                 </div>
                 <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
                 <textarea id="prompt-slider" readonly></textarea>
-                <label class="upload-label">Upload Slider Image <input name="slider" type="file" accept="image/*" required /></label>
+                <label class="upload-label">Upload Slider Image <input name="slider" type="file" accept="image/*" /></label>
+                <p id="existing-slider" class="file-meta">No existing image loaded.</p>
               </article>
               <article class="workflow-card">
                 <div class="prompt-head">
@@ -1680,7 +1776,8 @@ function renderAdminPage(): string {
                 </div>
                 <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
                 <textarea id="prompt-swap" readonly></textarea>
-                <label class="upload-label">Upload Swap Image <input name="swap" type="file" accept="image/*" required /></label>
+                <label class="upload-label">Upload Swap Image <input name="swap" type="file" accept="image/*" /></label>
+                <p id="existing-swap" class="file-meta">No existing image loaded.</p>
               </article>
               <article class="workflow-card">
                 <div class="prompt-head">
@@ -1689,18 +1786,19 @@ function renderAdminPage(): string {
                 </div>
                 <p class="workflow-order">Copy prompt -> Generate image -> Upload image</p>
                 <textarea id="prompt-polygram" readonly></textarea>
-                <label class="upload-label">Upload Polygram Image <input name="polygram" type="file" accept="image/*" required /></label>
+                <label class="upload-label">Upload Polygram Image <input name="polygram" type="file" accept="image/*" /></label>
+                <p id="existing-polygram" class="file-meta">No existing image loaded.</p>
               </article>
             </div>
 
             <div class="actions">
-              <button type="submit" id="submit-btn">Save Daily Images</button>
+              <button type="submit" id="submit-btn">Save Puzzle Date</button>
             </div>
           </form>
         </section>
       </div>
 
-      <div id="status" class="status note">Ready. Generate daily prompts first.</div>
+      <div id="status" class="status note">Ready. Load a date to inspect existing details, or find the next empty date.</div>
     </section>
 
     <script>
@@ -1710,12 +1808,17 @@ function renderAdminPage(): string {
       const dateInput = document.getElementById("date")
       const passwordInput = document.getElementById("admin-password")
       const hiddenPasswordInput = document.getElementById("form-password")
-      const hiddenTagsInput = document.getElementById("tags-hidden")
+      const recordState = document.getElementById("record-state")
+      const imageRule = document.getElementById("image-rule")
+      const prevDayBtn = document.getElementById("prev-day-btn")
+      const nextDayBtn = document.getElementById("next-day-btn")
+      const loadDateBtn = document.getElementById("load-date-btn")
+      const nextEmptyBtn = document.getElementById("next-empty-btn")
       const generateBtn = document.getElementById("generate-prompt-btn")
       const copyPackBtn = document.getElementById("copy-pack-btn")
       const selectedThemeInput = document.getElementById("selected-theme")
-      const selectedKeywordsInput = document.getElementById("selected-keywords")
       const uploadTagsInput = document.getElementById("upload-tags")
+      const submitBtn = document.getElementById("submit-btn")
 
       const promptFields = {
         jigsaw: document.getElementById("prompt-jigsaw"),
@@ -1724,10 +1827,25 @@ function renderAdminPage(): string {
         polygram: document.getElementById("prompt-polygram"),
       }
 
+      const existingMetaFields = {
+        jigsaw: document.getElementById("existing-jigsaw"),
+        slider: document.getElementById("existing-slider"),
+        swap: document.getElementById("existing-swap"),
+        polygram: document.getElementById("existing-polygram"),
+      }
+
+      const fileInputs = {
+        jigsaw: form.querySelector('input[name="jigsaw"]'),
+        slider: form.querySelector('input[name="slider"]'),
+        swap: form.querySelector('input[name="swap"]'),
+        polygram: form.querySelector('input[name="polygram"]'),
+      }
+
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
       dateInput.value = tomorrow
 
       let promptPack = null
+      let isExistingDate = false
 
       function setStatus(text, type) {
         status.textContent = text
@@ -1738,14 +1856,158 @@ function renderAdminPage(): string {
         hiddenPasswordInput.value = passwordInput.value.trim()
       }
 
-      function clearPromptFields() {
+      function addDays(dateKey, days) {
+        const base = Date.parse(dateKey + "T00:00:00.000Z")
+        return new Date(base + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      }
+
+      function setRecordState(text, type) {
+        recordState.textContent = text
+        recordState.className = "record-state " + (type || "new")
+      }
+
+      function applyDateModeUi() {
+        for (const category of CATEGORIES) {
+          const input = fileInputs[category]
+          if (input) {
+            input.required = !isExistingDate
+          }
+        }
+
+        if (isExistingDate) {
+          submitBtn.textContent = "Save Changes"
+          imageRule.textContent = "Existing date loaded: leave file inputs empty to keep current images."
+        } else {
+          submitBtn.textContent = "Create Date"
+          imageRule.textContent = "New date: all four image uploads are required to create it."
+        }
+      }
+
+      function clearPromptTextareas() {
         for (const key of CATEGORIES) {
           promptFields[key].value = ""
         }
-        selectedThemeInput.value = ""
-        selectedKeywordsInput.value = ""
-        uploadTagsInput.value = ""
-        hiddenTagsInput.value = ""
+      }
+
+      function setExistingFileMeta(category, asset) {
+        const meta = existingMetaFields[category]
+        if (!meta) {
+          return
+        }
+
+        meta.textContent = ""
+        if (!asset || !asset.imageUrl) {
+          meta.textContent = isExistingDate ? "No image currently saved for this mode." : "No image saved yet."
+          return
+        }
+
+        const prefix = document.createElement("span")
+        prefix.textContent = "Existing: "
+        const link = document.createElement("a")
+        link.href = asset.imageUrl
+        link.target = "_blank"
+        link.rel = "noopener noreferrer"
+        link.textContent = asset.fileName || (category + " image")
+        meta.append(prefix, link)
+      }
+
+      function clearExistingFileMeta() {
+        for (const category of CATEGORIES) {
+          setExistingFileMeta(category, null)
+        }
+      }
+
+      function renderLoadedPuzzle(puzzle) {
+        if (!puzzle) {
+          clearExistingFileMeta()
+          return
+        }
+
+        selectedThemeInput.value = typeof puzzle.theme === "string" ? puzzle.theme : ""
+        uploadTagsInput.value = Array.isArray(puzzle.tags) ? puzzle.tags.join(", ") : ""
+
+        for (const category of CATEGORIES) {
+          setExistingFileMeta(category, puzzle.categories?.[category] || null)
+        }
+      }
+
+      async function loadDateDetails() {
+        const date = dateInput.value.trim()
+        if (!date) {
+          setStatus("Choose a date first.", "error")
+          return
+        }
+
+        setStatus("Loading details for " + date + "...", "note")
+
+        try {
+          const response = await fetch("/api/puzzles/" + encodeURIComponent(date))
+          const payload = await response.json()
+          if (response.status === 404) {
+            isExistingDate = false
+            selectedThemeInput.value = ""
+            uploadTagsInput.value = ""
+            clearExistingFileMeta()
+            applyDateModeUi()
+            setRecordState("Date " + date + " is new (not uploaded yet).", "new")
+            setStatus("No puzzle scheduled for " + date + ". Add metadata and upload images to create it.", "note")
+            return
+          }
+          if (!response.ok) {
+            setStatus(payload.error || "Unable to load date details.", "error")
+            return
+          }
+
+          isExistingDate = true
+          renderLoadedPuzzle(payload)
+          applyDateModeUi()
+          setRecordState("Date " + date + " exists and can be edited.", "existing")
+          setStatus(
+            "Loaded " + date + ". Leave file inputs empty to keep current images, or upload replacements.",
+            "ok",
+          )
+        } catch (error) {
+          setStatus("Network error while loading date details.", "error")
+        }
+      }
+
+      async function jumpToNextEmptyDate() {
+        const password = passwordInput.value.trim()
+        if (!password) {
+          setStatus("Enter admin password before scanning for the next empty date.", "error")
+          return
+        }
+        syncPasswordIntoForm()
+
+        const from = dateInput.value.trim() || tomorrow
+        setStatus("Searching for next empty date from " + from + "...", "note")
+        try {
+          const response = await fetch("/api/admin/puzzles/next-empty?from=" + encodeURIComponent(from), {
+            headers: {
+              "x-admin-password": password,
+            },
+          })
+          const payload = await response.json()
+          if (!response.ok) {
+            setStatus(payload.error || "Unable to find next empty date.", "error")
+            return
+          }
+
+          dateInput.value = payload.nextEmptyDate || from
+          await loadDateDetails()
+        } catch (error) {
+          setStatus("Network error while finding next empty date.", "error")
+        }
+      }
+
+      function shiftDate(days) {
+        const date = dateInput.value.trim() || tomorrow
+        dateInput.value = addDays(date, days)
+        loadDateDetails()
+      }
+
+      function clearPromptFields() {
+        clearPromptTextareas()
       }
 
       async function copyText(text, label) {
@@ -1806,14 +2068,12 @@ function renderAdminPage(): string {
 
       function renderPromptPack(pack) {
         if (!pack) {
-          clearPromptFields()
+          clearPromptTextareas()
           return
         }
 
         selectedThemeInput.value = pack.themeName || ""
-        selectedKeywordsInput.value = Array.isArray(pack.keywords) ? pack.keywords.join(", ") : ""
         uploadTagsInput.value = Array.isArray(pack.keywords) ? pack.keywords.join(", ") : ""
-        hiddenTagsInput.value = JSON.stringify(Array.isArray(pack.keywords) ? pack.keywords : [])
         promptFields.jigsaw.value = pack.prompts?.jigsaw || ""
         promptFields.slider.value = pack.prompts?.slider || ""
         promptFields.swap.value = pack.prompts?.swap || ""
@@ -1822,6 +2082,8 @@ function renderAdminPage(): string {
 
       passwordInput.addEventListener("input", syncPasswordIntoForm)
       syncPasswordIntoForm()
+      clearExistingFileMeta()
+      applyDateModeUi()
 
       generateBtn.addEventListener("click", async () => {
         const password = passwordInput.value.trim()
@@ -1870,6 +2132,12 @@ function renderAdminPage(): string {
           generateBtn.disabled = false
         }
       })
+
+      prevDayBtn.addEventListener("click", () => shiftDate(-1))
+      nextDayBtn.addEventListener("click", () => shiftDate(1))
+      loadDateBtn.addEventListener("click", loadDateDetails)
+      nextEmptyBtn.addEventListener("click", jumpToNextEmptyDate)
+      dateInput.addEventListener("change", loadDateDetails)
 
       copyPackBtn.addEventListener("click", async () => {
         if (!promptPack) {
@@ -1923,21 +2191,21 @@ function renderAdminPage(): string {
         }
         syncPasswordIntoForm()
 
-        const submitBtn = document.getElementById("submit-btn")
         submitBtn.disabled = true
-        setStatus("Uploading daily images...", "note")
+        setStatus("Saving puzzle details...", "note")
 
         try {
           const formData = new FormData(form)
           for (const category of CATEGORIES) {
             const file = formData.get(category)
-            if (!(file instanceof File) || file.size === 0) {
-              setStatus("Missing image file for " + category + ".", "error")
-              return
+            if (file instanceof File && file.size > 0) {
+              const jpegFile = await convertImageFileToJpeg(file)
+              formData.set(category, jpegFile, jpegFile.name)
+            } else {
+              formData.delete(category)
             }
-            const jpegFile = await convertImageFileToJpeg(file)
-            formData.set(category, jpegFile, jpegFile.name)
           }
+
           const response = await fetch("/api/admin/puzzles", {
             method: "POST",
             body: formData,
@@ -1945,18 +2213,30 @@ function renderAdminPage(): string {
 
           const payload = await response.json()
           if (!response.ok) {
-            setStatus(payload.error || "Unable to save daily images.", "error")
+            setStatus(payload.error || "Unable to save puzzle details.", "error")
             return
           }
 
           const generatedLabel = payload.generatedTheme ? " Auto-generated label: " + payload.generatedTheme + "." : ""
-          setStatus((payload.message || "Daily images saved.") + generatedLabel, "ok")
+          isExistingDate = true
+          applyDateModeUi()
+          setRecordState("Date " + (payload.puzzle?.date || dateInput.value) + " exists and can be edited.", "existing")
+          renderLoadedPuzzle(payload.puzzle || null)
+          for (const category of CATEGORIES) {
+            const input = fileInputs[category]
+            if (input) {
+              input.value = ""
+            }
+          }
+          setStatus((payload.message || "Puzzle details saved.") + generatedLabel, "ok")
         } catch (error) {
-          setStatus("Network error while saving daily images.", "error")
+          setStatus("Network error while saving puzzle details.", "error")
         } finally {
           submitBtn.disabled = false
         }
       })
+
+      loadDateDetails()
     </script>
   </body>
 </html>`
