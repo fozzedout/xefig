@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/src/admin.css" />
+    <link rel="stylesheet" href="src/admin.css" />
   </head>
   <body>
 
@@ -51,20 +51,22 @@
       </nav>
 
       <div class="workspace">
+
+        <!-- STEP RAIL -->
         <aside class="step-rail">
           <div class="step-indicator active" data-step="1">
             <div class="step-dot"><span>1</span></div>
-            <div class="step-label">Date &amp; Meta</div>
+            <div class="step-label">Pick Date</div>
           </div>
           <div class="step-connector"></div>
           <div class="step-indicator" data-step="2">
             <div class="step-dot"><span>2</span></div>
-            <div class="step-label">Prompts</div>
+            <div class="step-label">Generate</div>
           </div>
           <div class="step-connector"></div>
           <div class="step-indicator" data-step="3">
             <div class="step-dot"><span>3</span></div>
-            <div class="step-label">Images</div>
+            <div class="step-label">Upload</div>
           </div>
           <div class="step-connector"></div>
           <div class="step-indicator" data-step="4">
@@ -73,34 +75,20 @@
           </div>
         </aside>
 
+        <!-- MAIN CONTENT -->
         <main class="main-content">
+
+          <!-- GLOBAL STATUS -->
           <div id="status" class="status-bar" data-type="idle">
             <div class="status-dot"></div>
             <span id="status-text">Ready. Select a date to begin.</span>
           </div>
 
-          <section class="content-section" id="section-meta">
-            <div class="section-header">
-              <h2><span class="section-num">01</span>Date Metadata</h2>
-              <p>Theme and tags for this puzzle date. Load a date to inspect what exists, or start fresh for a new one.</p>
-            </div>
-
-            <div class="meta-fields">
-              <label class="field-group">
-                <span class="field-label">Theme</span>
-                <input id="selected-theme" name="theme" form="admin-form" type="text" placeholder="e.g. Deep Sea Bioluminescence" class="field-input" />
-              </label>
-              <label class="field-group">
-                <span class="field-label">Tags <em>(comma-separated)</em></span>
-                <input id="upload-tags" name="tags" form="admin-form" type="text" placeholder="ocean, light, dark, nature" class="field-input" />
-              </label>
-            </div>
-          </section>
-
+          <!-- SECTION: Generate -->
           <section class="content-section" id="section-prompts">
             <div class="section-header">
-              <h2><span class="section-num">02</span>Image Prompts</h2>
-              <p>Generate a prompt pack, then copy each prompt into your image tool.</p>
+              <h2><span class="section-num">01</span>Generate</h2>
+              <p>Generate a prompt pack — this produces the theme, tags, and all four image prompts together. Edit theme or tags manually if needed, then copy each prompt into your image tool.</p>
             </div>
 
             <div class="prompt-actions">
@@ -117,6 +105,17 @@
                 </svg>
                 Copy All
               </button>
+            </div>
+
+            <div class="meta-fields generated-meta">
+              <label class="field-group">
+                <span class="field-label">Theme <em>— filled by Generate</em></span>
+                <input id="selected-theme" name="theme" form="admin-form" type="text" placeholder="e.g. Deep Sea Bioluminescence" class="field-input" />
+              </label>
+              <label class="field-group">
+                <span class="field-label">Tags <em>— filled by Generate</em></span>
+                <input id="upload-tags" name="tags" form="admin-form" type="text" placeholder="ocean, light, dark, nature" class="field-input" />
+              </label>
             </div>
 
             <div class="prompt-grid">
@@ -154,9 +153,10 @@
             </div>
           </section>
 
+          <!-- SECTION: Images -->
           <section class="content-section" id="section-images">
             <div class="section-header">
-              <h2><span class="section-num">03</span>Upload Images</h2>
+              <h2><span class="section-num">02</span>Upload Images</h2>
               <p id="image-rule">Load a date first to determine which uploads are required.</p>
             </div>
 
@@ -167,15 +167,18 @@
                 <div class="upload-card" data-mode="jigsaw">
                   <div class="upload-card-header">
                     <div class="mode-tag">Jigsaw</div>
-                    <div id="existing-jigsaw" class="existing-indicator">—</div>
+                  </div>
+                  <div id="thumb-jigsaw" class="existing-thumb" hidden>
+                    <img alt="Current jigsaw image" />
+                    <div class="thumb-overlay">Current image</div>
                   </div>
                   <label class="drop-zone" id="drop-jigsaw">
                     <input name="jigsaw" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
-                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-label">Drop or <u>browse</u></span>
                       <span class="drop-name"></span>
                     </div>
                   </label>
@@ -184,15 +187,18 @@
                 <div class="upload-card" data-mode="slider">
                   <div class="upload-card-header">
                     <div class="mode-tag">Slider</div>
-                    <div id="existing-slider" class="existing-indicator">—</div>
+                  </div>
+                  <div id="thumb-slider" class="existing-thumb" hidden>
+                    <img alt="Current slider image" />
+                    <div class="thumb-overlay">Current image</div>
                   </div>
                   <label class="drop-zone" id="drop-slider">
                     <input name="slider" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
-                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-label">Drop or <u>browse</u></span>
                       <span class="drop-name"></span>
                     </div>
                   </label>
@@ -201,15 +207,18 @@
                 <div class="upload-card" data-mode="swap">
                   <div class="upload-card-header">
                     <div class="mode-tag">Swap</div>
-                    <div id="existing-swap" class="existing-indicator">—</div>
+                  </div>
+                  <div id="thumb-swap" class="existing-thumb" hidden>
+                    <img alt="Current swap image" />
+                    <div class="thumb-overlay">Current image</div>
                   </div>
                   <label class="drop-zone" id="drop-swap">
                     <input name="swap" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
-                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-label">Drop or <u>browse</u></span>
                       <span class="drop-name"></span>
                     </div>
                   </label>
@@ -218,21 +227,25 @@
                 <div class="upload-card" data-mode="polygram">
                   <div class="upload-card-header">
                     <div class="mode-tag">Polygram</div>
-                    <div id="existing-polygram" class="existing-indicator">—</div>
+                  </div>
+                  <div id="thumb-polygram" class="existing-thumb" hidden>
+                    <img alt="Current polygram image" />
+                    <div class="thumb-overlay">Current image</div>
                   </div>
                   <label class="drop-zone" id="drop-polygram">
                     <input name="polygram" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
-                      <span class="drop-label">Drop image or <u>browse</u></span>
+                      <span class="drop-label">Drop or <u>browse</u></span>
                       <span class="drop-name"></span>
                     </div>
                   </label>
                 </div>
               </div>
 
+              <!-- SAVE -->
               <div class="save-row">
                 <div class="save-note">
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
@@ -250,6 +263,7 @@
               </div>
             </form>
           </section>
+
         </main>
       </div>
     </div>

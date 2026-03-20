@@ -25,3 +25,6 @@ id = "2e5bd934d9304ca69fa36a71e5ea1a25"
 binding = "DB"
 database_name = "daily_puzzles"
 database_id = "d15bf548-6546-4a58-9d90-a1697b19af08"
+
+[vars]
+OPENROUTER_MODEL = "google/gemma-3-27b-it:free"

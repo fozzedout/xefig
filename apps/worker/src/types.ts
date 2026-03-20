@@ -4,6 +4,8 @@ export type Bindings = {
   DB: D1Database
   STATIC_ASSETS: Fetcher
   ADMIN_PASSWORD?: string
+  OPENROUTER_API_KEY?: string
+  OPENROUTER_MODEL?: string
 }
 
 export const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram'] as const

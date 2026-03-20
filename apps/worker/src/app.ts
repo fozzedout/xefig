@@ -16,6 +16,7 @@ import {
   toCdnUrl,
   toPuzzleKey,
 } from './lib/puzzles'
+import { maybeRewritePromptPackWithOpenRouter } from './lib/prompt-rewriter'
 import { generatePromptPacks } from './lib/prompts'
 import {
   CATEGORIES,
@@ -248,9 +249,29 @@ export function createApp() {
     }
 
     const prompts = await generatePromptPacks(c.env.metadata, 1)
+    let rewrite = {
+      attempted: false,
+      applied: false,
+      model: null as string | null,
+      error: null as string | null,
+    }
+
+    const firstPack = prompts[0]
+    if (firstPack) {
+      const rewriteResult = await maybeRewritePromptPackWithOpenRouter(c.env, firstPack)
+      prompts[0] = rewriteResult.pack
+      rewrite = {
+        attempted: rewriteResult.attempted,
+        applied: rewriteResult.applied,
+        model: rewriteResult.model,
+        error: rewriteResult.error,
+      }
+    }
+
     return c.json({
       ok: true,
       prompts,
+      promptRewrite: rewrite,
     })
   })
 

@@ -29,11 +29,11 @@ const promptFields = {
   polygram: document.getElementById('prompt-polygram'),
 }
 
-const existingEls = {
-  jigsaw:   document.getElementById('existing-jigsaw'),
-  slider:   document.getElementById('existing-slider'),
-  swap:     document.getElementById('existing-swap'),
-  polygram: document.getElementById('existing-polygram'),
+const thumbEls = {
+  jigsaw:   document.getElementById('thumb-jigsaw'),
+  slider:   document.getElementById('thumb-slider'),
+  swap:     document.getElementById('thumb-swap'),
+  polygram: document.getElementById('thumb-polygram'),
 }
 
 const fileInputs = {
@@ -85,31 +85,28 @@ function clearPrompts() {
   for (const k of CATEGORIES) promptFields[k].value = ''
 }
 
-function setExistingMeta(category, asset) {
-  const el = existingEls[category]
-  if (!el) return
-  el.textContent = ''
+function setThumb(category, asset) {
+  const wrap = thumbEls[category]
+  if (!wrap) return
   if (!asset?.imageUrl) {
-    el.textContent = isExistingDate ? 'none saved' : '—'
+    wrap.hidden = true
+    wrap.querySelector('img').src = ''
     return
   }
-  const a = document.createElement('a')
-  a.href = asset.imageUrl
-  a.target = '_blank'
-  a.rel = 'noopener noreferrer'
-  a.textContent = asset.fileName || `${category}`
-  el.append(a)
+  const img = wrap.querySelector('img')
+  img.src = asset.imageUrl
+  wrap.hidden = false
 }
 
 function clearExistingMeta() {
-  for (const cat of CATEGORIES) setExistingMeta(cat, null)
+  for (const cat of CATEGORIES) setThumb(cat, null)
 }
 
 function renderLoadedPuzzle(puzzle) {
   if (!puzzle) { clearExistingMeta(); return }
   themeInput.value = typeof puzzle.theme === 'string' ? puzzle.theme : ''
   tagsInput.value  = Array.isArray(puzzle.tags) ? puzzle.tags.join(', ') : ''
-  for (const cat of CATEGORIES) setExistingMeta(cat, puzzle.categories?.[cat] || null)
+  for (const cat of CATEGORIES) setThumb(cat, puzzle.categories?.[cat] || null)
 }
 
 // ── Drop-zone file feedback ────────────────────────────
@@ -122,12 +119,15 @@ function initDropZones() {
 
     input.addEventListener('change', () => {
       const file = input.files?.[0]
+      const card = zone.closest('.upload-card')
       if (file) {
         nameEl.textContent = file.name
         zone.classList.add('has-file')
+        card?.classList.add('has-replacement')
       } else {
         nameEl.textContent = ''
         zone.classList.remove('has-file')
+        card?.classList.remove('has-replacement')
       }
     })
 
@@ -341,6 +341,7 @@ form.addEventListener('submit', async (e) => {
       if (input)  input.value = ''
       if (zone)   zone.classList.remove('has-file')
       if (nameEl) nameEl.textContent = ''
+      zone?.closest('.upload-card')?.classList.remove('has-replacement')
     }
     setStatus(`${payload.message || 'Saved.'}${extra}`, 'ok')
   } catch { setStatus('Network error while saving.', 'error')

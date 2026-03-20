@@ -26,7 +26,12 @@ From repo root:
    - D1 database for `DB`
 3. `cd apps/worker`
 4. `npx wrangler secret put ADMIN_PASSWORD --config wrangler.toml`
-5. `cd ../.. && npm run deploy`
+5. Optional prompt rewriter in admin prompt generation:
+   - `npx wrangler secret put OPENROUTER_API_KEY --config wrangler.toml`
+   - Optional model override (must be a free-capable OpenRouter model id):
+     `npx wrangler secret put OPENROUTER_MODEL --config wrangler.toml`
+   - If `OPENROUTER_MODEL` is not set, the worker defaults to `google/gemma-3-27b-it:free`.
+6. `cd ../.. && npm run deploy`
 
 ## Runtime URLs
 
