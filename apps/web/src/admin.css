@@ -391,6 +391,42 @@ body {
   gap: 0.6rem;
   margin-bottom: 1.1rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.rewrite-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.rewrite-tools-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+
+.rewrite-model-select {
+  height: 30px;
+  min-width: 250px;
+  max-width: 420px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0 0.55rem;
+  outline: none;
+}
+
+.rewrite-model-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .prompt-grid {
@@ -414,6 +450,12 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.65rem;
+}
+
+.prompt-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .mode-tag {
@@ -732,6 +774,16 @@ button { font-family: var(--font-ui); cursor: pointer; }
   .topbar-date-cluster { width: 100%; }
   .password-field { width: 100%; }
   .password-field input { flex: 1; width: auto; }
+
+  .rewrite-tools {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .rewrite-model-select {
+    flex: 1;
+    min-width: 160px;
+  }
 }
 
 @media (max-width: 480px) {

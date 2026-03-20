@@ -15,6 +15,8 @@ const loadDateBtn    = document.getElementById('load-date-btn')
 const nextEmptyBtn   = document.getElementById('next-empty-btn')
 const generateBtn    = document.getElementById('generate-prompt-btn')
 const copyPackBtn    = document.getElementById('copy-pack-btn')
+const refreshModelsBtn = document.getElementById('refresh-models-btn')
+const rewriteModelSelect = document.getElementById('rewrite-model-select')
 const themeInput     = document.getElementById('selected-theme')
 const tagsInput      = document.getElementById('upload-tags')
 const submitBtn      = document.getElementById('submit-btn')
@@ -239,6 +241,128 @@ function renderPromptPack(pack) {
   promptFields.polygram.value = pack.prompts?.polygram || ''
 }
 
+function getSelectedRewriteModel() {
+  return typeof rewriteModelSelect?.value === 'string' ? rewriteModelSelect.value.trim() : ''
+}
+
+function populateRewriteModels(models, defaultModel) {
+  if (!rewriteModelSelect) return
+  const previous = getSelectedRewriteModel()
+  const fallback = (typeof defaultModel === 'string' && defaultModel.trim()) || 'openrouter/free'
+  const options = Array.isArray(models) ? models : []
+
+  rewriteModelSelect.innerHTML = ''
+
+  const workerDefault = document.createElement('option')
+  workerDefault.value = ''
+  workerDefault.textContent = `Worker default (${fallback})`
+  rewriteModelSelect.append(workerDefault)
+
+  for (const model of options) {
+    const id = typeof model?.id === 'string' ? model.id.trim() : ''
+    if (!id) continue
+    const contextLength = Number.isFinite(model?.contextLength) ? Number(model.contextLength) : null
+    const contextLabel = contextLength && contextLength > 0 ? ` • ${contextLength.toLocaleString()} ctx` : ''
+    const option = document.createElement('option')
+    option.value = id
+    option.textContent = `${id}${contextLabel}`
+    rewriteModelSelect.append(option)
+  }
+
+  const values = Array.from(rewriteModelSelect.options).map((opt) => opt.value)
+  if (values.includes(previous)) {
+    rewriteModelSelect.value = previous
+    return
+  }
+  if (values.includes(fallback)) {
+    rewriteModelSelect.value = fallback
+    return
+  }
+  rewriteModelSelect.value = ''
+}
+
+async function refreshFreeModels({ quiet = false } = {}) {
+  const pw = passwordInput.value.trim()
+  if (!pw) {
+    if (!quiet) setStatus('Enter admin password first.', 'error')
+    return
+  }
+
+  if (refreshModelsBtn) refreshModelsBtn.disabled = true
+  if (!quiet) setStatus('Loading free OpenRouter models…', 'working')
+
+  try {
+    const res = await fetch(apiUrl('/api/admin/openrouter/free-models'), {
+      headers: { 'x-admin-password': pw },
+    })
+    const payload = await res.json()
+    if (!res.ok) {
+      if (!quiet) setStatus(payload.error || 'Could not load free models.', 'error')
+      return
+    }
+
+    populateRewriteModels(payload.models, payload.defaultModel)
+    if (!quiet) {
+      const count = Array.isArray(payload.models) ? payload.models.length : 0
+      setStatus(`Loaded ${count} free models.`, 'ok')
+    }
+  } catch {
+    if (!quiet) setStatus('Network error while loading free models.', 'error')
+  } finally {
+    if (refreshModelsBtn) refreshModelsBtn.disabled = false
+  }
+}
+
+async function rewritePrompt(category, triggerBtn) {
+  const pw = passwordInput.value.trim()
+  if (!pw) { setStatus('Enter admin password first.', 'error'); return }
+
+  const field = promptFields[category]
+  if (!field) { setStatus('Prompt field not found.', 'error'); return }
+  const rawPrompt = field.value.trim()
+  if (!rawPrompt) { setStatus(`No ${category} prompt to rewrite.`, 'error'); return }
+
+  const model = getSelectedRewriteModel()
+  const modelLabel = model || 'worker default'
+  triggerBtn.disabled = true
+  setStatus(`Rewriting ${category} prompt using ${modelLabel}…`, 'working')
+  try {
+    const res = await fetch(apiUrl('/api/admin/prompts/rewrite-one'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: pw,
+        category,
+        prompt: rawPrompt,
+        ...(model ? { model } : {}),
+      }),
+    })
+    const payload = await res.json()
+    if (!res.ok) {
+      setStatus(payload.error || `Failed to rewrite ${category} prompt.`, 'error')
+      return
+    }
+
+    const nextPrompt = typeof payload.prompt === 'string' ? payload.prompt.trim() : ''
+    if (!nextPrompt) {
+      setStatus(`No rewritten ${category} prompt returned.`, 'error')
+      return
+    }
+
+    field.value = nextPrompt
+    if (promptPack?.prompts && typeof promptPack.prompts === 'object') {
+      promptPack.prompts[category] = nextPrompt
+    }
+
+    const usedModel = typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : modelLabel
+    setStatus(`Rewrote ${category} prompt using ${usedModel}.`, 'ok')
+  } catch {
+    setStatus(`Network error while rewriting ${category} prompt.`, 'error')
+  } finally {
+    triggerBtn.disabled = false
+  }
+}
+
 // ── Event wiring ───────────────────────────────────────
 passwordInput.addEventListener('input', syncPassword)
 syncPassword()
@@ -251,6 +375,24 @@ nextDayBtn.addEventListener('click', () => shiftDate(1))
 loadDateBtn.addEventListener('click', loadDateDetails)
 nextEmptyBtn.addEventListener('click', jumpToNextEmpty)
 dateInput.addEventListener('change', loadDateDetails)
+if (refreshModelsBtn) {
+  refreshModelsBtn.addEventListener('click', () => { refreshFreeModels() })
+}
+
+if (rewriteModelSelect && rewriteModelSelect.options.length === 0) {
+  populateRewriteModels([], 'openrouter/free')
+}
+
+document.querySelectorAll('.rewrite-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const category = (btn.getAttribute('data-mode') || '').trim()
+    if (!CATEGORIES.includes(category)) {
+      setStatus('Invalid rewrite category.', 'error')
+      return
+    }
+    await rewritePrompt(category, btn)
+  })
+})
 
 generateBtn.addEventListener('click', async () => {
   const pw = passwordInput.value.trim()
@@ -279,6 +421,7 @@ generateBtn.addEventListener('click', async () => {
     promptPack = first
     renderPromptPack(first)
     copyPackBtn.disabled = false
+    refreshFreeModels({ quiet: true })
     setStatus('Prompts ready — copy each one into your image tool, then upload the results below.', 'ok')
     setActiveStep(3)
   } catch { setStatus('Network error while generating prompts.', 'error'); promptPack = null; clearPrompts()
@@ -348,4 +491,5 @@ form.addEventListener('submit', async (e) => {
   } finally { submitBtn.disabled = false }
 })
 
+refreshFreeModels({ quiet: true })
 loadDateDetails()

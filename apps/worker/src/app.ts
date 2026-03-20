@@ -16,7 +16,11 @@ import {
   toCdnUrl,
   toPuzzleKey,
 } from './lib/puzzles'
-import { maybeRewritePromptPackWithOpenRouter } from './lib/prompt-rewriter'
+import {
+  listOpenRouterFreeModels,
+  maybeRewritePromptPackWithOpenRouter,
+  rewriteSinglePromptWithOpenRouter,
+} from './lib/prompt-rewriter'
 import { generatePromptPacks } from './lib/prompts'
 import {
   CATEGORIES,
@@ -114,6 +118,30 @@ export function createApp() {
       from: scanFrom,
       nextEmptyDate,
     })
+  })
+
+  app.get('/api/admin/openrouter/free-models', async (c) => {
+    const configuredPassword = c.env.ADMIN_PASSWORD
+    if (!configuredPassword) {
+      return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
+    }
+
+    const password = (c.req.header('x-admin-password') || '').trim()
+    if (!password || password !== configuredPassword) {
+      return c.json({ error: 'Invalid admin password.' }, 401)
+    }
+
+    try {
+      const models = await listOpenRouterFreeModels(c.env)
+      return c.json({
+        ok: true,
+        defaultModel: (c.env.OPENROUTER_MODEL || '').trim() || 'openrouter/free',
+        models,
+      })
+    } catch (error) {
+      console.error('OpenRouter model list failed', error)
+      return c.json({ error: 'Unable to load OpenRouter free models.' }, 502)
+    }
   })
 
   app.post('/api/admin/puzzles', async (c) => {
@@ -260,6 +288,12 @@ export function createApp() {
     if (firstPack) {
       const rewriteResult = await maybeRewritePromptPackWithOpenRouter(c.env, firstPack)
       prompts[0] = rewriteResult.pack
+      if (rewriteResult.attempted && rewriteResult.error) {
+        console.warn('Prompt rewrite failed', {
+          model: rewriteResult.model,
+          error: rewriteResult.error,
+        })
+      }
       rewrite = {
         attempted: rewriteResult.attempted,
         applied: rewriteResult.applied,
@@ -272,6 +306,72 @@ export function createApp() {
       ok: true,
       prompts,
       promptRewrite: rewrite,
+    })
+  })
+
+  app.post('/api/admin/prompts/rewrite-one', async (c) => {
+    const configuredPassword = c.env.ADMIN_PASSWORD
+    if (!configuredPassword) {
+      return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
+    }
+
+    let body:
+      | {
+          password?: string
+          category?: string
+          prompt?: string
+          model?: string
+        }
+      | null = null
+
+    try {
+      body = (await c.req.json()) as {
+        password?: string
+        category?: string
+        prompt?: string
+        model?: string
+      }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const password = typeof body?.password === 'string' ? body.password.trim() : ''
+    if (!password || password !== configuredPassword) {
+      return c.json({ error: 'Invalid admin password.' }, 401)
+    }
+
+    const categoryRaw = typeof body?.category === 'string' ? body.category.trim() : ''
+    const category = CATEGORIES.find((item) => item === categoryRaw)
+    if (!category) {
+      return c.json({ error: 'Invalid prompt category.' }, 400)
+    }
+
+    const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : ''
+    if (!prompt) {
+      return c.json({ error: 'Prompt text is required.' }, 400)
+    }
+
+    const model = typeof body?.model === 'string' ? body.model.trim() : ''
+
+    const rewritten = await rewriteSinglePromptWithOpenRouter(c.env, {
+      category,
+      prompt,
+      model,
+    })
+
+    if (!rewritten.attempted) {
+      return c.json({ error: rewritten.error || 'Prompt rewrite is unavailable.' }, 500)
+    }
+
+    if (!rewritten.applied || !rewritten.prompt) {
+      return c.json({ error: rewritten.error || 'Unable to rewrite prompt.' }, 502)
+    }
+
+    return c.json({
+      ok: true,
+      category,
+      model: rewritten.model,
+      prompt: rewritten.prompt,
     })
   })
 

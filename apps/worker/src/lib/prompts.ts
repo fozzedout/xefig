@@ -138,16 +138,16 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   ],
 
   palette: [
-    'teal and amber palette',
-    'indigo and coral palette',
-    'sage and copper palette',
-    'cobalt and gold palette',
-    'rose and charcoal palette',
-    'emerald and cream palette',
-    'mint and rust palette',
-    'sand and ultramarine palette',
-    'violet and lime accents',
-    'monochrome with accent red',
+    'teal and amber as dominant tones with natural colour variation throughout',
+    'indigo and coral as dominant tones with natural colour variation throughout',
+    'sage and copper as dominant tones with natural colour variation throughout',
+    'cobalt and gold as dominant tones with natural colour variation throughout',
+    'rose and charcoal as dominant tones with natural colour variation throughout',
+    'emerald and cream as dominant tones with natural colour variation throughout',
+    'mint and rust as dominant tones with natural colour variation throughout',
+    'sand and ultramarine as dominant tones with natural colour variation throughout',
+    'violet and lime as dominant tones with natural colour variation throughout',
+    'monochrome with accent red as dominant tones with natural colour variation throughout',
   ],
 
   camera: [
@@ -190,7 +190,7 @@ const SCENE_PUZZLE_INTENT = {
   composition:
     'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
   qualityTarget:
-    'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them.',
+    'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
 } as const
 
 const CATEGORY_PROMPT_INTENTS: Record<
@@ -212,7 +212,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
     composition:
       'Depict a single subject with a bold, immediately recognisable silhouette and a clear sense of orientation — animals, figures, vehicles, landmarks, and structured objects work especially well. Choose a subject whose interior is naturally filled with texture, markings, or structural detail.',
     qualityTarget:
-      'The outer contour should be crisp and unambiguous. Every interior region should be packed with visible texture, fine detail, and tonal contrast — ensuring the full image surface is visually active with no large areas of uniform colour or tone.',
+      'The outer contour should be crisp and unambiguous. Every interior region should be packed with visible texture, fine detail, and tonal contrast — ensuring the full image surface is visually active with no large areas of uniform colour or tone. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
 }
 
@@ -221,9 +221,9 @@ const CATEGORY_PROMPT_INTENTS: Record<
 // then render instructions. Order is fixed for clarity, not shuffled.
 
 const PROMPT_CONTEXT_TEMPLATES = [
-  'Create a single image for use as a puzzle.',
-  'Generate one image intended as a puzzle.',
-  'Produce a single image to be used as a puzzle.',
+  'Create a vivid, detailed illustration.',
+  'Generate a vivid, detailed illustration.',
+  'Produce a vivid, detailed illustration.',
 ] as const
 
 const PROMPT_SUBJECT_TEMPLATES = [

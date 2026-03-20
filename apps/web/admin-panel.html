@@ -105,6 +105,13 @@
                 </svg>
                 Copy All
               </button>
+              <div class="rewrite-tools">
+                <label for="rewrite-model-select" class="rewrite-tools-label">Reword Model</label>
+                <select id="rewrite-model-select" class="rewrite-model-select">
+                  <option value="">Worker default (openrouter/free)</option>
+                </select>
+                <button type="button" id="refresh-models-btn" class="btn-micro">Refresh Free Models</button>
+              </div>
             </div>
 
             <div class="meta-fields generated-meta">
@@ -122,7 +129,10 @@
               <div class="prompt-card" data-mode="jigsaw">
                 <div class="prompt-card-head">
                   <div class="mode-tag">Jigsaw</div>
-                  <button type="button" class="copy-btn btn-micro" data-target="prompt-jigsaw">Copy</button>
+                  <div class="prompt-card-actions">
+                    <button type="button" class="rewrite-btn btn-micro" data-mode="jigsaw">Reword</button>
+                    <button type="button" class="copy-btn btn-micro" data-target="prompt-jigsaw">Copy</button>
+                  </div>
                 </div>
                 <textarea id="prompt-jigsaw" readonly placeholder="Prompt will appear here after generation…"></textarea>
               </div>
@@ -130,7 +140,10 @@
               <div class="prompt-card" data-mode="slider">
                 <div class="prompt-card-head">
                   <div class="mode-tag">Slider</div>
-                  <button type="button" class="copy-btn btn-micro" data-target="prompt-slider">Copy</button>
+                  <div class="prompt-card-actions">
+                    <button type="button" class="rewrite-btn btn-micro" data-mode="slider">Reword</button>
+                    <button type="button" class="copy-btn btn-micro" data-target="prompt-slider">Copy</button>
+                  </div>
                 </div>
                 <textarea id="prompt-slider" readonly placeholder="Prompt will appear here after generation…"></textarea>
               </div>
@@ -138,7 +151,10 @@
               <div class="prompt-card" data-mode="swap">
                 <div class="prompt-card-head">
                   <div class="mode-tag">Swap</div>
-                  <button type="button" class="copy-btn btn-micro" data-target="prompt-swap">Copy</button>
+                  <div class="prompt-card-actions">
+                    <button type="button" class="rewrite-btn btn-micro" data-mode="swap">Reword</button>
+                    <button type="button" class="copy-btn btn-micro" data-target="prompt-swap">Copy</button>
+                  </div>
                 </div>
                 <textarea id="prompt-swap" readonly placeholder="Prompt will appear here after generation…"></textarea>
               </div>
@@ -146,7 +162,10 @@
               <div class="prompt-card" data-mode="polygram">
                 <div class="prompt-card-head">
                   <div class="mode-tag">Polygram</div>
-                  <button type="button" class="copy-btn btn-micro" data-target="prompt-polygram">Copy</button>
+                  <div class="prompt-card-actions">
+                    <button type="button" class="rewrite-btn btn-micro" data-mode="polygram">Reword</button>
+                    <button type="button" class="copy-btn btn-micro" data-target="prompt-polygram">Copy</button>
+                  </div>
                 </div>
                 <textarea id="prompt-polygram" readonly placeholder="Prompt will appear here after generation…"></textarea>
               </div>

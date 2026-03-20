@@ -30,7 +30,7 @@ From repo root:
    - `npx wrangler secret put OPENROUTER_API_KEY --config wrangler.toml`
    - Optional model override (must be a free-capable OpenRouter model id):
      `npx wrangler secret put OPENROUTER_MODEL --config wrangler.toml`
-   - If `OPENROUTER_MODEL` is not set, the worker defaults to `google/gemma-3-27b-it:free`.
+   - If `OPENROUTER_MODEL` is not set, the worker defaults to `openrouter/free`.
 6. `cd ../.. && npm run deploy`
 
 ## Runtime URLs
