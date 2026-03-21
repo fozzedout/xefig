@@ -5,6 +5,22 @@ const DIFFICULTY_TO_GRID = {
   extreme: 15,
 }
 
+const BOARD_COLORS_LIGHT = [
+  { name: 'birch', color: '#d6cbb5' },
+  { name: 'maple', color: '#cba96a' },
+  { name: 'oak', color: '#b08848' },
+  { name: 'cherry', color: '#9a5e42' },
+  { name: 'image', color: null },
+]
+
+const BOARD_COLORS_DARK = [
+  { name: 'walnut', color: '#3d2e22' },
+  { name: 'mahogany', color: '#3a2222' },
+  { name: 'dark oak', color: '#2e2518' },
+  { name: 'ebony', color: '#1e1a16' },
+  { name: 'image', color: null },
+]
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
@@ -37,6 +53,10 @@ export class JigsawPuzzle {
     this.pendingLift = null
     this.referenceVisible = false
     this.audioContext = null
+    this.boardColorIndex = 0
+    this.boardColors = this.isDarkMode() ? BOARD_COLORS_DARK : BOARD_COLORS_LIGHT
+    this.boardColor = this.boardColors[0].color
+    this.edgesOnly = false
     this.renderScale = this.resolveRenderScale()
 
     this.handleWindowPointerMove = (event) => this.onWindowPointerMove(event)
@@ -461,13 +481,16 @@ export class JigsawPuzzle {
     ctx.stroke(piecePath)
   }
 
-  getBoardOutlineStroke() {
-    const isDarkMode =
+  isDarkMode() {
+    return (
       typeof window !== 'undefined' &&
       window.matchMedia &&
       window.matchMedia('(prefers-color-scheme: dark)').matches
+    )
+  }
 
-    return isDarkMode ? 'rgba(234, 243, 252, 0.86)' : 'rgba(8, 20, 32, 0.46)'
+  getBoardOutlineStroke() {
+    return this.isDarkMode() ? 'rgba(234, 243, 252, 0.86)' : 'rgba(8, 20, 32, 0.46)'
   }
 
   paintGhostImage() {
@@ -478,22 +501,28 @@ export class JigsawPuzzle {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, this.ghostCanvas.width, this.ghostCanvas.height)
     ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0)
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = 'high'
-    ctx.globalAlpha = 0.1
-    const crop = this.imageCrop
-    ctx.drawImage(
-      this.image,
-      crop.x,
-      crop.y,
-      crop.width,
-      crop.height,
-      0,
-      0,
-      this.boardWidth,
-      this.boardHeight,
-    )
-    ctx.globalAlpha = 1
+
+    if (this.boardColor) {
+      ctx.fillStyle = this.boardColor
+      ctx.fillRect(0, 0, this.boardWidth, this.boardHeight)
+    } else {
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.globalAlpha = 0.1
+      const crop = this.imageCrop
+      ctx.drawImage(
+        this.image,
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height,
+        0,
+        0,
+        this.boardWidth,
+        this.boardHeight,
+      )
+      ctx.globalAlpha = 1
+    }
   }
 
   shuffleCarousel() {
@@ -512,7 +541,7 @@ export class JigsawPuzzle {
     piece.locked = false
     piece.inCarousel = true
 
-    piece.canvas.classList.remove('is-locked', 'is-dragging')
+    piece.canvas.classList.remove('is-locked', 'is-dragging', 'is-loose')
     piece.canvas.style.touchAction = 'pan-x'
     piece.canvas.style.position = 'absolute'
     piece.canvas.style.left = '0px'
@@ -542,12 +571,15 @@ export class JigsawPuzzle {
     if (!this.carouselTrack.contains(piece.carouselItem)) {
       this.carouselTrack.append(piece.carouselItem)
     }
+
+    piece.carouselItem.classList.toggle('is-hidden', this.edgesOnly && !this.isEdgePiece(piece))
   }
 
   mountPieceOnBoard(piece, { locked = false } = {}) {
     piece.inCarousel = false
     piece.locked = locked
     piece.canvas.classList.toggle('is-locked', locked)
+    piece.canvas.classList.toggle('is-loose', !locked)
     piece.canvas.classList.remove('is-dragging')
     piece.canvas.style.touchAction = 'none'
     piece.canvas.style.position = 'absolute'
@@ -632,6 +664,13 @@ export class JigsawPuzzle {
     piece.canvas.style.zIndex = `${++this.zIndexCounter}`
 
     document.body.append(piece.canvas)
+
+    try {
+      piece.canvas.setPointerCapture(event.pointerId)
+    } catch {
+      // Best effort — prevents losing the pointer mid-drag on touch.
+    }
+
     this.attachWindowTracking()
   }
 
@@ -679,6 +718,13 @@ export class JigsawPuzzle {
       return
     }
 
+    if (event.type === 'pointercancel') {
+      this.mountPieceInCarousel(piece)
+      this.emitProgress()
+      this.stopDragging()
+      return
+    }
+
     const droppedInCarousel = this.isPointInCarousel(event.clientX, event.clientY)
     const drop = this.getDropState(piece)
 
@@ -696,6 +742,8 @@ export class JigsawPuzzle {
       piece.x = piece.targetX
       piece.y = piece.targetY
       this.mountPieceOnBoard(piece, { locked: true })
+      this.flashSnapOutline(piece)
+      this.vibrateOnSnap()
       this.playSnapSound()
       this.checkCompletion()
     } else {
@@ -804,6 +852,8 @@ export class JigsawPuzzle {
       panX: this.panX,
       panY: this.panY,
       referenceVisible: this.referenceVisible,
+      boardColorIndex: this.boardColorIndex,
+      edgesOnly: this.edgesOnly,
       pieces: this.pieces.map((piece) => ({
         row: piece.row,
         col: piece.col,
@@ -873,6 +923,17 @@ export class JigsawPuzzle {
     this.panY = clampedPan.y
     this.updateStageTransform()
     this.setReferenceVisible(Boolean(payload.referenceVisible))
+
+    const rawColorIndex = Number(payload.boardColorIndex)
+    if (Number.isFinite(rawColorIndex) && rawColorIndex >= 0 && rawColorIndex < this.boardColors.length) {
+      this.boardColorIndex = rawColorIndex
+      this.boardColor = this.boardColors[rawColorIndex].color
+      this.paintGhostImage()
+    }
+
+    if (payload.edgesOnly) {
+      this.setEdgesOnly(true)
+    }
 
     const lockedCount = this.pieces.filter((piece) => piece.locked).length
     this.completed = lockedCount === this.pieces.length
@@ -1036,6 +1097,92 @@ export class JigsawPuzzle {
 
   toggleReferenceVisible() {
     return this.setReferenceVisible(!this.referenceVisible)
+  }
+
+  flashSnapOutline(piece) {
+    piece.canvas.classList.add('snap-flash')
+    piece.canvas.addEventListener(
+      'animationend',
+      () => piece.canvas.classList.remove('snap-flash'),
+      { once: true },
+    )
+  }
+
+  vibrateOnSnap() {
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(15)
+      }
+    } catch {
+      // Best effort haptic feedback.
+    }
+  }
+
+  highlightLoosePieces() {
+    for (const piece of this.pieces) {
+      if (piece.locked || piece.inCarousel) {
+        continue
+      }
+      piece.canvas.classList.remove('is-highlighted')
+      void piece.canvas.offsetWidth
+      piece.canvas.classList.add('is-highlighted')
+      piece.canvas.addEventListener(
+        'animationend',
+        () => piece.canvas.classList.remove('is-highlighted'),
+        { once: true },
+      )
+    }
+  }
+
+  isEdgePiece(piece) {
+    return (
+      piece.edges.top === 0 ||
+      piece.edges.right === 0 ||
+      piece.edges.bottom === 0 ||
+      piece.edges.left === 0
+    )
+  }
+
+  setEdgesOnly(enabled) {
+    this.edgesOnly = Boolean(enabled)
+    for (const piece of this.pieces) {
+      if (!piece.inCarousel) {
+        continue
+      }
+      piece.carouselItem.classList.toggle('is-hidden', this.edgesOnly && !this.isEdgePiece(piece))
+    }
+    return this.edgesOnly
+  }
+
+  toggleEdgesOnly() {
+    return this.setEdgesOnly(!this.edgesOnly)
+  }
+
+  cycleBoardColor() {
+    this.boardColorIndex = (this.boardColorIndex + 1) % this.boardColors.length
+    this.boardColor = this.boardColors[this.boardColorIndex].color
+    this.paintGhostImage()
+    this.emitProgress()
+    return this.boardColors[this.boardColorIndex]
+  }
+
+  getBoardColorName() {
+    return this.boardColors[this.boardColorIndex].name
+  }
+
+  getBoardColorOptions() {
+    return this.boardColors.map((entry, index) => ({
+      ...entry,
+      active: index === this.boardColorIndex,
+    }))
+  }
+
+  setBoardColorIndex(index) {
+    if (index < 0 || index >= this.boardColors.length) return
+    this.boardColorIndex = index
+    this.boardColor = this.boardColors[index].color
+    this.paintGhostImage()
+    this.emitProgress()
   }
 
   playSnapSound() {

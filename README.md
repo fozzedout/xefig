@@ -2,6 +2,40 @@
 
 Single Cloudflare Worker puzzle platform.
 
+## Prerequisites
+
+- **Node.js** v18 or later
+- **npm** (ships with Node)
+- A **Cloudflare** account (for deployment; not needed for local dev)
+
+## Install
+
+```bash
+git clone <repo-url> xefig
+cd xefig
+npm install
+```
+
+This installs dependencies for both workspaces (`apps/worker` and `apps/web`).
+
+## Local development
+
+```bash
+npm run dev
+```
+
+This builds the web app then starts a local Wrangler dev server with simulated
+Cloudflare bindings (R2, KV, D1). The site is served at
+`http://localhost:8787` by default.
+
+To run only the Vite frontend dev server (hot-reload, no worker):
+
+```bash
+npm run web:dev
+```
+
+The Vite server starts at `http://localhost:5173`.
+
 ## Project layout
 
 - `apps/worker`: Cloudflare Worker runtime (API, admin portal, R2/KV/D1 bindings, static asset serving)

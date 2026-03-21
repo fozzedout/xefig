@@ -706,12 +706,30 @@ function renderGame({ resumeRun = null } = {}) {
         <p id="status" class="status toolbar-status">Loading puzzle...</p>
 
         <div class="toolbar-actions">
+          ${gameMode === GAME_MODE_JIGSAW ? `
+          <button id="highlight-btn" class="toolbar-btn icon-btn" type="button" aria-label="Highlight loose pieces" title="Highlight loose pieces">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z" />
+            </svg>
+          </button>
+          <button id="edges-btn" class="toolbar-btn icon-btn" type="button" aria-label="Show edge pieces only" aria-pressed="false" title="Edge pieces only">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+            </svg>
+          </button>
+          ` : ''}
           <button id="view-btn" class="toolbar-btn icon-btn" type="button" aria-label="Toggle reference image" aria-pressed="false">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z" />
             </svg>
           </button>
-          <button id="reset-view-btn" class="toolbar-btn" type="button">Reset View</button>
+          ${gameMode === GAME_MODE_JIGSAW ? `
+          <button id="settings-btn" class="toolbar-btn icon-btn" type="button" aria-label="Puzzle settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94a7.07 7.07 0 0 0 .06-.94c0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.04 7.04 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.3.59.22l2.39-.96c.49.37 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z" />
+            </svg>
+          </button>
+          ` : ''}
         </div>
       </header>
 
@@ -719,13 +737,31 @@ function renderGame({ resumeRun = null } = {}) {
         <div id="puzzle-mount" class="puzzle-mount"></div>
       </section>
     </main>
+
+    ${gameMode === GAME_MODE_JIGSAW ? `
+    <div id="settings-modal" class="settings-overlay" hidden>
+      <div class="settings-panel">
+        <div class="settings-header">
+          <span class="settings-title">Settings</span>
+          <button id="settings-close-btn" class="toolbar-btn icon-btn" type="button" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12 5.7 16.89a1 1 0 1 0 1.41 1.41L12 13.41l4.89 4.89a1 1 0 0 0 1.41-1.41L13.41 12l4.89-4.89a1 1 0 0 0 0-1.4Z" />
+            </svg>
+          </button>
+        </div>
+        <div class="settings-body">
+          <label class="settings-label">Board background</label>
+          <div id="board-color-options" class="board-color-options"></div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
   `
 
   const statusEl = document.querySelector('#status')
   const mount = document.querySelector('#puzzle-mount')
   const backBtn = document.querySelector('#back-btn')
   const viewBtn = document.querySelector('#view-btn')
-  const resetViewBtn = document.querySelector('#reset-view-btn')
 
   const setStatus = (message, variant = '') => {
     statusEl.textContent = message
@@ -734,7 +770,15 @@ function renderGame({ resumeRun = null } = {}) {
 
   let leaderboardDone = false
 
+  const preventBrowserZoom = (e) => e.preventDefault()
+  document.addEventListener('gesturestart', preventBrowserZoom)
+  document.addEventListener('gesturechange', preventBrowserZoom)
+  document.addEventListener('gestureend', preventBrowserZoom)
+
   backBtn.addEventListener('click', () => {
+    document.removeEventListener('gesturestart', preventBrowserZoom)
+    document.removeEventListener('gesturechange', preventBrowserZoom)
+    document.removeEventListener('gestureend', preventBrowserZoom)
     persistActiveRun()
     renderLauncher()
   })
@@ -748,9 +792,72 @@ function renderGame({ resumeRun = null } = {}) {
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   })
 
-  resetViewBtn.addEventListener('click', () => {
-    puzzle?.resetView()
-  })
+
+  const highlightBtn = document.querySelector('#highlight-btn')
+  const edgesBtn = document.querySelector('#edges-btn')
+  const settingsBtn = document.querySelector('#settings-btn')
+  const settingsModal = document.querySelector('#settings-modal')
+  const settingsCloseBtn = document.querySelector('#settings-close-btn')
+  const boardColorOptions = document.querySelector('#board-color-options')
+
+  if (highlightBtn) {
+    highlightBtn.addEventListener('click', () => {
+      puzzle?.highlightLoosePieces()
+    })
+  }
+
+  if (edgesBtn) {
+    edgesBtn.addEventListener('click', () => {
+      if (!puzzle) return
+      const active = puzzle.toggleEdgesOnly()
+      edgesBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+    })
+  }
+
+  const renderBoardColorOptions = () => {
+    if (!boardColorOptions || !puzzle) return
+    const options = puzzle.getBoardColorOptions()
+    boardColorOptions.innerHTML = options
+      .map(
+        (opt, i) =>
+          `<button class="board-color-swatch${opt.active ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${opt.name}" title="${opt.name}"${opt.color ? ` style="background:${opt.color}"` : ''}>${opt.color ? '' : '🖼'}</button>`,
+      )
+      .join('')
+  }
+
+  if (boardColorOptions) {
+    boardColorOptions.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-index]')
+      if (!btn || !puzzle) return
+      puzzle.setBoardColorIndex(Number(btn.dataset.index))
+      renderBoardColorOptions()
+    })
+  }
+
+  const openSettings = () => {
+    if (!settingsModal) return
+    renderBoardColorOptions()
+    settingsModal.hidden = false
+  }
+
+  const closeSettings = () => {
+    if (!settingsModal) return
+    settingsModal.hidden = true
+  }
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', openSettings)
+  }
+
+  if (settingsCloseBtn) {
+    settingsCloseBtn.addEventListener('click', closeSettings)
+  }
+
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (event) => {
+      if (event.target === settingsModal) closeSettings()
+    })
+  }
 
   ;(async () => {
     try {
@@ -851,6 +958,12 @@ function renderGame({ resumeRun = null } = {}) {
 
       if (resumeRun?.puzzleState) {
         puzzle.applyProgressState(resumeRun.puzzleState)
+
+        if (gameMode === GAME_MODE_JIGSAW) {
+          if (edgesBtn && puzzle.edgesOnly) {
+            edgesBtn.setAttribute('aria-pressed', 'true')
+          }
+        }
       }
 
       persistActiveRun(puzzle.getProgressState())
