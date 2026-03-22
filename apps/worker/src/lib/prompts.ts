@@ -10,6 +10,7 @@ const DESCRIPTORS_PER_PACK = ROLES.length
 
 // ---------------------------------------------------------------------------
 // Descriptor pool — organised by role.
+// Used by jigsaw, slider, and swap (rich scene puzzles).
 // To expand variety, add entries to any role slot. Every new entry multiplies
 // combinatorial space with all entries in the other roles.
 // ---------------------------------------------------------------------------
@@ -167,12 +168,137 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 }
 
 // ---------------------------------------------------------------------------
+// Polygram descriptor pool — purpose-built for single-subject silhouette images.
+//
+// Polygram puzzles require a SINGLE isolated subject against a clean background.
+// The subject silhouette must be bold and immediately readable. Every descriptor
+// here is chosen to reinforce that goal: subjects are singular and iconic,
+// backgrounds are uncluttered, lighting separates subject from ground clearly,
+// and camera angles show the full subject body without cropping key contours.
+//
+// Do NOT add busy scenes, crowds, action blur, or abstract compositions here —
+// those belong in DESCRIPTOR_POOL for the scene-based puzzle types.
+// ---------------------------------------------------------------------------
+
+const POLYGRAM_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
+  setting: [
+    // Single animal subjects — iconic silhouettes, sparse surroundings
+    'lone eagle soaring against open sky',
+    'wolf standing alert on rocky ridge',
+    'stag silhouetted on misty hilltop',
+    'lion resting on flat sunlit ground',
+    'bear standing upright on sparse tundra',
+    'horse mid-gallop on open plain',
+    'hawk perched on bare branch against sky',
+    'fox sitting on snow-covered ground',
+    'elephant standing on dry savanna earth',
+    'whale breaching against clean horizon',
+    'owl perched alone against moonlit sky',
+    'leaping dolphin against clear ocean surface',
+    'cheetah crouching on bare rock',
+    'gorilla seated on open jungle floor',
+    'bison standing on empty prairie',
+    'hummingbird hovering against soft bokeh',
+    'peacock displaying feathers on open ground',
+    'crocodile resting on bare riverbank',
+    'great white shark isolated in clear water',
+    'octopus against clean dark ocean backdrop',
+    // Single vehicle / object subjects
+    'sailing ship isolated against clear horizon',
+    'vintage motorcycle on empty road',
+    'biplane against clean blue sky',
+    'lighthouse standing alone on rocky coast',
+    'hot air balloon against gradient sky',
+    'old steam locomotive on open track',
+    'classic sailing boat on calm flat water',
+    'rocket on launch pad against clear sky',
+  ],
+
+  lighting: [
+    // Lighting that separates subject from background cleanly
+    'clean rim lighting with dark separation',
+    'strong directional sidelight with crisp shadows',
+    'golden hour backlight with subject separation',
+    'diffused even studio light with no harsh shadows',
+    'cool blue separation lighting against warm subject',
+    'crisp overhead sunlight with hard ground shadow',
+    'warm ambient glow with soft edge definition',
+    'sharp sidelight casting long clean shadow',
+    'soft overcast lighting with clear subject edges',
+    'dramatic low sun with long separation shadow',
+    'neutral grey sky diffused light',
+    'clear bright midday clarity',
+  ],
+
+  mood: [
+    'calm and focused mood',
+    'bold and heroic mood',
+    'serene and confident mood',
+    'dramatic and powerful mood',
+    'quiet and watchful mood',
+    'majestic and composed mood',
+    'tense and alert mood',
+    'peaceful solitary mood',
+  ],
+
+  style: [
+    'high detail concept art',
+    'bold naturalistic illustration',
+    'clean photorealistic rendering',
+    'matte painting finish',
+    'sharp wildlife illustration style',
+    'detailed storybook painting style',
+    'fantasy realism blend',
+    'bold graphic illustration',
+    'clean digital painting',
+    'precise technical illustration',
+    'rich oil paint texture',
+    'detailed gouache brush strokes',
+  ],
+
+  palette: [
+    // Shared with scene pool — all work well for single subjects
+    'teal and amber as dominant tones with natural colour variation throughout',
+    'indigo and coral as dominant tones with natural colour variation throughout',
+    'sage and copper as dominant tones with natural colour variation throughout',
+    'cobalt and gold as dominant tones with natural colour variation throughout',
+    'rose and charcoal as dominant tones with natural colour variation throughout',
+    'emerald and cream as dominant tones with natural colour variation throughout',
+    'mint and rust as dominant tones with natural colour variation throughout',
+    'sand and ultramarine as dominant tones with natural colour variation throughout',
+    'violet and lime as dominant tones with natural colour variation throughout',
+    'monochrome with accent red as dominant tones with natural colour variation throughout',
+  ],
+
+  camera: [
+    // Angles that show the full subject body and preserve the outer contour
+    'clean side profile shot showing full body',
+    'symmetrical frontal framing showing full subject',
+    'three-quarter angle view showing full body',
+    'low-angle hero perspective showing full silhouette',
+    'medium full-body framing with space around subject',
+    'wide-angle shot with subject centred in frame',
+    'intimate eye-level shot showing complete form',
+    'slight elevated angle showing full body outline',
+  ],
+}
+
+// ---------------------------------------------------------------------------
 // Minimum pool size validation — checked per role at startup.
 // ---------------------------------------------------------------------------
 
 const MIN_ROLE_POOL_SIZE: Record<DescriptorRole, number> = {
   setting: 20,
   lighting: 10,
+  mood: 6,
+  style: 10,
+  palette: 6,
+  camera: 6,
+}
+
+const MIN_POLYGRAM_POOL_SIZE: Record<DescriptorRole, number> = {
+  setting: 20,
+  lighting: 6,
   mood: 6,
   style: 10,
   palette: 6,
@@ -206,13 +332,15 @@ const CATEGORY_PROMPT_INTENTS: Record<
   swap:   { title: 'Swap',   ...SCENE_PUZZLE_INTENT },
   polygram: {
     title: 'Polygram',
-    // Polygram pieces are rotated to the correct orientation. The outer
-    // silhouette must be bold and readable, while the interior must be
-    // dense with detail so every region looks distinct when rotated.
+    // Polygram pieces are rotated to the correct orientation. The image must
+    // have a single bold subject with a crisp, unambiguous outer silhouette.
+    // The background must be clean and simple so the contour reads at a glance.
+    // The interior must be dense with detail so every region looks distinct
+    // when the piece is rotated.
     composition:
-      'Depict a single subject with a bold, immediately recognisable silhouette and a clear sense of orientation — animals, figures, vehicles, landmarks, and structured objects work especially well. Choose a subject whose interior is naturally filled with texture, markings, or structural detail.',
+      'Depict a SINGLE isolated subject — one animal, vehicle, or object — centred in the frame against a clean, uncluttered background. NO crowds, secondary subjects, busy scenes, or complex environments. The subject must have a bold, immediately recognisable outer silhouette with crisp edges. The background must remain simple — soft, blurred, or plain — so the subject contour reads clearly at a glance.',
     qualityTarget:
-      'The outer contour should be crisp and unambiguous. Every interior region should be packed with visible texture, fine detail, and tonal contrast — ensuring the full image surface is visually active with no large areas of uniform colour or tone. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+      'The outer contour of the subject must be sharp and high-contrast against the background. The interior of the subject should be packed with visible texture, fine markings, and tonal contrast — every interior region must look distinct and visually active. The background must stay visually simple with no competing detail. No large flat areas of uniform tone anywhere on the subject itself. Maintain natural colour variety within the subject.',
   },
 }
 
@@ -308,20 +436,32 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   // Pick a fresh descriptor set per puzzle category. Each category gets its
   // own independent role-slot draw so that e.g. the jigsaw and slider prompts
   // share no descriptors — maximising variety across the pack.
+  // Polygram draws from its own dedicated pool (POLYGRAM_DESCRIPTOR_POOL) and
+  // does not share descriptors with the scene-based categories.
   const descriptorSetsByCategory = {} as Record<PuzzleCategory, DescriptorSet>
-  const usedInPack = new Set<string>()
+  const sceneUsedInPack = new Set<string>()
+  const polygramUsedInPack = new Set<string>()
 
   for (const category of CATEGORIES) {
-    const set = pickDescriptorSet(recent, usedInPack)
-    descriptorSetsByCategory[category] = set
-    for (const value of Object.values(set)) {
-      usedInPack.add(value)
+    if (category === 'polygram') {
+      const set = pickDescriptorSet(recent, polygramUsedInPack, 'polygram')
+      descriptorSetsByCategory[category] = set
+      for (const value of Object.values(set)) {
+        polygramUsedInPack.add(value)
+      }
+    } else {
+      const set = pickDescriptorSet(recent, sceneUsedInPack, category)
+      descriptorSetsByCategory[category] = set
+      for (const value of Object.values(set)) {
+        sceneUsedInPack.add(value)
+      }
     }
   }
 
+  const allUsed = new Set([...sceneUsedInPack, ...polygramUsedInPack])
   const jigsawSet = descriptorSetsByCategory.jigsaw
   const themeName = `${capitalizeWords(jigsawSet.setting)} — ${capitalizeWords(jigsawSet.mood)}`
-  const keywords = [...usedInPack].slice(0, 12)
+  const keywords = [...sceneUsedInPack].slice(0, 12)
 
   const pack: PromptPack = {
     themeName,
@@ -335,7 +475,7 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   }
 
   history.push({
-    descriptors: [...usedInPack],
+    descriptors: [...allUsed],
     createdAt: new Date().toISOString(),
   })
 
@@ -387,15 +527,18 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
 
 // Pick one descriptor per role, preferring least-recently-used entries and
 // avoiding anything already used elsewhere in this pack.
+// Polygram draws from POLYGRAM_DESCRIPTOR_POOL; all other categories use DESCRIPTOR_POOL.
 function pickDescriptorSet(
   recent: PromptHistoryItem[],
   excluded: Set<string>,
+  category: PuzzleCategory,
 ): DescriptorSet {
   const counts = buildUsageCounts(recent)
+  const pool = category === 'polygram' ? POLYGRAM_DESCRIPTOR_POOL : DESCRIPTOR_POOL
   const set = {} as DescriptorSet
 
   for (const role of ROLES) {
-    set[role] = pickOneDescriptor(DESCRIPTOR_POOL[role], counts, excluded)
+    set[role] = pickOneDescriptor(pool[role], counts, excluded)
     excluded = new Set([...excluded, set[role]])
   }
 
@@ -502,11 +645,19 @@ function normalizePromptHistoryItem(raw: unknown): PromptHistoryItem | null {
 
 function validatePoolSizes(): void {
   for (const role of ROLES) {
-    const size = DESCRIPTOR_POOL[role].length
-    const min = MIN_ROLE_POOL_SIZE[role]
-    if (size < min) {
+    const sceneSize = DESCRIPTOR_POOL[role].length
+    const sceneMin = MIN_ROLE_POOL_SIZE[role]
+    if (sceneSize < sceneMin) {
       throw new Error(
-        `Descriptor pool for role "${role}" has ${size} entries but requires at least ${min}.`,
+        `Descriptor pool for role "${role}" has ${sceneSize} entries but requires at least ${sceneMin}.`,
+      )
+    }
+
+    const polygramSize = POLYGRAM_DESCRIPTOR_POOL[role].length
+    const polygramMin = MIN_POLYGRAM_POOL_SIZE[role]
+    if (polygramSize < polygramMin) {
+      throw new Error(
+        `Polygram descriptor pool for role "${role}" has ${polygramSize} entries but requires at least ${polygramMin}.`,
       )
     }
   }

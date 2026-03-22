@@ -1,8 +1,11 @@
 import { CATEGORIES, type Bindings, type PromptPack, type PuzzleCategory } from '../types'
 
-const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
-const DEFAULT_OPENROUTER_MODEL = 'openrouter/free'
+//const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
+//const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
+const OPENROUTER_CHAT_URL = 'http://llm.jaxah.com:1234/v1/chat/completions'
+const OPENROUTER_MODELS_URL = 'http://llm.jaxah.com:1234/v1/models'
+//const DEFAULT_OPENROUTER_MODEL = 'openrouter/free'
+const DEFAULT_OPENROUTER_MODEL = 'liquid/lfm2.5-1.2b'
 const APP_REFERER = 'https://xefig.com'
 const APP_TITLE = 'xefig-admin-prompt-rewriter'
 
@@ -57,9 +60,12 @@ export type OpenRouterFreeModel = {
 export async function maybeRewritePromptPackWithOpenRouter(
   env: Pick<Bindings, 'OPENROUTER_API_KEY' | 'OPENROUTER_MODEL'>,
   pack: PromptPack,
+  modelOverride?: string,
 ): Promise<PromptRewriteResult> {
   const apiKey = (env.OPENROUTER_API_KEY || '').trim()
-  if (!apiKey) {
+  const isCustomUrl = !OPENROUTER_CHAT_URL.includes('openrouter.ai')
+  
+  if (!apiKey && !isCustomUrl) {
     return {
       attempted: false,
       applied: false,
@@ -69,10 +75,23 @@ export async function maybeRewritePromptPackWithOpenRouter(
     }
   }
 
-  const model = resolveModel(env.OPENROUTER_MODEL)
+  const model = resolveModel(modelOverride || env.OPENROUTER_MODEL)
+  
+  // If we're using a custom URL (like LM Studio) but the model is still the 
+  // default "openrouter/free", it's likely that no model was selected. 
+  // We should skip rewriting in this case to avoid errors.
+  if (isCustomUrl && model === 'openrouter/free') {
+    return {
+      attempted: false,
+      applied: false,
+      model,
+      error: null,
+      pack,
+    }
+  }
 
   try {
-    const fallbackModels = model === DEFAULT_OPENROUTER_MODEL ? [] : [DEFAULT_OPENROUTER_MODEL]
+    const fallbackModels = model === DEFAULT_OPENROUTER_MODEL || isCustomUrl ? [] : [DEFAULT_OPENROUTER_MODEL]
     const rewritten = await rewritePromptsIndividually(apiKey, model, fallbackModels, pack.prompts)
     if (rewritten.applied) {
       return {
@@ -91,16 +110,16 @@ export async function maybeRewritePromptPackWithOpenRouter(
       attempted: true,
       applied: false,
       model,
-      error: rewritten.error || 'OpenRouter did not return any rewritten prompt text.',
+      error: rewritten.error || `Failed to rewrite prompts via ${OPENROUTER_CHAT_URL}.`,
       pack,
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     return {
       attempted: true,
       applied: false,
       model,
-      error:
-        error instanceof Error ? `OpenRouter request error: ${error.message}` : 'OpenRouter request error.',
+      error: `Rewrite error via ${OPENROUTER_CHAT_URL}: ${message}`,
       pack,
     }
   }
@@ -115,7 +134,9 @@ export async function rewriteSinglePromptWithOpenRouter(
   },
 ): Promise<SinglePromptRewriteResult> {
   const apiKey = (env.OPENROUTER_API_KEY || '').trim()
-  if (!apiKey) {
+  const isCustomUrl = !OPENROUTER_CHAT_URL.includes('openrouter.ai')
+
+  if (!apiKey && !isCustomUrl) {
     return {
       attempted: false,
       applied: false,
@@ -126,7 +147,7 @@ export async function rewriteSinglePromptWithOpenRouter(
   }
 
   const model = resolveModel(input.model || env.OPENROUTER_MODEL)
-  const fallbackModels = model === DEFAULT_OPENROUTER_MODEL ? [] : [DEFAULT_OPENROUTER_MODEL]
+  const fallbackModels = model === DEFAULT_OPENROUTER_MODEL || isCustomUrl ? [] : [DEFAULT_OPENROUTER_MODEL]
 
   try {
     const rewritten = await rewriteOnePrompt(
@@ -173,25 +194,31 @@ export async function listOpenRouterFreeModels(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'HTTP-Referer': APP_REFERER,
-    'X-Title': APP_TITLE,
+    'User-Agent': 'Mozilla/5.0 (compatible; XefigAdmin/1.0)',
   }
 
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`
   }
 
-  const response = await fetch(OPENROUTER_MODELS_URL, {
-    method: 'GET',
-    headers,
-  })
+  let rawBody = ''
+  let response: Response
+  try {
+    response = await fetch(OPENROUTER_MODELS_URL, {
+      method: 'GET',
+      headers,
+    })
+    rawBody = await response.text()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Failed to fetch models from ${OPENROUTER_MODELS_URL}: ${msg}`)
+  }
 
-  const rawBody = await response.text()
   const parsed = parseJsonSafely<OpenRouterModelsResponse>(rawBody)
 
   if (!response.ok) {
     const message = describeOpenRouterError(response.status, response.statusText, parsed as OpenRouterResponse | null, rawBody)
-    throw new Error(`OpenRouter model list failed: ${message}`)
+    throw new Error(`Model list failed for ${OPENROUTER_MODELS_URL}: ${message}`)
   }
 
   const data = Array.isArray(parsed?.data) ? parsed.data : []
@@ -288,14 +315,25 @@ async function rewriteOnePrompt(
   category: PuzzleCategory,
   prompt: string,
 ): Promise<{ prompt: string | null; error: string | null }> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'HTTP-Referer': APP_REFERER,
+    'X-Title': APP_TITLE,
+  }
+
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+
+  // Split the prompt: everything before "Finally, ensure rendering quality" or "Rendering requirement"
+  // is considered the descriptive part. The rest is technical.
+  const technicalMarker = prompt.match(/(?:Finally, ensure rendering quality|For the final render|Rendering requirement):/i)
+  const descriptivePart = technicalMarker ? prompt.slice(0, technicalMarker.index).trim() : prompt
+  const technicalPart = technicalMarker ? prompt.slice(technicalMarker.index).trim() : ''
+
   const response = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': APP_REFERER,
-      'X-Title': APP_TITLE,
-    },
+    headers,
     body: JSON.stringify({
       model,
       ...(fallbackModels.length > 0 ? { models: fallbackModels } : {}),
@@ -305,14 +343,14 @@ async function rewriteOnePrompt(
         {
           role: 'system',
           content:
-          'You are a creative image prompt writer. You will be given a structured image prompt containing a set of labelled descriptors (setting, lighting, mood, style, colour palette, camera). Your task is to author a single vivid, imaginative paragraph that conjures a fully realised scene — as if describing a painting or film still to someone who cannot see it. Do not just reword the input. Use the descriptors as raw ingredients: let the setting ground the scene, let the lighting and mood infuse its atmosphere, and make the camera angle feel intentional. Invent concrete sensory details — textures, movement, implied story — that bring the scene to life. The paragraph must still function as an image generation prompt, so preserve all technical constraints exactly as given (composition rules, quality requirements, output format, and colour palette instructions). Return only the rewritten prompt paragraph with no markdown, no preamble, and no explanation.',
+            'You are a creative writer specializing in vivid scene descriptions. You will be given a structured image prompt. Your task is to transform the descriptive elements (setting, lighting, mood, style, subject) into a single, cohesive, and highly imaginative paragraph. Do not just reword the input; invent concrete sensory details, textures, and atmosphere that bring the scene to life. Return ONLY the rewritten descriptive paragraph. Do not include any technical instructions, quality requirements, or output format details in your response. No preamble, no explanation, no markdown.',
         },
         {
           role: 'user',
           content: [
             `Category: ${category}`,
-            'Here is the structured prompt. Rewrite it as one vivid, scene-driven paragraph:',
-            prompt,
+            'Here is the descriptive part of the prompt to rewrite:',
+            descriptivePart,
           ].join('\n\n'),
         },
       ],
@@ -334,12 +372,17 @@ async function rewriteOnePrompt(
     return { prompt: null, error: 'No text content returned.' }
   }
 
-  const cleaned = trimPromptText(content)
-  if (!cleaned) {
+  const rewrittenDescriptive = trimPromptText(content)
+  if (!rewrittenDescriptive) {
     return { prompt: null, error: 'Empty rewrite text.' }
   }
 
-  return { prompt: cleaned, error: null }
+  // Re-attach the technical part
+  const finalPrompt = technicalPart 
+    ? `${rewrittenDescriptive} ${technicalPart}`
+    : rewrittenDescriptive
+
+  return { prompt: finalPrompt, error: null }
 }
 
 function extractFirstTextContent(payload: OpenRouterResponse | null): string {
@@ -446,14 +489,16 @@ function isLikelyFreeModel(id: string, pricing: unknown): boolean {
   }
 
   if (!pricing || typeof pricing !== 'object') {
-    return false
+    // If we're using a custom base URL (not OpenRouter), pricing might be absent.
+    // We assume any model without explicit pricing is "free" for our purposes.
+    return true
   }
 
   const entry = pricing as Record<string, unknown>
   const promptPrice = parsePrice(entry.prompt)
   const completionPrice = parsePrice(entry.completion)
 
-  return promptPrice === 0 && completionPrice === 0
+  return (promptPrice === 0 || promptPrice === null) && (completionPrice === 0 || completionPrice === null)
 }
 
 function parsePrice(value: unknown): number | null {

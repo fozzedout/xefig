@@ -223,12 +223,71 @@ async function convertToJpeg(file) {
     ctx.fillStyle = '#fff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(img, 0, 0)
+
+    const croppedCanvas = cropBorders(canvas)
+
     const blob = await new Promise((res, rej) => {
-      canvas.toBlob((b) => b ? res(b) : rej(new Error('Conversion failed')), 'image/jpeg', 0.8)
+      croppedCanvas.toBlob((b) => b ? res(b) : rej(new Error('Conversion failed')), 'image/jpeg', 0.8)
     })
     const safe = (file.name || 'image').replace(/[.][^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_')
     return new File([blob], `${safe}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
   } finally { URL.revokeObjectURL(url) }
+}
+
+/**
+ * Zealously crop solid or near-solid color borders from a canvas.
+ */
+function cropBorders(canvas) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return canvas
+  const { width, height } = canvas
+  const imgData = ctx.getImageData(0, 0, width, height)
+  const data = imgData.data
+
+  const getPixel = (x, y) => {
+    const idx = (y * width + x) * 4
+    return [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]]
+  }
+
+  const isUniformRow = (y, threshold = 18) => {
+    const first = getPixel(0, y)
+    for (let x = 1; x < width; x++) {
+      const p = getPixel(x, y)
+      if (Math.abs(p[0] - first[0]) > threshold ||
+          Math.abs(p[1] - first[1]) > threshold ||
+          Math.abs(p[2] - first[2]) > threshold) return false
+    }
+    return true
+  }
+
+  const isUniformCol = (x, threshold = 18) => {
+    const first = getPixel(x, 0)
+    for (let y = 1; y < height; y++) {
+      const p = getPixel(x, y)
+      if (Math.abs(p[0] - first[0]) > threshold ||
+          Math.abs(p[1] - first[1]) > threshold ||
+          Math.abs(p[2] - first[2]) > threshold) return false
+    }
+    return true
+  }
+
+  let top = 0;    while (top < height * 0.25 && isUniformRow(top)) top++
+  let bottom = height - 1; while (bottom > height * 0.75 && isUniformRow(bottom)) bottom--
+  let left = 0;   while (left < width * 0.25 && isUniformCol(left)) left++
+  let right = width - 1;  while (right > width * 0.75 && isUniformCol(right)) right--
+
+  if (top === 0 && bottom === height - 1 && left === 0 && right === width - 1) return canvas
+
+  const croppedWidth  = right - left + 1
+  const croppedHeight = bottom - top + 1
+  if (croppedWidth <= 32 || croppedHeight <= 32) return canvas // Sanity check
+
+  const croppedCanvas = document.createElement('canvas')
+  croppedCanvas.width  = croppedWidth
+  croppedCanvas.height = croppedHeight
+  const croppedCtx = croppedCanvas.getContext('2d')
+  croppedCtx.drawImage(canvas, left, top, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight)
+  return croppedCanvas
 }
 
 function renderPromptPack(pack) {
@@ -405,7 +464,10 @@ generateBtn.addEventListener('click', async () => {
     const res     = await fetch(apiUrl('/api/admin/prompts/generate'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pw }),
+      body: JSON.stringify({ 
+        password: pw,
+        model: getSelectedRewriteModel()
+      }),
     })
     const payload = await res.json()
     if (!res.ok) {

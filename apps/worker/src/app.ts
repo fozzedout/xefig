@@ -140,7 +140,8 @@ export function createApp() {
       })
     } catch (error) {
       console.error('OpenRouter model list failed', error)
-      return c.json({ error: 'Unable to load OpenRouter free models.' }, 502)
+      const message = error instanceof Error ? error.message : 'Unable to load OpenRouter free models.'
+      return c.json({ error: message }, 502)
     }
   })
 
@@ -264,9 +265,9 @@ export function createApp() {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
-    let body: { password?: string } | null = null
+    let body: { password?: string; model?: string } | null = null
     try {
-      body = (await c.req.json()) as { password?: string }
+      body = (await c.req.json()) as { password?: string; model?: string }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
     }
@@ -275,6 +276,8 @@ export function createApp() {
     if (!password || password !== configuredPassword) {
       return c.json({ error: 'Invalid admin password.' }, 401)
     }
+
+    const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
 
     const prompts = await generatePromptPacks(c.env.metadata, 1)
     let rewrite = {
@@ -286,7 +289,7 @@ export function createApp() {
 
     const firstPack = prompts[0]
     if (firstPack) {
-      const rewriteResult = await maybeRewritePromptPackWithOpenRouter(c.env, firstPack)
+      const rewriteResult = await maybeRewritePromptPackWithOpenRouter(c.env, firstPack, requestedModel)
       prompts[0] = rewriteResult.pack
       if (rewriteResult.attempted && rewriteResult.error) {
         console.warn('Prompt rewrite failed', {
