@@ -25,10 +25,21 @@ function toPuzzleRecord(value: unknown): PuzzleRecord | null {
     return null
   }
 
-  const candidate = value as Partial<PuzzleRecord>
+  // Define a structural interface for the incoming data to avoid "any".
+  // This supports both current PuzzleRecord and legacy formats during migration.
+  type PuzzleCandidate = {
+    date?: unknown
+    theme?: unknown
+    tags?: unknown
+    difficulty?: unknown
+    categories?: Record<string, Record<string, unknown>>
+    createdAt?: unknown
+    updatedAt?: unknown
+  }
+
+  const candidate = value as PuzzleCandidate
   if (
     typeof candidate.date !== 'string' ||
-    typeof candidate.theme !== 'string' ||
     typeof candidate.difficulty !== 'string' ||
     !candidate.categories ||
     typeof candidate.createdAt !== 'string' ||
@@ -37,9 +48,13 @@ function toPuzzleRecord(value: unknown): PuzzleRecord | null {
     return null
   }
 
+  // Support legacy migration: global theme/tags used as fallback
+  const globalTheme = typeof candidate.theme === 'string' ? candidate.theme : ''
+  const globalTags = normalizeTags(candidate.tags)
+
   const normalizedCategories = {} as Record<PuzzleCategory, PuzzleAsset>
   for (const category of CATEGORIES) {
-    const asset = candidate.categories[category]
+    const asset = candidate.categories[category] as Record<string, unknown> | undefined
     if (
       !asset ||
       typeof asset.imageKey !== 'string' ||
@@ -55,14 +70,13 @@ function toPuzzleRecord(value: unknown): PuzzleRecord | null {
       imageUrl: asset.imageUrl,
       contentType: asset.contentType,
       fileName: asset.fileName,
+      theme: typeof asset.theme === 'string' ? asset.theme : globalTheme,
+      tags: Array.isArray(asset.tags) ? normalizeTags(asset.tags) : globalTags,
     }
   }
 
-  const tags = normalizeTags((candidate as { tags?: unknown }).tags)
   return {
     date: candidate.date,
-    theme: candidate.theme,
-    tags: tags.length > 0 ? tags : normalizeTags(candidate.theme.split(/\s*-\s*/)),
     difficulty: candidate.difficulty,
     categories: normalizedCategories,
     createdAt: candidate.createdAt,

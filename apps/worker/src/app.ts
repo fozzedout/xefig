@@ -21,7 +21,7 @@ import {
   maybeRewritePromptPackWithOpenRouter,
   rewriteSinglePromptWithOpenRouter,
 } from './lib/prompt-rewriter'
-import { generatePromptPacks } from './lib/prompts'
+import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
 import {
   CATEGORIES,
   type Bindings,
@@ -165,7 +165,6 @@ export function createApp() {
       }
 
       const date = getStringField(body.date)?.trim()
-      const providedTags = parseTagList(getStringField(body.tags))
 
       if (!date || !isValidDateKey(date)) {
         return c.json({ error: 'Date is required in YYYY-MM-DD format.' }, 400)
@@ -176,27 +175,18 @@ export function createApp() {
       }
 
       const existing = await getPuzzleByDate(c.env.metadata, date)
-      const providedTheme = getStringField(body.theme)?.trim() || ''
-      let generatedPack: PromptPack | null = null
-      let tags = providedTags
-      if (tags.length === 0) {
-        tags = normalizeTags(existing?.tags ?? [])
-        if (tags.length === 0) {
-          const packs = await generatePromptPacks(c.env.metadata, 1)
-          generatedPack = packs[0] ?? null
-          tags = normalizeTags(generatedPack?.keywords ?? [])
-        }
-      }
-      if (tags.length === 0) {
-        return c.json({ error: 'Unable to determine puzzle tags.' }, 500)
-      }
-      const theme = providedTheme || existing?.theme || generatedPack?.themeName || formatThemeFromTags(tags)
-
       const difficulty = 'adaptive'
-
       const nextCategories = {} as Record<PuzzleCategory, PuzzleAsset>
 
       for (const category of CATEGORIES) {
+        // Parse category-specific theme and tags from form body
+        const catTheme = getStringField(body[`theme-${category}`])?.trim() || ''
+        const catTags = parseTagList(getStringField(body[`tags-${category}`]))
+
+        if (!catTheme && !existing?.categories?.[category]?.theme) {
+          return c.json({ error: `Theme is required for ${category}.` }, 400)
+        }
+
         const file = getFileField(body[category])
         if (!file || file.size === 0) {
           const existingAsset = existing?.categories?.[category]
@@ -206,7 +196,11 @@ export function createApp() {
               400,
             )
           }
-          nextCategories[category] = existingAsset
+          nextCategories[category] = {
+            ...existingAsset,
+            theme: catTheme || existingAsset.theme,
+            tags: catTags.length > 0 ? catTags : existingAsset.tags,
+          }
           continue
         }
 
@@ -232,14 +226,14 @@ export function createApp() {
           imageUrl: toCdnUrl(imageKey),
           contentType,
           fileName: file.name || `${category}.${extension}`,
+          theme: catTheme,
+          tags: catTags,
         }
       }
 
       const now = new Date().toISOString()
       const record: PuzzleRecord = {
         date,
-        theme,
-        tags,
         difficulty,
         categories: nextCategories,
         createdAt: existing?.createdAt ?? now,
@@ -250,7 +244,6 @@ export function createApp() {
       return c.json({
         ok: true,
         message: `Puzzle details for ${date} saved.`,
-        generatedTheme: generatedPack?.themeName ?? null,
         puzzle: record,
       })
     } catch (error) {
@@ -312,6 +305,42 @@ export function createApp() {
     })
   })
 
+  app.post('/api/admin/prompts/generate-one', async (c) => {
+    const configuredPassword = c.env.ADMIN_PASSWORD
+    if (!configuredPassword) {
+      return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
+    }
+
+    let body: { password?: string; category?: string } | null = null
+    try {
+      body = (await c.req.json()) as { password?: string; category?: string }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const password = typeof body?.password === 'string' ? body.password : ''
+    if (!password || password !== configuredPassword) {
+      return c.json({ error: 'Invalid admin password.' }, 401)
+    }
+
+    const category = (body?.category || '').trim() as PuzzleCategory
+    if (!CATEGORIES.includes(category)) {
+      return c.json({ error: 'Invalid category.' }, 400)
+    }
+
+    try {
+      const details = await generateSingleCategoryPrompt(c.env.metadata, category)
+      return c.json({
+        ok: true,
+        category,
+        ...details,
+      })
+    } catch (error) {
+      console.error('Single category generation failed', error)
+      return c.json({ error: 'Failed to generate category prompt.' }, 500)
+    }
+  })
+
   app.post('/api/admin/prompts/rewrite-one', async (c) => {
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
@@ -323,6 +352,8 @@ export function createApp() {
           password?: string
           category?: string
           prompt?: string
+          theme?: string
+          tags?: string
           model?: string
         }
       | null = null
@@ -332,6 +363,8 @@ export function createApp() {
         password?: string
         category?: string
         prompt?: string
+        theme?: string
+        tags?: string
         model?: string
       }
     } catch {
@@ -359,6 +392,8 @@ export function createApp() {
     const rewritten = await rewriteSinglePromptWithOpenRouter(c.env, {
       category,
       prompt,
+      theme: typeof body?.theme === 'string' ? body.theme : undefined,
+      keywords: typeof body?.tags === 'string' ? parseTagList(body.tags) : undefined,
       model,
     })
 

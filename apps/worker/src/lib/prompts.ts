@@ -4,73 +4,43 @@ const PROMPT_HISTORY_KEY = 'prompt-history:v1'
 const PROMPT_HISTORY_LIMIT = 260
 
 // One descriptor is picked per role per prompt, so DESCRIPTORS_PER_PACK === ROLE count.
-const ROLES = ['setting', 'lighting', 'mood', 'style', 'palette', 'camera'] as const
+const ROLES = ['concept', 'location', 'state', 'lighting', 'mood', 'style', 'palette', 'camera'] as const
 type DescriptorRole = (typeof ROLES)[number]
 const DESCRIPTORS_PER_PACK = ROLES.length
 
 // ---------------------------------------------------------------------------
 // Descriptor pool — organised by role.
-// Used by jigsaw, slider, and swap (rich scene puzzles).
-// To expand variety, add entries to any role slot. Every new entry multiplies
-// combinatorial space with all entries in the other roles.
+// Used by all puzzle categories. To expand variety, add entries to any role slot.
 // ---------------------------------------------------------------------------
 
 const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
-  setting: [
-    // Architecture / urban
-    'floating market at sunrise',
-    'clockwork tower interior',
-    'desert observatory ruins',
-    'rain-soaked neon alley',
-    'glacier cave sanctuary',
-    'coral reef transit hub',
-    'cliffside monastery bridge',
-    'retro arcade boulevard',
-    'sky island greenhouse',
-    'ancient library atrium',
-    'volcanic orchard terraces',
-    'festival harbor promenade',
-    'mountain rail station',
-    'submerged cathedral nave',
-    'glass foundry workshop',
-    'tea house by waterfall',
-    'tidal wind farm coast',
-    'lunar dockyard gantries',
-    'sunken palace courtyard',
-    // Nature / landscape
-    'bioluminescent forest clearing',
-    'misty pine valley',
-    'tropical storm horizon',
-    'spring blossom avenue',
-    'winter dawn stillness',
-    'foggy moorland trail',
-    'savanna grassland horizon',
-    'jungle canopy sunlight',
-    'volcanic shoreline basalt columns',
-    'iceberg field at noon',
-    'coastal village rooftops',
-    'road trip desert stop',
-    // Wildlife / life scenes
-    'fox in snowy woodland',
-    'wolf pack at dusk',
-    'jaguar in rainforest shade',
-    'elephants at watering hole',
-    'whale breaching ocean surface',
-    'dolphins in crystal surf',
-    'jellyfish bloom underwater',
-    'owl in moonlit branches',
-    'koi pond surface ripples',
-    'reef fish color burst',
-    'farmyard morning routine',
-    'street market portrait moment',
-    'bookshop corner ambiance',
-    'train cabin interior scene',
-    // Abstract / action
-    'carnival parade motion blur',
-    'skate park action moment',
-    'ballroom dance freeze moment',
-    'abstract fluid ink marbling',
-    'minimal still-life composition',
+  concept: [
+    'clockwork', 'observatory', 'market', 'library', 'foundry', 'aqueduct', 'lighthouse', 
+    'cathedral', 'workshop', 'greenhouse', 'arcade', 'monastery', 'terrace', 'promenade', 
+    'harbor', 'station', 'shrine', 'temple', 'palace', 'courtyard', 'plaza', 'boulevard', 
+    'dockyard', 'gantries', 'orchard', 'railway', 'bridge', 'monolith', 'obelisk', 
+    'pyramid', 'statue', 'airship', 'sanctuary', 'atrium', 'fountain', 'garden',
+    'fox', 'wolf', 'jaguar', 'elephant', 'whale', 'dolphin', 'jellyfish', 'owl', 'koi',
+    'parade', 'skate park', 'ballroom', 'still-life', 'abstract ink', 'fluid marbling',
+    'waterfall', 'wind farm', 'solar array', 'canyon', 'glacier', 'reef', 'oasis',
+    'staircase', 'colonnade', 'sequestration hub', 'transit node', 'vault', 'archives'
+  ],
+
+  location: [
+    'ruins', 'tower', 'alley', 'forest', 'cave', 'mountain', 'valley', 'coast', 'island', 
+    'cliffs', 'gorge', 'canyon', 'desert', 'savanna', 'jungle', 'tundra', 'glacier', 
+    'village', 'city', 'rooftops', 'sky', 'underwater', 'lunar', 'nebula', 'void', 
+    'abyss', 'cavern', 'meadow', 'swamp', 'marsh', 'delta', 'fjord', 'plateau', 
+    'mesa', 'volcano', 'observatory', 'sanctuary', 'outpost', 'stronghold'
+  ],
+
+  state: [
+    'neon', 'floating', 'submerged', 'volcanic', 'bioluminescent', 'ancient', 'retro', 
+    'futuristic', 'industrial', 'organic', 'geometric', 'maximalist', 'minimalist', 
+    'overgrown', 'frozen', 'burning', 'steampunk', 'cyberpunk', 'solarpunk', 'fantasy', 
+    'mythological', 'ethereal', 'surreal', 'mystical', 'abandoned', 'decaying', 
+    'pristine', 'lush', 'barren', 'stormy', 'serene', 'vibrant', 'monochrome',
+    'misty', 'shimmering', 'clockwork', 'crystalline', 'decaying', 'ossified'
   ],
 
   lighting: [
@@ -168,127 +138,17 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 }
 
 // ---------------------------------------------------------------------------
-// Polygram descriptor pool — purpose-built for single-subject silhouette images.
-//
-// Polygram puzzles require a SINGLE isolated subject against a clean background.
-// The subject silhouette must be bold and immediately readable. Every descriptor
-// here is chosen to reinforce that goal: subjects are singular and iconic,
-// backgrounds are uncluttered, lighting separates subject from ground clearly,
-// and camera angles show the full subject body without cropping key contours.
-//
-// Do NOT add busy scenes, crowds, action blur, or abstract compositions here —
-// those belong in DESCRIPTOR_POOL for the scene-based puzzle types.
+// Polygram descriptor pool — removed as it is now unified with the main pool.
 // ---------------------------------------------------------------------------
-
-const POLYGRAM_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
-  setting: [
-    // Single animal subjects — iconic silhouettes, sparse surroundings
-    'lone eagle soaring against open sky',
-    'wolf standing alert on rocky ridge',
-    'stag silhouetted on misty hilltop',
-    'lion resting on flat sunlit ground',
-    'bear standing upright on sparse tundra',
-    'horse mid-gallop on open plain',
-    'hawk perched on bare branch against sky',
-    'fox sitting on snow-covered ground',
-    'elephant standing on dry savanna earth',
-    'whale breaching against clean horizon',
-    'owl perched alone against moonlit sky',
-    'leaping dolphin against clear ocean surface',
-    'cheetah crouching on bare rock',
-    'gorilla seated on open jungle floor',
-    'bison standing on empty prairie',
-    'hummingbird hovering against soft bokeh',
-    'peacock displaying feathers on open ground',
-    'crocodile resting on bare riverbank',
-    'great white shark isolated in clear water',
-    'octopus against clean dark ocean backdrop',
-    // Single vehicle / object subjects
-    'sailing ship isolated against clear horizon',
-    'vintage motorcycle on empty road',
-    'biplane against clean blue sky',
-    'lighthouse standing alone on rocky coast',
-    'hot air balloon against gradient sky',
-    'old steam locomotive on open track',
-    'classic sailing boat on calm flat water',
-    'rocket on launch pad against clear sky',
-  ],
-
-  lighting: [
-    // Lighting that separates subject from background cleanly
-    'clean rim lighting with dark separation',
-    'strong directional sidelight with crisp shadows',
-    'golden hour backlight with subject separation',
-    'diffused even studio light with no harsh shadows',
-    'cool blue separation lighting against warm subject',
-    'crisp overhead sunlight with hard ground shadow',
-    'warm ambient glow with soft edge definition',
-    'sharp sidelight casting long clean shadow',
-    'soft overcast lighting with clear subject edges',
-    'dramatic low sun with long separation shadow',
-    'neutral grey sky diffused light',
-    'clear bright midday clarity',
-  ],
-
-  mood: [
-    'calm and focused mood',
-    'bold and heroic mood',
-    'serene and confident mood',
-    'dramatic and powerful mood',
-    'quiet and watchful mood',
-    'majestic and composed mood',
-    'tense and alert mood',
-    'peaceful solitary mood',
-  ],
-
-  style: [
-    'high detail concept art',
-    'bold naturalistic illustration',
-    'clean photorealistic rendering',
-    'matte painting finish',
-    'sharp wildlife illustration style',
-    'detailed storybook painting style',
-    'fantasy realism blend',
-    'bold graphic illustration',
-    'clean digital painting',
-    'precise technical illustration',
-    'rich oil paint texture',
-    'detailed gouache brush strokes',
-  ],
-
-  palette: [
-    // Shared with scene pool — all work well for single subjects
-    'teal and amber as dominant tones with natural colour variation throughout',
-    'indigo and coral as dominant tones with natural colour variation throughout',
-    'sage and copper as dominant tones with natural colour variation throughout',
-    'cobalt and gold as dominant tones with natural colour variation throughout',
-    'rose and charcoal as dominant tones with natural colour variation throughout',
-    'emerald and cream as dominant tones with natural colour variation throughout',
-    'mint and rust as dominant tones with natural colour variation throughout',
-    'sand and ultramarine as dominant tones with natural colour variation throughout',
-    'violet and lime as dominant tones with natural colour variation throughout',
-    'monochrome with accent red as dominant tones with natural colour variation throughout',
-  ],
-
-  camera: [
-    // Angles that show the full subject body and preserve the outer contour
-    'clean side profile shot showing full body',
-    'symmetrical frontal framing showing full subject',
-    'three-quarter angle view showing full body',
-    'low-angle hero perspective showing full silhouette',
-    'medium full-body framing with space around subject',
-    'wide-angle shot with subject centred in frame',
-    'intimate eye-level shot showing complete form',
-    'slight elevated angle showing full body outline',
-  ],
-}
 
 // ---------------------------------------------------------------------------
 // Minimum pool size validation — checked per role at startup.
 // ---------------------------------------------------------------------------
 
 const MIN_ROLE_POOL_SIZE: Record<DescriptorRole, number> = {
-  setting: 20,
+  concept: 20,
+  location: 20,
+  state: 20,
   lighting: 10,
   mood: 6,
   style: 10,
@@ -331,17 +191,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
   slider: { title: 'Slider', ...SCENE_PUZZLE_INTENT },
   swap:   { title: 'Swap',   ...SCENE_PUZZLE_INTENT },
   polygram: {
-    title: 'Polygram',
-    // Polygram pieces are rotated to the correct orientation. The image must
-    // have a single bold subject with a crisp, unambiguous outer silhouette.
-    // The background must be clean and simple so the contour reads at a glance.
-    // The interior must be dense with detail so every region looks distinct
-    // when the piece is rotated.
-    composition:
-      'Depict a SINGLE isolated subject — one animal, vehicle, or object — centred in the frame against a clean, uncluttered background. NO crowds, secondary subjects, busy scenes, or complex environments. The subject must have a bold, immediately recognisable outer silhouette with crisp edges. The background must remain simple — soft, blurred, or plain — so the subject contour reads clearly at a glance.',
-    qualityTarget:
-      'The outer contour of the subject must be sharp and high-contrast against the background. The interior of the subject should be packed with visible texture, fine markings, and tonal contrast — every interior region must look distinct and visually active. The background must stay visually simple with no competing detail. No large flat areas of uniform tone anywhere on the subject itself. Maintain natural colour variety within the subject.',
-  },
+    title: 'Polygram', ...SCENE_PUZZLE_INTENT },
 }
 
 // Step-by-step prompt structure per Google best practices:
@@ -378,6 +228,16 @@ const PROMPT_OUTPUT_TEMPLATES = [
   'Single 4:3 landscape image only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting.',
 ] as const
 
+// Polygram output templates reinforce orientation rather than edge-to-edge fill.
+// "Edge-to-edge" is correct for scene puzzles but actively harmful for polygram
+// because it encourages the model to crop the subject — removing the very
+// perspective lines and vertical extent that anchor piece orientation.
+const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
+  'Output: one landscape 4:3 image. The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Deliver a single landscape 4:3 image. Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Single 4:3 landscape image only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+] as const
+
 // ---------------------------------------------------------------------------
 // A selected descriptor set — one value per role.
 // ---------------------------------------------------------------------------
@@ -400,6 +260,26 @@ export async function generatePromptPacks(kv: KVNamespace, count: number): Promi
 
   await kv.put(PROMPT_HISTORY_KEY, JSON.stringify(history.slice(-PROMPT_HISTORY_LIMIT)))
   return packs
+}
+
+export async function generateSingleCategoryPrompt(
+  kv: KVNamespace,
+  category: PuzzleCategory,
+): Promise<{ prompt: string; theme: string; keywords: string[] }> {
+  validatePoolSizes()
+  const history = await getPromptHistory(kv)
+  const recent = history.slice(-PROMPT_HISTORY_LIMIT)
+
+  const set = pickDescriptorSet(recent, new Set(), category)
+  const details = buildCategoryPromptDetails(category, set)
+
+  history.push({
+    descriptors: [...new Set(Object.values(set))],
+    createdAt: new Date().toISOString(),
+  })
+  await kv.put(PROMPT_HISTORY_KEY, JSON.stringify(history.slice(-PROMPT_HISTORY_LIMIT)))
+
+  return details
 }
 
 // ---------------------------------------------------------------------------
@@ -433,53 +313,43 @@ async function getPromptHistory(kv: KVNamespace): Promise<PromptHistoryItem[]> {
 function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   const recent = history.slice(-PROMPT_HISTORY_LIMIT)
 
-  // Pick a fresh descriptor set per puzzle category. Each category gets its
-  // own independent role-slot draw so that e.g. the jigsaw and slider prompts
-  // share no descriptors — maximising variety across the pack.
-  // Polygram draws from its own dedicated pool (POLYGRAM_DESCRIPTOR_POOL) and
-  // does not share descriptors with the scene-based categories.
+  // We pick a fresh descriptor set per puzzle category to maximise variety.
+  // Each category gets its own independent setting, mood, style, etc.
   const descriptorSetsByCategory = {} as Record<PuzzleCategory, DescriptorSet>
-  const sceneUsedInPack = new Set<string>()
-  const polygramUsedInPack = new Set<string>()
+  const usedInPack = new Set<string>()
 
   for (const category of CATEGORIES) {
-    if (category === 'polygram') {
-      const set = pickDescriptorSet(recent, polygramUsedInPack, 'polygram')
-      descriptorSetsByCategory[category] = set
-      for (const value of Object.values(set)) {
-        polygramUsedInPack.add(value)
-      }
-    } else {
-      const set = pickDescriptorSet(recent, sceneUsedInPack, category)
-      descriptorSetsByCategory[category] = set
-      for (const value of Object.values(set)) {
-        sceneUsedInPack.add(value)
-      }
+    const set = pickDescriptorSet(recent, usedInPack, category)
+    descriptorSetsByCategory[category] = set
+    for (const value of Object.values(set)) {
+      usedInPack.add(value)
     }
   }
 
-  const allUsed = new Set([...sceneUsedInPack, ...polygramUsedInPack])
-  const jigsawSet = descriptorSetsByCategory.jigsaw
-  const themeName = `${capitalizeWords(jigsawSet.setting)} — ${capitalizeWords(jigsawSet.mood)}`
-  const keywords = [...sceneUsedInPack].slice(0, 12)
-
   const pack: PromptPack = {
-    themeName,
-    keywords,
-    prompts: {
-      jigsaw: buildImagePrompt('jigsaw', descriptorSetsByCategory.jigsaw),
-      slider: buildImagePrompt('slider', descriptorSetsByCategory.slider),
-      swap: buildImagePrompt('swap', descriptorSetsByCategory.swap),
-      polygram: buildImagePrompt('polygram', descriptorSetsByCategory.polygram),
+    // Per-category details
+    categories: {
+      jigsaw:   buildCategoryPromptDetails('jigsaw',   descriptorSetsByCategory.jigsaw),
+      slider:   buildCategoryPromptDetails('slider',   descriptorSetsByCategory.slider),
+      swap:     buildCategoryPromptDetails('swap',     descriptorSetsByCategory.swap),
+      polygram: buildCategoryPromptDetails('polygram', descriptorSetsByCategory.polygram),
     },
   }
 
   history.push({
-    descriptors: [...allUsed],
+    descriptors: [...usedInPack],
     createdAt: new Date().toISOString(),
   })
 
   return pack
+}
+
+function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet) {
+  return {
+    prompt: buildImagePrompt(category, set),
+    theme: `${capitalizeWords(set.state)} ${capitalizeWords(set.concept)} ${capitalizeWords(set.location)} — ${capitalizeWords(set.mood)}`,
+    keywords: [...new Set(Object.values(set))].map(v => v.trim()).filter(Boolean).slice(0, 12),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +374,9 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
   const descriptorIntro = pickRandom(PROMPT_DESCRIPTOR_INTRO_TEMPLATES)
   const descriptorLine = [
     descriptorIntro,
-    `setting: ${set.setting};`,
+    `concept: ${set.concept};`,
+    `location: ${set.location};`,
+    `state: ${set.state};`,
     `lighting: ${set.lighting};`,
     `mood: ${set.mood};`,
     `style: ${set.style};`,
@@ -515,8 +387,10 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
   const qualityLine = pickRandom(PROMPT_QUALITY_TEMPLATES)
     .replace('{quality}', intent.qualityTarget)
 
-  // Step 5: output format — edge-to-edge, no borders
-  const outputLine = pickRandom(PROMPT_OUTPUT_TEMPLATES)
+  // Step 5: output format
+  const outputLine = category === 'polygram'
+    ? pickRandom(PROMPT_OUTPUT_TEMPLATES_POLYGRAM)
+    : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
   return [contextLine, subjectLine, descriptorLine, qualityLine, outputLine].join(' ')
 }
@@ -527,14 +401,13 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
 
 // Pick one descriptor per role, preferring least-recently-used entries and
 // avoiding anything already used elsewhere in this pack.
-// Polygram draws from POLYGRAM_DESCRIPTOR_POOL; all other categories use DESCRIPTOR_POOL.
 function pickDescriptorSet(
   recent: PromptHistoryItem[],
   excluded: Set<string>,
-  category: PuzzleCategory,
+  _category: PuzzleCategory,
 ): DescriptorSet {
   const counts = buildUsageCounts(recent)
-  const pool = category === 'polygram' ? POLYGRAM_DESCRIPTOR_POOL : DESCRIPTOR_POOL
+  const pool = DESCRIPTOR_POOL
   const set = {} as DescriptorSet
 
   for (const role of ROLES) {
@@ -645,19 +518,11 @@ function normalizePromptHistoryItem(raw: unknown): PromptHistoryItem | null {
 
 function validatePoolSizes(): void {
   for (const role of ROLES) {
-    const sceneSize = DESCRIPTOR_POOL[role].length
-    const sceneMin = MIN_ROLE_POOL_SIZE[role]
-    if (sceneSize < sceneMin) {
+    const size = DESCRIPTOR_POOL[role].length
+    const min = MIN_ROLE_POOL_SIZE[role]
+    if (size < min) {
       throw new Error(
-        `Descriptor pool for role "${role}" has ${sceneSize} entries but requires at least ${sceneMin}.`,
-      )
-    }
-
-    const polygramSize = POLYGRAM_DESCRIPTOR_POOL[role].length
-    const polygramMin = MIN_POLYGRAM_POOL_SIZE[role]
-    if (polygramSize < polygramMin) {
-      throw new Error(
-        `Polygram descriptor pool for role "${role}" has ${polygramSize} entries but requires at least ${polygramMin}.`,
+        `Descriptor pool for role "${role}" has ${size} entries but requires at least ${min}.`,
       )
     }
   }

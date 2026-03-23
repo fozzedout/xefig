@@ -23,12 +23,12 @@ export type PuzzleAsset = {
   imageUrl: string
   contentType: string
   fileName: string
+  theme: string
+  tags: string[]
 }
 
 export type PuzzleRecord = {
   date: string
-  theme: string
-  tags: string[]
   difficulty: string
   categories: Record<PuzzleCategory, PuzzleAsset>
   createdAt: string
@@ -41,7 +41,12 @@ export type PromptHistoryItem = {
 }
 
 export type PromptPack = {
-  themeName: string
-  keywords: string[]
-  prompts: Record<PuzzleCategory, string>
+  categories: Record<
+    PuzzleCategory,
+    {
+      prompt: string
+      theme: string
+      keywords: string[]
+    }
+  >
 }

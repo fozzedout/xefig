@@ -77,9 +77,6 @@ export async function maybeRewritePromptPackWithOpenRouter(
 
   const model = resolveModel(modelOverride || env.OPENROUTER_MODEL)
   
-  // If we're using a custom URL (like LM Studio) but the model is still the 
-  // default "openrouter/free", it's likely that no model was selected. 
-  // We should skip rewriting in this case to avoid errors.
   if (isCustomUrl && model === 'openrouter/free') {
     return {
       attempted: false,
@@ -92,17 +89,14 @@ export async function maybeRewritePromptPackWithOpenRouter(
 
   try {
     const fallbackModels = model === DEFAULT_OPENROUTER_MODEL || isCustomUrl ? [] : [DEFAULT_OPENROUTER_MODEL]
-    const rewritten = await rewritePromptsIndividually(apiKey, model, fallbackModels, pack.prompts)
+    const rewritten = await rewritePromptsIndividually(apiKey, model, fallbackModels, pack)
     if (rewritten.applied) {
       return {
         attempted: true,
         applied: true,
         model,
         error: null,
-        pack: {
-          ...pack,
-          prompts: rewritten.prompts,
-        },
+        pack: rewritten.pack,
       }
     }
 
@@ -130,6 +124,8 @@ export async function rewriteSinglePromptWithOpenRouter(
   input: {
     prompt: string
     category: PuzzleCategory
+    theme?: string
+    keywords?: string[]
     model?: string
   },
 ): Promise<SinglePromptRewriteResult> {
@@ -156,6 +152,8 @@ export async function rewriteSinglePromptWithOpenRouter(
       fallbackModels,
       input.category,
       cleanPrompt(input.prompt),
+      input.theme,
+      input.keywords,
     )
 
     if (!rewritten.prompt) {
@@ -263,7 +261,7 @@ function resolveModel(value: string | undefined): string {
 
 type IndividualRewriteResult = {
   applied: boolean
-  prompts: Record<PuzzleCategory, string>
+  pack: PromptPack
   error: string | null
 }
 
@@ -271,13 +269,25 @@ async function rewritePromptsIndividually(
   apiKey: string,
   model: string,
   fallbackModels: string[],
-  prompts: Record<PuzzleCategory, string>,
+  pack: PromptPack,
 ): Promise<IndividualRewriteResult> {
-  const nextPrompts = { ...prompts }
+  const nextPack = { 
+    ...pack,
+    categories: { ...pack.categories }
+  }
 
   const attempts = await Promise.all(
     CATEGORIES.map(async (category) => {
-      const result = await rewriteOnePrompt(apiKey, model, fallbackModels, category, prompts[category])
+      const details = pack.categories[category]
+      const result = await rewriteOnePrompt(
+        apiKey, 
+        model, 
+        fallbackModels, 
+        category, 
+        details.prompt,
+        details.theme,
+        details.keywords,
+      )
       return {
         category,
         prompt: result.prompt,
@@ -292,7 +302,7 @@ async function rewritePromptsIndividually(
   for (const result of attempts) {
     if (result.prompt) {
       rewrittenCount += 1
-      nextPrompts[result.category] = result.prompt
+      nextPack.categories[result.category].prompt = result.prompt
       continue
     }
 
@@ -303,7 +313,7 @@ async function rewritePromptsIndividually(
 
   return {
     applied: rewrittenCount > 0,
-    prompts: nextPrompts,
+    pack: nextPack,
     error: errors.length > 0 ? errors.join(' | ').slice(0, 700) : null,
   }
 }
@@ -314,6 +324,8 @@ async function rewriteOnePrompt(
   fallbackModels: string[],
   category: PuzzleCategory,
   prompt: string,
+  theme?: string,
+  keywords?: string[],
 ): Promise<{ prompt: string | null; error: string | null }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -325,11 +337,12 @@ async function rewriteOnePrompt(
     headers.Authorization = `Bearer ${apiKey}`
   }
 
-  // Split the prompt: everything before "Finally, ensure rendering quality" or "Rendering requirement"
-  // is considered the descriptive part. The rest is technical.
   const technicalMarker = prompt.match(/(?:Finally, ensure rendering quality|For the final render|Rendering requirement):/i)
   const descriptivePart = technicalMarker ? prompt.slice(0, technicalMarker.index).trim() : prompt
   const technicalPart = technicalMarker ? prompt.slice(technicalMarker.index).trim() : ''
+
+  const themeCtx = theme ? `Theme: ${theme}` : ''
+  const keywordsCtx = Array.isArray(keywords) && keywords.length > 0 ? `Keywords: ${keywords.join(', ')}` : ''
 
   const response = await fetch(OPENROUTER_CHAT_URL, {
     method: 'POST',
@@ -338,20 +351,27 @@ async function rewriteOnePrompt(
       model,
       ...(fallbackModels.length > 0 ? { models: fallbackModels } : {}),
       temperature: 1,
-      max_tokens: 1020,
+      max_tokens: 1024,
       messages: [
         {
           role: 'system',
-          content:
-            'You are a creative writer specializing in vivid scene descriptions. You will be given a structured image prompt. Your task is to transform the descriptive elements (setting, lighting, mood, style, subject) into a single, cohesive, and highly imaginative paragraph. Do not just reword the input; invent concrete sensory details, textures, and atmosphere that bring the scene to life. Return ONLY the rewritten descriptive paragraph. Do not include any technical instructions, quality requirements, or output format details in your response. No preamble, no explanation, no markdown.',
+          content: [
+            'You are a creative writer specializing in vivid scene descriptions. You will be given a structured image prompt and its associated metadata.',
+            'Your task is to transform the descriptive elements into a single, cohesive, and highly imaginative paragraph.',
+            'Do not just reword the input; invent concrete sensory details, textures, and atmosphere that bring the scene to life.',
+            'Use the provided Theme and Keywords as high-level creative direction to ensure the scene reflects the intended mood and subject.',
+            'Return ONLY the rewritten descriptive paragraph. No technical instructions, no preamble, no explanation, no markdown.',
+          ].join(' '),
         },
         {
           role: 'user',
           content: [
             `Category: ${category}`,
-            'Here is the descriptive part of the prompt to rewrite:',
+            themeCtx,
+            keywordsCtx,
+            '--- Structured Prompt ---',
             descriptivePart,
-          ].join('\n\n'),
+          ].filter(Boolean).join('\n\n'),
         },
       ],
     }),

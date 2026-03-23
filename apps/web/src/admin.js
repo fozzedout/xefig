@@ -17,8 +17,6 @@ const generateBtn    = document.getElementById('generate-prompt-btn')
 const copyPackBtn    = document.getElementById('copy-pack-btn')
 const refreshModelsBtn = document.getElementById('refresh-models-btn')
 const rewriteModelSelect = document.getElementById('rewrite-model-select')
-const themeInput     = document.getElementById('selected-theme')
-const tagsInput      = document.getElementById('upload-tags')
 const submitBtn      = document.getElementById('submit-btn')
 const submitLabel    = document.getElementById('submit-label')
 const statusBar      = document.getElementById('status')
@@ -59,7 +57,19 @@ function setStatus(text, type = 'idle') {
   statusBar.dataset.type = type
 }
 
-function syncPassword() { hiddenPassword.value = passwordInput.value.trim() }
+function syncPassword() { 
+  const val = passwordInput.value.trim()
+  hiddenPassword.value = val
+  if (val) {
+    localStorage.setItem('xefig_admin_password', val)
+  }
+}
+
+// Initialize password from localStorage
+const savedPassword = localStorage.getItem('xefig_admin_password')
+if (savedPassword) {
+  passwordInput.value = savedPassword
+}
 
 function addDays(dateKey, n) {
   return new Date(Date.parse(`${dateKey}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
@@ -84,7 +94,13 @@ function applyDateMode() {
 }
 
 function clearPrompts() {
-  for (const k of CATEGORIES) promptFields[k].value = ''
+  for (const k of CATEGORIES) {
+    if (promptFields[k]) promptFields[k].value = ''
+    const catThemeInput = document.getElementById(`theme-${k}`)
+    const catTagsInput = document.getElementById(`tags-${k}`)
+    if (catThemeInput) catThemeInput.value = ''
+    if (catTagsInput) catTagsInput.value = ''
+  }
 }
 
 function setThumb(category, asset) {
@@ -101,14 +117,26 @@ function setThumb(category, asset) {
 }
 
 function clearExistingMeta() {
-  for (const cat of CATEGORIES) setThumb(cat, null)
+  for (const cat of CATEGORIES) {
+    setThumb(cat, null)
+    const catThemeInput = document.getElementById(`theme-${cat}`)
+    const catTagsInput = document.getElementById(`tags-${cat}`)
+    if (catThemeInput) catThemeInput.value = ''
+    if (catTagsInput) catTagsInput.value = ''
+  }
 }
 
 function renderLoadedPuzzle(puzzle) {
   if (!puzzle) { clearExistingMeta(); return }
-  themeInput.value = typeof puzzle.theme === 'string' ? puzzle.theme : ''
-  tagsInput.value  = Array.isArray(puzzle.tags) ? puzzle.tags.join(', ') : ''
-  for (const cat of CATEGORIES) setThumb(cat, puzzle.categories?.[cat] || null)
+  for (const cat of CATEGORIES) {
+    const asset = puzzle.categories?.[cat]
+    setThumb(cat, asset || null)
+    
+    const catThemeInput = document.getElementById(`theme-${cat}`)
+    const catTagsInput = document.getElementById(`tags-${cat}`)
+    if (catThemeInput) catThemeInput.value = asset?.theme || ''
+    if (catTagsInput) catTagsInput.value = Array.isArray(asset?.tags) ? asset.tags.join(', ') : ''
+  }
 }
 
 // ── Drop-zone file feedback ────────────────────────────
@@ -160,8 +188,6 @@ async function loadDateDetails() {
     const payload = await res.json()
     if (res.status === 404) {
       isExistingDate = false
-      themeInput.value = ''
-      tagsInput.value  = ''
       clearExistingMeta()
       applyDateMode()
       setRecordBadge('New', 'new')
@@ -292,12 +318,16 @@ function cropBorders(canvas) {
 
 function renderPromptPack(pack) {
   if (!pack) { clearPrompts(); return }
-  themeInput.value         = pack.themeName || ''
-  tagsInput.value          = Array.isArray(pack.keywords) ? pack.keywords.join(', ') : ''
-  promptFields.jigsaw.value   = pack.prompts?.jigsaw   || ''
-  promptFields.slider.value   = pack.prompts?.slider   || ''
-  promptFields.swap.value     = pack.prompts?.swap     || ''
-  promptFields.polygram.value = pack.prompts?.polygram || ''
+
+  for (const cat of CATEGORIES) {
+    const details = pack.categories?.[cat]
+    if (promptFields[cat]) promptFields[cat].value = details?.prompt || ''
+    
+    const catThemeInput = document.getElementById(`theme-${cat}`)
+    const catTagsInput = document.getElementById(`tags-${cat}`)
+    if (catThemeInput) catThemeInput.value = details?.theme || ''
+    if (catTagsInput) catTagsInput.value = Array.isArray(details?.keywords) ? details.keywords.join(', ') : ''
+  }
 }
 
 function getSelectedRewriteModel() {
@@ -381,6 +411,11 @@ async function rewritePrompt(category, triggerBtn) {
   const rawPrompt = field.value.trim()
   if (!rawPrompt) { setStatus(`No ${category} prompt to rewrite.`, 'error'); return }
 
+  const themeInput = document.getElementById(`theme-${category}`)
+  const tagsInput = document.getElementById(`tags-${category}`)
+  const theme = themeInput?.value.trim() || ''
+  const tags = tagsInput?.value.trim() || ''
+
   const model = getSelectedRewriteModel()
   const modelLabel = model || 'worker default'
   triggerBtn.disabled = true
@@ -393,6 +428,8 @@ async function rewritePrompt(category, triggerBtn) {
         password: pw,
         category,
         prompt: rawPrompt,
+        theme,
+        tags,
         ...(model ? { model } : {}),
       }),
     })
@@ -441,6 +478,60 @@ if (refreshModelsBtn) {
 if (rewriteModelSelect && rewriteModelSelect.options.length === 0) {
   populateRewriteModels([], 'openrouter/free')
 }
+
+async function regenerateCategoryPrompt(category, triggerBtn) {
+  const pw = passwordInput.value.trim()
+  if (!pw) { setStatus('Enter admin password first.', 'error'); return }
+
+  triggerBtn.disabled = true
+  setStatus(`Regenerating ${category} descriptors…`, 'working')
+  try {
+    const res = await fetch(apiUrl('/api/admin/prompts/generate-one'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw, category }),
+    })
+    const payload = await res.json()
+    if (!res.ok) {
+      setStatus(payload.error || `Failed to regenerate ${category} prompt.`, 'error')
+      return
+    }
+
+    // Update UI
+    const promptField = promptFields[category]
+    const themeInput = document.getElementById(`theme-${category}`)
+    const tagsInput = document.getElementById(`tags-${category}`)
+
+    if (promptField) promptField.value = payload.prompt || ''
+    if (themeInput) themeInput.value = payload.theme || ''
+    if (tagsInput) tagsInput.value = Array.isArray(payload.keywords) ? payload.keywords.join(', ') : ''
+
+    if (promptPack?.categories) {
+      promptPack.categories[category] = {
+        prompt: payload.prompt,
+        theme: payload.theme,
+        keywords: payload.keywords,
+      }
+    }
+
+    setStatus(`Regenerated ${category} prompt.`, 'ok')
+  } catch {
+    setStatus(`Network error while regenerating ${category} prompt.`, 'error')
+  } finally {
+    triggerBtn.disabled = false
+  }
+}
+
+document.querySelectorAll('.regen-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const category = (btn.getAttribute('data-mode') || '').trim()
+    if (!CATEGORIES.includes(category)) {
+      setStatus('Invalid category.', 'error')
+      return
+    }
+    await regenerateCategoryPrompt(category, btn)
+  })
+})
 
 document.querySelectorAll('.rewrite-btn').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -492,16 +583,19 @@ generateBtn.addEventListener('click', async () => {
 
 copyPackBtn.addEventListener('click', async () => {
   if (!promptPack) { setStatus('Generate prompts first.', 'error'); return }
-  const text = [
-    'DAILY PROMPTS',
-    `Label: ${promptPack.themeName || ''}`,
-    `Tags: ${Array.isArray(promptPack.keywords) ? promptPack.keywords.join(', ') : ''}`,
-    '', 'JIGSAW:',   promptPack.prompts?.jigsaw   || '',
-    '', 'SLIDER:',   promptPack.prompts?.slider   || '',
-    '', 'SWAP:',     promptPack.prompts?.swap     || '',
-    '', 'POLYGRAM:', promptPack.prompts?.polygram || '',
-  ].join('\n')
-  await copyText(text, 'All prompts')
+  const lines = ['DAILY PROMPTS', '']
+  
+  for (const cat of CATEGORIES) {
+    const details = promptPack.categories?.[cat]
+    const label = cat.toUpperCase()
+    lines.push(`--- ${label} ---`)
+    lines.push(`Theme: ${details?.theme || ''}`)
+    lines.push(`Tags: ${Array.isArray(details?.keywords) ? details.keywords.join(', ') : ''}`)
+    lines.push(`Prompt: ${details?.prompt || ''}`)
+    lines.push('')
+  }
+  
+  await copyText(lines.join('\n'), 'All prompts')
 })
 
 document.querySelectorAll('.copy-btn').forEach((btn) => {
