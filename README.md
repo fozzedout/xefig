@@ -35,6 +35,9 @@ npm run web:dev
 ```
 
 The Vite server starts at `http://localhost:5173`.
+When the worker is also running on `http://localhost:8787`, the Vite dev server
+proxies `/api` and `/cdn` requests to the worker so admin session cookies work
+in local development.
 
 ## Project layout
 
@@ -60,12 +63,14 @@ From repo root:
    - D1 database for `DB`
 3. `cd apps/worker`
 4. `npx wrangler secret put ADMIN_PASSWORD --config wrangler.toml`
-5. Optional prompt rewriter in admin prompt generation:
+5. Recommended for signed admin cookies:
+   - `npx wrangler secret put ADMIN_SESSION_SECRET --config wrangler.toml`
+6. Optional prompt rewriter in admin prompt generation:
    - `npx wrangler secret put OPENROUTER_API_KEY --config wrangler.toml`
    - Optional model override (must be a free-capable OpenRouter model id):
      `npx wrangler secret put OPENROUTER_MODEL --config wrangler.toml`
    - If `OPENROUTER_MODEL` is not set, the worker defaults to `openrouter/free`.
-6. `cd ../.. && npm run deploy`
+7. `cd ../.. && npm run deploy`
 
 ## Runtime URLs
 

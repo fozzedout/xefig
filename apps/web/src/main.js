@@ -6,7 +6,7 @@ import { PictureSwapPuzzle } from './components/picture-swap-puzzle.js'
 import { PolygramPuzzle } from './components/polygram-puzzle.js'
 
 const app = document.querySelector('#app')
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : ''
+const API_BASE = ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'

@@ -4,6 +4,7 @@ export type Bindings = {
   DB: D1Database
   STATIC_ASSETS: Fetcher
   ADMIN_PASSWORD?: string
+  ADMIN_SESSION_SECRET?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
 }

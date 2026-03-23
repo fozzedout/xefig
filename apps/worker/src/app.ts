@@ -1,17 +1,23 @@
 import { Hono } from 'hono'
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 
 import { ensureLeaderboardTable, isLeaderboardDifficulty, isLeaderboardGameMode } from './lib/leaderboard'
 import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_TTL_SECONDS,
+  createAdminSessionToken,
+  getAdminSessionSecret,
+  verifyAdminSessionToken,
+} from './lib/admin-session'
+import {
   findNextUnscheduledDate,
-  formatThemeFromTags,
   getFileExtension,
   getFileField,
   getPuzzleByDate,
   getStringField,
   getUtcDateKey,
   isValidDateKey,
-  normalizeTags,
   parseTagList,
   toCdnUrl,
   toPuzzleKey,
@@ -26,11 +32,32 @@ import {
   CATEGORIES,
   type Bindings,
   type FormValue,
-  type PromptPack,
   type PuzzleAsset,
   type PuzzleCategory,
   type PuzzleRecord,
 } from './types'
+
+function getSessionCookieOptions(url: string) {
+  const requestUrl = new URL(url)
+  const isLocalhost = requestUrl.hostname === 'localhost' || requestUrl.hostname === '127.0.0.1'
+
+  return {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Strict' as const,
+    secure: !isLocalhost,
+    maxAge: ADMIN_SESSION_TTL_SECONDS,
+  }
+}
+
+async function hasAdminSession(env: Bindings, token: string | undefined): Promise<boolean> {
+  const secret = getAdminSessionSecret(env)
+  if (!secret) {
+    return false
+  }
+
+  return verifyAdminSessionToken(secret, token)
+}
 
 export function createApp() {
   const app = new Hono<{ Bindings: Bindings }>()
@@ -39,7 +66,7 @@ export function createApp() {
     '/api/*',
     cors({
       origin: '*',
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type'],
     }),
   )
@@ -90,14 +117,15 @@ export function createApp() {
   })
 
   app.get('/api/admin/puzzles/next-empty', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
-    }
-
-    const password = (c.req.header('x-admin-password') || '').trim()
-    if (!password || password !== configuredPassword) {
-      return c.json({ error: 'Invalid admin password.' }, 401)
     }
 
     const requestedFrom = (c.req.query('from') || '').trim()
@@ -120,15 +148,88 @@ export function createApp() {
     })
   })
 
-  app.get('/api/admin/openrouter/free-models', async (c) => {
+  app.get('/api/admin/session', async (c) => {
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
-    const password = (c.req.header('x-admin-password') || '').trim()
+    const authenticated = await hasAdminSession(c.env, getCookie(c, ADMIN_SESSION_COOKIE))
+    return c.json(
+      {
+        ok: true,
+        authenticated,
+      },
+      200,
+      {
+        'cache-control': 'no-store',
+      },
+    )
+  })
+
+  app.post('/api/admin/session', async (c) => {
+    const configuredPassword = c.env.ADMIN_PASSWORD
+    if (!configuredPassword) {
+      return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
+    }
+
+    let body: { password?: string } | null = null
+    try {
+      body = (await c.req.json()) as { password?: string }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const password = typeof body?.password === 'string' ? body.password.trim() : ''
     if (!password || password !== configuredPassword) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
       return c.json({ error: 'Invalid admin password.' }, 401)
+    }
+
+    const secret = getAdminSessionSecret(c.env)
+    if (!secret) {
+      return c.json({ error: 'Admin session secret is not configured.' }, 500)
+    }
+
+    const token = await createAdminSessionToken(secret)
+    setCookie(c, ADMIN_SESSION_COOKIE, token, getSessionCookieOptions(c.req.url))
+
+    return c.json(
+      {
+        ok: true,
+        authenticated: true,
+      },
+      200,
+      {
+        'cache-control': 'no-store',
+      },
+    )
+  })
+
+  app.delete('/api/admin/session', async (c) => {
+    deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+    return c.json(
+      {
+        ok: true,
+        authenticated: false,
+      },
+      200,
+      {
+        'cache-control': 'no-store',
+      },
+    )
+  })
+
+  app.get('/api/admin/openrouter/free-models', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const configuredPassword = c.env.ADMIN_PASSWORD
+    if (!configuredPassword) {
+      return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
     try {
@@ -146,6 +247,12 @@ export function createApp() {
   })
 
   app.post('/api/admin/puzzles', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json(
@@ -158,12 +265,6 @@ export function createApp() {
 
     try {
       const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
-      const password = getStringField(body.password)
-
-      if (!password || password !== configuredPassword) {
-        return c.json({ error: 'Invalid admin password.' }, 401)
-      }
-
       const date = getStringField(body.date)?.trim()
 
       if (!date || !isValidDateKey(date)) {
@@ -179,7 +280,6 @@ export function createApp() {
       const nextCategories = {} as Record<PuzzleCategory, PuzzleAsset>
 
       for (const category of CATEGORIES) {
-        // Parse category-specific theme and tags from form body
         const catTheme = getStringField(body[`theme-${category}`])?.trim() || ''
         const catTags = parseTagList(getStringField(body[`tags-${category}`]))
 
@@ -253,21 +353,22 @@ export function createApp() {
   })
 
   app.post('/api/admin/prompts/generate', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
-    let body: { password?: string; model?: string } | null = null
+    let body: { model?: string } | null = null
     try {
-      body = (await c.req.json()) as { password?: string; model?: string }
+      body = (await c.req.json()) as { model?: string }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
-    }
-
-    const password = typeof body?.password === 'string' ? body.password : ''
-    if (!password || password !== configuredPassword) {
-      return c.json({ error: 'Invalid admin password.' }, 401)
     }
 
     const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
@@ -306,21 +407,22 @@ export function createApp() {
   })
 
   app.post('/api/admin/prompts/generate-one', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
-    let body: { password?: string; category?: string } | null = null
+    let body: { category?: string } | null = null
     try {
-      body = (await c.req.json()) as { password?: string; category?: string }
+      body = (await c.req.json()) as { category?: string }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
-    }
-
-    const password = typeof body?.password === 'string' ? body.password : ''
-    if (!password || password !== configuredPassword) {
-      return c.json({ error: 'Invalid admin password.' }, 401)
     }
 
     const category = (body?.category || '').trim() as PuzzleCategory
@@ -342,6 +444,12 @@ export function createApp() {
   })
 
   app.post('/api/admin/prompts/rewrite-one', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
@@ -349,7 +457,6 @@ export function createApp() {
 
     let body:
       | {
-          password?: string
           category?: string
           prompt?: string
           theme?: string
@@ -360,7 +467,6 @@ export function createApp() {
 
     try {
       body = (await c.req.json()) as {
-        password?: string
         category?: string
         prompt?: string
         theme?: string
@@ -369,11 +475,6 @@ export function createApp() {
       }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
-    }
-
-    const password = typeof body?.password === 'string' ? body.password.trim() : ''
-    if (!password || password !== configuredPassword) {
-      return c.json({ error: 'Invalid admin password.' }, 401)
     }
 
     const categoryRaw = typeof body?.category === 'string' ? body.category.trim() : ''
