@@ -977,6 +977,7 @@ h1 {
   width: 100%;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.5rem;
@@ -985,6 +986,7 @@ h1 {
 
 .polygram-board-wrap {
   min-height: 0;
+  min-width: 0;
   display: grid;
   place-items: center;
   padding: 0.2rem;
@@ -1035,11 +1037,15 @@ h1 {
   top: 0;
   left: 0;
   pointer-events: none;
-  border: 2px dashed color-mix(in oklab, #ffb347 70%, var(--line));
-  background: color-mix(in oklab, #ffb347 14%, transparent);
+  border: 2px solid color-mix(in oklab, #ffb347 82%, white);
+  background: transparent;
   opacity: 0;
   z-index: 4;
-  transition: opacity 80ms ease, border-color 80ms ease, background-color 80ms ease;
+  filter:
+    drop-shadow(0 0 0.35rem color-mix(in oklab, #ffb347 78%, transparent))
+    drop-shadow(0 0 1rem color-mix(in oklab, #ffb347 48%, transparent))
+    drop-shadow(0 0 1.6rem color-mix(in oklab, #ffb347 26%, transparent));
+  transition: opacity 80ms ease, border-color 80ms ease, filter 80ms ease;
 }
 
 .polygram-snap-hint.is-visible {
@@ -1048,11 +1054,15 @@ h1 {
 
 .polygram-snap-hint.is-ready {
   border-color: color-mix(in oklab, var(--ok) 82%, #8fe1b2);
-  background: color-mix(in oklab, var(--ok) 22%, transparent);
+  filter:
+    drop-shadow(0 0 0.45rem color-mix(in oklab, var(--ok) 82%, transparent))
+    drop-shadow(0 0 1.2rem color-mix(in oklab, var(--ok) 48%, transparent))
+    drop-shadow(0 0 1.8rem color-mix(in oklab, var(--ok) 22%, transparent));
 }
 
 .polygram-tray {
   min-height: 0;
+  min-width: 0;
   border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
   border-radius: 0.9rem;
   background: color-mix(in oklab, var(--surface) 92%, var(--surface-2));
@@ -1062,23 +1072,101 @@ h1 {
   overflow: hidden;
 }
 
+.polygram-tray-header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem 0.45rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 76%, transparent);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 82%, transparent), transparent);
+}
+
 .polygram-tray-title {
-  margin: 0;
-  padding: 0.42rem 0.65rem 0.2rem;
-  font-size: 0.72rem;
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.polygram-tray-title span {
+  font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-weight: 800;
+  color: var(--text);
+}
+
+.polygram-tray-title small {
+  font-size: 0.72rem;
   color: var(--muted);
+}
+
+.polygram-rotate-dock {
+  min-width: min(46vw, 240px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in oklab, var(--surface-2) 84%, var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 18%, transparent);
+}
+
+.polygram-rotate-status {
+  display: flex;
+  align-items: center;
+}
+
+.polygram-rotate-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.polygram-rotate-buttons {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.polygram-rotate-btn {
+  border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
+  background: color-mix(in oklab, var(--surface) 90%, var(--surface-2));
+  color: var(--text);
+  border-radius: 0.7rem;
+  padding: 0.5rem 1rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+}
+
+.polygram-rotate-btn:disabled {
+  opacity: 0.45;
+}
+
+.polygram-tray-scroller {
+  min-height: 0;
+  min-width: 0;
+  padding: 0.4rem 0.25rem 0.3rem;
 }
 
 .polygram-tray-viewport {
   min-height: 0;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   touch-action: pan-x;
   overscroll-behavior: contain;
-  padding-bottom: 0.1rem;
+  padding: 0 0.55rem 0.2rem;
 }
 
 .polygram-tray-track {
@@ -1104,16 +1192,31 @@ h1 {
   transform-origin: center center;
   cursor: grab;
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
   transition: transform 140ms ease, filter 120ms ease;
+}
+
+.polygram-piece.is-active,
+.polygram-piece.is-dragging {
+  touch-action: none;
 }
 
 .polygram-piece.is-active {
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.33));
 }
 
+.polygram-piece.is-selected {
+  filter:
+    drop-shadow(0 0 0.4rem color-mix(in oklab, var(--accent) 58%, transparent))
+    drop-shadow(0 0 0.95rem color-mix(in oklab, var(--accent) 22%, transparent));
+}
+
 .polygram-piece.is-ready-to-snap {
-  filter: drop-shadow(0 0 0.35rem color-mix(in oklab, var(--ok) 78%, transparent));
+  filter:
+    drop-shadow(0 0 0.45rem color-mix(in oklab, var(--ok) 78%, transparent))
+    drop-shadow(0 0 0.95rem color-mix(in oklab, var(--ok) 32%, transparent));
 }
 
 .polygram-piece.is-dragging {
@@ -1132,4 +1235,82 @@ h1 {
 .polygram-piece:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 65%, transparent);
   outline-offset: 1px;
+}
+
+@media (max-width: 760px) {
+  .polygram-root {
+    gap: 0.35rem;
+  }
+
+  .polygram-board-wrap {
+    padding: 0.1rem;
+  }
+
+  .polygram-tray-header {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+    padding: 0.45rem 0.55rem 0.35rem;
+  }
+
+  .polygram-rotate-dock {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.28rem 0.35rem;
+    border-radius: 0.6rem;
+  }
+
+  .polygram-rotate-status {
+    min-width: 0;
+  }
+
+  .polygram-tray-title {
+    gap: 0.12rem;
+  }
+
+  .polygram-tray-title span {
+    font-size: 0.68rem;
+  }
+
+  .polygram-rotate-buttons {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .polygram-rotate-btn {
+    min-width: 2.8rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  }
+
+  .polygram-tray-title small {
+    display: none;
+  }
+
+  .polygram-tray-scroller {
+    padding: 0.1rem 0.08rem 0.15rem;
+  }
+
+  .polygram-tray-viewport {
+    padding: 0 0.25rem 0.15rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .polygram-tray-header {
+    padding: 0.38rem 0.45rem 0.3rem;
+  }
+
+  .polygram-rotate-dock {
+    padding: 0.2rem 0.3rem;
+  }
+
+  .polygram-rotate-label {
+    font-size: 0.6rem;
+  }
 }
