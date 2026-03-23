@@ -841,7 +841,8 @@ h1 {
 }
 
 .sliding-reference.is-visible {
-  opacity: 0.9;
+  opacity: 1;
+  z-index: 4;
 }
 
 .sliding-tile-layer {
@@ -926,7 +927,8 @@ h1 {
 }
 
 .picture-swap-reference.is-visible {
-  opacity: 0.92;
+  opacity: 1;
+  z-index: 5;
 }
 
 .picture-swap-tile-layer {
