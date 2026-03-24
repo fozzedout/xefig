@@ -5,3 +5,4 @@ apps/*/dist/
 apps/*/node_modules/
 *.log
 .DS_Store
+/apps/web/test-results
