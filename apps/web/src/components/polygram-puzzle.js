@@ -1,17 +1,15 @@
 const SHARD_COUNT_RANGES = {
-  easy: [16, 20],
-  medium: [25, 30],
-  hard: [36, 42],
-  extreme: [52, 60],
+  easy: [36, 42],
+  medium: [52, 60],
+  hard: [80, 96],
+  extreme: [120, 144],
 }
 
 const DRAG_START_DISTANCE = 8
 const TRAY_SCROLL_START_DISTANCE = 10
 const ROTATION_STEP_DEG = 30
-const SNAP_POSITION_MARGIN = 0.05
-const SNAP_ROTATION_MARGIN_DEG = 18
-const TOUCH_LIFT_MIN_PX = 42
-const TOUCH_LIFT_MAX_PX = 88
+const SNAP_POSITION_MARGIN = 0.08
+const SNAP_ROTATION_MARGIN_DEG = 22
 const MIN_BOARD_SIZE = 180
 const MAX_BOARD_SIZE = 980
 
@@ -41,10 +39,20 @@ export class PolygramPuzzle {
       size: 0,
     }
 
+    this.zoom = 1
+    this.panX = 0
+    this.panY = 0
+    this.touchPoints = new Map()
+    this.pinchState = null
+    this.panState = null
+
     this.handleWindowResize = () => this.onWindowResize()
     this.handleWindowPointerMove = (event) => this.onWindowPointerMove(event)
     this.handleWindowPointerUp = (event) => this.onWindowPointerUp(event)
     this.handleWindowPointerCancel = (event) => this.onWindowPointerCancel(event)
+    this.handleBoardPointerDown = (event) => this.onBoardPointerDown(event)
+    this.handleBoardPointerMove = (event) => this.onBoardPointerMove(event)
+    this.handleBoardPointerUp = (event) => this.onBoardPointerUp(event)
   }
 
   async init() {
@@ -86,7 +94,15 @@ export class PolygramPuzzle {
     this.pieces = []
     this.selectedPieceId = null
     this.blueprints = []
+    this.touchPoints.clear()
+    this.pinchState = null
+    this.panState = null
     this.container.innerHTML = ''
+
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {})
+      this.audioContext = null
+    }
   }
 
   createLayout() {
@@ -98,6 +114,9 @@ export class PolygramPuzzle {
 
     this.board = document.createElement('div')
     this.board.className = 'polygram-board'
+
+    this.boardContent = document.createElement('div')
+    this.boardContent.className = 'polygram-board-content'
 
     this.ghostImage = document.createElement('img')
     this.ghostImage.className = 'polygram-ghost'
@@ -116,7 +135,11 @@ export class PolygramPuzzle {
     this.snapHint = document.createElement('div')
     this.snapHint.className = 'polygram-snap-hint'
 
-    this.board.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.snapHint)
+    this.placedLayer = document.createElement('div')
+    this.placedLayer.className = 'polygram-placed-layer'
+
+    this.boardContent.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.placedLayer, this.snapHint)
+    this.board.append(this.boardContent)
     this.boardWrap.append(this.board)
 
     this.tray = document.createElement('div')
@@ -127,7 +150,7 @@ export class PolygramPuzzle {
 
     this.trayTitle = document.createElement('div')
     this.trayTitle.className = 'polygram-tray-title'
-    this.trayTitle.innerHTML = '<span>Shard Tray</span><small>Drag shards upward. Use the rotate dock to line them up.</small>'
+    this.trayTitle.innerHTML = '<span>Shard Tray</span><small>Drag shards onto the board, then rotate and reposition.</small>'
 
     this.rotateDock = document.createElement('div')
     this.rotateDock.className = 'polygram-rotate-dock'
@@ -182,6 +205,13 @@ export class PolygramPuzzle {
     this.rotateLeftBtn.addEventListener('click', () => this.rotateSelectedPiece(-1))
     this.rotateRightBtn.addEventListener('click', () => this.rotateSelectedPiece(1))
     this.updateRotateDock()
+
+    this.board.addEventListener('pointerdown', this.handleBoardPointerDown)
+    this.board.addEventListener('pointermove', this.handleBoardPointerMove)
+    this.board.addEventListener('pointerup', this.handleBoardPointerUp)
+    this.board.addEventListener('pointercancel', this.handleBoardPointerUp)
+
+    this.updateBoardTransform()
   }
 
   createPieces(rng) {
@@ -207,6 +237,7 @@ export class PolygramPuzzle {
         trayOrder: order,
         rotation,
         locked: false,
+        placed: false,
         dragging: false,
         dragX: 0,
         dragY: 0,
@@ -254,10 +285,6 @@ export class PolygramPuzzle {
       startY: event.clientY,
       offsetX: event.clientX - centerClientX,
       offsetY: event.clientY - centerClientY,
-      liftY:
-        event.pointerType && event.pointerType !== 'mouse'
-          ? clamp((piece.heightPx || 120) * 0.35, TOUCH_LIFT_MIN_PX, TOUCH_LIFT_MAX_PX)
-          : 0,
       dragging: false,
       scrollingTray: false,
       trayScrollStartLeft: this.trayViewport?.scrollLeft || 0,
@@ -416,9 +443,19 @@ export class PolygramPuzzle {
 
     if (piece.dragging) {
       piece.dragging = false
-      piece.element.classList.remove('is-dragging')
       piece.element.classList.remove('is-ready-to-snap')
-      this.trayTrack.append(piece.element)
+
+      // If piece has a stored board position, return it there
+      if (piece.element.dataset.boardX) {
+        piece.placed = true
+        piece.element.classList.add('is-placed')
+        this.placedLayer.append(piece.element)
+        this.applyPlacedPieceTransform(piece)
+      } else {
+        this.trayTrack.append(piece.element)
+      }
+      // Remove is-dragging after reparent + transform to avoid animated jump
+      piece.element.classList.remove('is-dragging')
       this.layoutTrayPieces()
     }
     this.clearSnapHint()
@@ -444,9 +481,62 @@ export class PolygramPuzzle {
 
   rotatePiece(piece, direction = 1) {
     piece.rotation += ROTATION_STEP_DEG * direction
-    this.layoutTrayPieces()
+    piece.element.classList.add('is-rotating')
+
+    if (piece.placed) {
+      // Rotate in-place on the board — reapply transform at current position
+      this.applyPlacedPieceTransform(piece)
+
+      // Check if rotation brought it into snap range
+      if (this.canSnapPlacedPiece(piece)) {
+        piece.placed = false
+        piece.element.classList.remove('is-placed')
+        piece.element.classList.remove('is-rotating')
+        this.snapPiece(piece)
+        if (this.areAllLocked()) {
+          this.handleCompleted()
+        }
+        return
+      }
+    } else {
+      this.layoutTrayPieces()
+    }
+
     this.updateRotateDock()
     this.emitProgress()
+
+    // Remove animation class after transition completes
+    const onEnd = () => {
+      piece.element.classList.remove('is-rotating')
+      piece.element.removeEventListener('transitionend', onEnd)
+    }
+    piece.element.addEventListener('transitionend', onEnd)
+    // Fallback cleanup
+    setTimeout(onEnd, 300)
+  }
+
+  applyPlacedPieceTransform(piece) {
+    // placed pieces store position relative to the board
+    const boardRelX = parseFloat(piece.element.dataset.boardX) || 0
+    const boardRelY = parseFloat(piece.element.dataset.boardY) || 0
+    this.applyPieceTransform(piece, boardRelX, boardRelY, 1)
+  }
+
+  canSnapPlacedPiece(piece) {
+    if (!this.boardMetrics.size) {
+      return false
+    }
+    const boardRelX = parseFloat(piece.element.dataset.boardX) || 0
+    const boardRelY = parseFloat(piece.element.dataset.boardY) || 0
+    const currentCenterX = boardRelX / this.boardMetrics.size
+    const currentCenterY = boardRelY / this.boardMetrics.size
+    const targetCenterX = piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2
+    const targetCenterY = piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2
+
+    const positionError = Math.hypot(currentCenterX - targetCenterX, currentCenterY - targetCenterY)
+    const rotationError = Math.abs(shortestAngleDelta(piece.rotation, 0))
+
+    return positionError <= SNAP_POSITION_MARGIN && rotationError <= SNAP_ROTATION_MARGIN_DEG
   }
 
   rotateSelectedPiece(direction) {
@@ -476,7 +566,18 @@ export class PolygramPuzzle {
     }
 
     for (const piece of this.pieces) {
-      piece.element.classList.toggle('is-selected', piece.id === this.selectedPieceId)
+      const isNowSelected = piece.id === this.selectedPieceId
+      piece.element.classList.toggle('is-selected', isNowSelected)
+
+      // Pulse animation on newly selected piece
+      if (isNowSelected && previous !== this.selectedPieceId) {
+        piece.element.classList.remove('is-select-pulse')
+        // Force reflow to restart animation
+        void piece.element.offsetWidth
+        piece.element.classList.add('is-select-pulse')
+      } else if (!isNowSelected) {
+        piece.element.classList.remove('is-select-pulse')
+      }
     }
 
     this.updateRotateDock()
@@ -497,10 +598,12 @@ export class PolygramPuzzle {
 
     if (!piece) {
       this.rotateLabel.textContent = 'No shard selected'
+      this.rotateDock.classList.remove('has-selection')
       return
     }
 
     this.rotateLabel.textContent = `Shard ${piece.id + 1}`
+    this.rotateDock.classList.add('has-selection')
   }
 
   shouldScrollTray(pointer, piece, dx, dy) {
@@ -519,8 +622,11 @@ export class PolygramPuzzle {
   }
 
   startDraggingPiece(piece, pointer) {
+    const wasPlaced = piece.placed
     piece.dragging = true
+    piece.placed = false
     piece.element.classList.add('is-dragging')
+    piece.element.classList.remove('is-placed')
 
     try {
       piece.element.setPointerCapture(pointer.pointerId)
@@ -530,27 +636,46 @@ export class PolygramPuzzle {
 
     this.selectPiece(piece.id)
     this.dragLayer.append(piece.element)
+
+    if (wasPlaced) {
+      // Recalculate offset so piece center stays under the pointer
+      const rect = piece.element.getBoundingClientRect()
+      const centerClientX = rect.left + rect.width / 2
+      const centerClientY = rect.top + rect.height / 2
+      pointer.offsetX = pointer.startX - centerClientX
+      pointer.offsetY = pointer.startY - centerClientY
+    }
+
     this.updateDraggedPiecePosition(piece, pointer.startX, pointer.startY, pointer)
   }
 
   updateDraggedPiecePosition(piece, clientX, clientY, pointer) {
     const rootRect = this.root.getBoundingClientRect()
     piece.dragX = clientX - rootRect.left - pointer.offsetX
-    piece.dragY = clientY - rootRect.top - pointer.offsetY - (pointer.liftY || 0)
+    piece.dragY = clientY - rootRect.top - pointer.offsetY
 
-    this.applyPieceTransform(piece, piece.dragX, piece.dragY, 1)
+    this.applyPieceTransform(piece, piece.dragX, piece.dragY, this.zoom)
     piece.element.style.zIndex = '2'
+
+    // Convert drag position from root-relative to board-content space for snap checking
+    const boardRelX = (piece.dragX - this.boardMetrics.x - this.panX) / this.zoom
+    const boardRelY = (piece.dragY - this.boardMetrics.y - this.panY) / this.zoom
+    piece.boardSnapX = boardRelX
+    piece.boardSnapY = boardRelY
     this.updateSnapHint(piece)
   }
 
   finishDraggingPiece(piece) {
     piece.dragging = false
-    piece.element.classList.remove('is-dragging')
     piece.element.classList.remove('is-ready-to-snap')
     this.clearSnapHint()
 
+    // Keep is-dragging (transition: none) until after reparent + transform,
+    // so the coordinate-system change doesn't trigger an animated jump.
+
     if (this.canSnapPiece(piece)) {
       this.snapPiece(piece)
+      piece.element.classList.remove('is-dragging')
       this.emitProgress()
 
       if (this.areAllLocked()) {
@@ -559,9 +684,42 @@ export class PolygramPuzzle {
       return
     }
 
-    this.trayTrack.append(piece.element)
+    // If the piece was dropped in the tray area, return it to the tray
+    if (this.isDragInTrayArea(piece)) {
+      piece.placed = false
+      piece.element.classList.remove('is-placed')
+      this.trayTrack.append(piece.element)
+      this.layoutTrayPieces()
+      piece.element.classList.remove('is-dragging')
+      this.emitProgress()
+      return
+    }
+
+    // Otherwise, place the piece on the board for rotation and repositioning
+    piece.placed = true
+    piece.element.classList.add('is-placed')
+    this.placedLayer.append(piece.element)
+    // Convert root-relative drag position to board-content space (accounting for zoom/pan)
+    const boardRelX = (piece.dragX - this.boardMetrics.x - this.panX) / this.zoom
+    const boardRelY = (piece.dragY - this.boardMetrics.y - this.panY) / this.zoom
+    piece.element.dataset.boardX = boardRelX
+    piece.element.dataset.boardY = boardRelY
+    this.applyPieceTransform(piece, boardRelX, boardRelY, 1)
+    piece.element.style.zIndex = '1'
+    piece.element.classList.remove('is-dragging')
+    this.selectPiece(piece.id)
     this.layoutTrayPieces()
     this.emitProgress()
+  }
+
+  isDragInTrayArea(piece) {
+    if (!this.tray) {
+      return false
+    }
+    const trayRect = this.tray.getBoundingClientRect()
+    const rootRect = this.root.getBoundingClientRect()
+    const pieceCenterY = piece.dragY + rootRect.top
+    return pieceCenterY >= trayRect.top
   }
 
   canSnapPiece(piece) {
@@ -574,8 +732,10 @@ export class PolygramPuzzle {
       return null
     }
 
-    const currentCenterX = (piece.dragX - this.boardMetrics.x) / this.boardMetrics.size
-    const currentCenterY = (piece.dragY - this.boardMetrics.y) / this.boardMetrics.size
+    // Use zoom-aware board coordinates computed during drag
+    const boardSize = this.boardMetrics.size
+    const currentCenterX = (piece.boardSnapX ?? ((piece.dragX - this.boardMetrics.x - this.panX) / this.zoom)) / boardSize
+    const currentCenterY = (piece.boardSnapY ?? ((piece.dragY - this.boardMetrics.y - this.panY) / this.zoom)) / boardSize
     const targetCenterX = piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2
     const targetCenterY = piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2
 
@@ -588,13 +748,14 @@ export class PolygramPuzzle {
     return {
       canSnap,
       nearTarget,
-      targetCenterX: targetCenterX * this.boardMetrics.size,
-      targetCenterY: targetCenterY * this.boardMetrics.size,
+      targetCenterX: targetCenterX * boardSize,
+      targetCenterY: targetCenterY * boardSize,
     }
   }
 
   snapPiece(piece) {
     piece.locked = true
+    piece.placed = false
     piece.rotation = nearestEquivalentAngle(piece.rotation, 0)
     if (this.selectedPieceId === piece.id) {
       this.selectedPieceId = null
@@ -602,12 +763,72 @@ export class PolygramPuzzle {
 
     piece.element.classList.add('is-locked')
     piece.element.classList.remove('is-ready-to-snap')
+    piece.element.classList.remove('is-placed')
     piece.element.style.zIndex = '1'
 
     this.lockedLayer.append(piece.element)
     this.placePieceOnBoard(piece)
     this.layoutTrayPieces()
     this.updateRotateDock()
+
+    this.flashSnapOutline(piece)
+    this.vibrateOnSnap()
+    this.playSnapSound()
+  }
+
+  flashSnapOutline(piece) {
+    piece.element.classList.add('snap-flash')
+    piece.element.addEventListener(
+      'animationend',
+      () => piece.element.classList.remove('snap-flash'),
+      { once: true },
+    )
+  }
+
+  vibrateOnSnap() {
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(15)
+      }
+    } catch {
+      // Best effort haptic feedback.
+    }
+  }
+
+  playSnapSound() {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) {
+        return
+      }
+
+      if (!this.audioContext) {
+        this.audioContext = new AudioContextClass()
+      }
+
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {})
+      }
+
+      const now = this.audioContext.currentTime
+      const oscillator = this.audioContext.createOscillator()
+      const gain = this.audioContext.createGain()
+
+      oscillator.type = 'triangle'
+      oscillator.frequency.setValueAtTime(720, now)
+      oscillator.frequency.exponentialRampToValueAtTime(980, now + 0.04)
+
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11)
+
+      oscillator.connect(gain)
+      gain.connect(this.audioContext.destination)
+      oscillator.start(now)
+      oscillator.stop(now + 0.12)
+    } catch {
+      // Best effort sound effect.
+    }
   }
 
   placePieceOnBoard(piece) {
@@ -675,7 +896,7 @@ export class PolygramPuzzle {
     for (const piece of this.pieces) {
       if (piece.dragging) {
         this.dragLayer.append(piece.element)
-        this.applyPieceTransform(piece, piece.dragX, piece.dragY, 1)
+        this.applyPieceTransform(piece, piece.dragX, piece.dragY, this.zoom)
         continue
       }
 
@@ -683,10 +904,18 @@ export class PolygramPuzzle {
         this.lockedLayer.append(piece.element)
         piece.element.classList.add('is-locked')
         piece.element.classList.remove('is-selected')
+        piece.element.classList.remove('is-placed')
         this.placePieceOnBoard(piece)
+      } else if (piece.placed) {
+        this.placedLayer.append(piece.element)
+        piece.element.classList.add('is-placed')
+        piece.element.classList.remove('is-locked')
+        piece.element.classList.toggle('is-selected', piece.id === this.selectedPieceId)
+        this.applyPlacedPieceTransform(piece)
       } else {
         this.trayTrack.append(piece.element)
         piece.element.classList.remove('is-locked')
+        piece.element.classList.remove('is-placed')
         piece.element.classList.toggle('is-selected', piece.id === this.selectedPieceId)
       }
     }
@@ -698,28 +927,31 @@ export class PolygramPuzzle {
     }
 
     const unlocked = this.pieces
-      .filter((piece) => !piece.locked && !piece.dragging)
+      .filter((piece) => !piece.locked && !piece.dragging && !piece.placed)
       .sort((a, b) => a.trayOrder - b.trayOrder)
 
     const viewportWidth = this.trayViewport.clientWidth || this.root.clientWidth || 320
     const isCompactScreen = viewportWidth <= 760
     const slotSize = Math.round(clamp(this.boardMetrics.size * (isCompactScreen ? 0.32 : 0.22), 72, 120))
     const gap = Math.round(clamp(slotSize * 0.16, 10, 16))
+    const slotInset = Math.round(clamp(slotSize * 0.14, 10, 16))
+    const usableSlotSize = slotSize - slotInset
     const columns = Math.max(1, unlocked.length)
 
     const trackWidth = Math.max(viewportWidth, gap + columns * (slotSize + gap))
-    const trackHeight = gap * 2 + slotSize
+    const trackHeight = gap * 2 + slotSize + slotInset
 
     this.trayTrack.style.width = `${trackWidth}px`
     this.trayTrack.style.height = `${trackHeight}px`
 
     unlocked.forEach((piece, index) => {
       const baseX = gap + index * (slotSize + gap)
-      const baseY = gap
+      const baseY = gap + slotInset / 2
+      const trayBounds = getRotatedBounds(piece.widthPx, piece.heightPx, piece.rotation)
 
       const trayScale = Math.min(
-        (slotSize * 0.94) / Math.max(1, piece.widthPx),
-        (slotSize * 0.94) / Math.max(1, piece.heightPx),
+        usableSlotSize / Math.max(1, trayBounds.width),
+        usableSlotSize / Math.max(1, trayBounds.height),
       )
 
       const centerX = baseX + slotSize / 2
@@ -750,11 +982,10 @@ export class PolygramPuzzle {
     const left = snapState.targetCenterX - piece.widthPx / 2
     const top = snapState.targetCenterY - piece.heightPx / 2
 
-    const hintPadding = Math.max(14, this.boardMetrics.size * 0.018)
-    this.snapHint.style.width = `${piece.widthPx + hintPadding * 2}px`
-    this.snapHint.style.height = `${piece.heightPx + hintPadding * 2}px`
+    this.snapHint.style.width = `${piece.widthPx}px`
+    this.snapHint.style.height = `${piece.heightPx}px`
     this.snapHint.style.clipPath = piece.element.style.clipPath || 'none'
-    this.snapHint.style.transform = `translate(${left - hintPadding}px, ${top - hintPadding}px)`
+    this.snapHint.style.transform = `translate(${left}px, ${top}px)`
     this.snapHint.classList.add('is-visible')
     this.snapHint.classList.toggle('is-ready', snapState.canSnap)
     piece.element.classList.toggle('is-ready-to-snap', snapState.canSnap)
@@ -765,6 +996,123 @@ export class PolygramPuzzle {
       return
     }
     this.snapHint.classList.remove('is-visible', 'is-ready')
+  }
+
+  // --- Zoom and pan ---
+
+  onBoardPointerDown(event) {
+    if (event.pointerType !== 'touch' || this.pointerState) {
+      return
+    }
+    this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (this.touchPoints.size === 2) {
+      this.panState = null
+      this.beginPinch()
+    } else if (this.touchPoints.size === 1 && this.zoom > 1) {
+      this.panState = { startX: event.clientX, startY: event.clientY, startPanX: this.panX, startPanY: this.panY }
+    }
+  }
+
+  onBoardPointerMove(event) {
+    if (this.pointerState || !this.touchPoints.has(event.pointerId)) {
+      return
+    }
+    this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    // Two-finger pinch zoom
+    if (this.touchPoints.size >= 2 && this.pinchState) {
+      event.preventDefault()
+
+      const points = [...this.touchPoints.values()]
+      const center = midpoint(points[0], points[1])
+      const distance = Math.max(1, distanceBetween(points[0], points[1]))
+      const boardRect = this.board.getBoundingClientRect()
+
+      const scaleRatio = distance / this.pinchState.startDistance
+      const nextScale = clamp(this.pinchState.startScale * scaleRatio, 1, 4)
+
+      const centerX = center.x - boardRect.left
+      const centerY = center.y - boardRect.top
+
+      const nextPanX = centerX - this.pinchState.anchorX * nextScale
+      const nextPanY = centerY - this.pinchState.anchorY * nextScale
+
+      this.zoom = nextScale
+      const clamped = this.clampPan(nextPanX, nextPanY, nextScale)
+      this.panX = clamped.x
+      this.panY = clamped.y
+      this.updateBoardTransform()
+      return
+    }
+
+    // Single-finger pan when zoomed
+    if (this.touchPoints.size === 1 && this.panState) {
+      event.preventDefault()
+      const dx = event.clientX - this.panState.startX
+      const dy = event.clientY - this.panState.startY
+      const clamped = this.clampPan(this.panState.startPanX + dx, this.panState.startPanY + dy, this.zoom)
+      this.panX = clamped.x
+      this.panY = clamped.y
+      this.updateBoardTransform()
+    }
+  }
+
+  onBoardPointerUp(event) {
+    if (this.pointerState) {
+      this.touchPoints.delete(event.pointerId)
+      this.pinchState = null
+      this.panState = null
+      return
+    }
+    if (!this.touchPoints.has(event.pointerId)) {
+      return
+    }
+    this.touchPoints.delete(event.pointerId)
+    if (this.touchPoints.size < 2) {
+      this.pinchState = null
+    }
+    if (this.touchPoints.size === 0) {
+      this.panState = null
+    }
+    if (this.touchPoints.size === 2) {
+      this.beginPinch()
+    }
+  }
+
+  beginPinch() {
+    if (this.touchPoints.size < 2) {
+      this.pinchState = null
+      return
+    }
+    const [pointA, pointB] = [...this.touchPoints.values()]
+    const center = midpoint(pointA, pointB)
+    const boardRect = this.board.getBoundingClientRect()
+
+    this.pinchState = {
+      startScale: this.zoom,
+      startDistance: Math.max(1, distanceBetween(pointA, pointB)),
+      anchorX: (center.x - boardRect.left - this.panX) / this.zoom,
+      anchorY: (center.y - boardRect.top - this.panY) / this.zoom,
+    }
+  }
+
+  clampPan(panX, panY, scale) {
+    const boardSize = this.boardMetrics.size || 1
+    const scaledSize = boardSize * scale
+    const minX = Math.min(0, boardSize - scaledSize)
+    const minY = Math.min(0, boardSize - scaledSize)
+    return {
+      x: clamp(panX, minX, 0),
+      y: clamp(panY, minY, 0),
+    }
+  }
+
+  updateBoardTransform() {
+    if (!this.boardContent) {
+      return
+    }
+    this.boardContent.style.transformOrigin = '0 0'
+    this.boardContent.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`
   }
 
   onWindowResize() {
@@ -803,11 +1151,17 @@ export class PolygramPuzzle {
       completed: this.completed,
       referenceVisible: this.referenceVisible,
       selectedPieceId: this.selectedPieceId,
+      zoom: this.zoom,
+      panX: this.panX,
+      panY: this.panY,
       pieces: this.pieces.map((piece) => ({
         id: piece.id,
         locked: piece.locked,
+        placed: piece.placed,
         rotation: round(normalizeAngle(piece.rotation), 3),
         trayOrder: piece.trayOrder,
+        boardX: piece.placed ? parseFloat(piece.element.dataset.boardX) || 0 : undefined,
+        boardY: piece.placed ? parseFloat(piece.element.dataset.boardY) || 0 : undefined,
       })),
     }
   }
@@ -843,6 +1197,7 @@ export class PolygramPuzzle {
         continue
       }
       piece.locked = Boolean(item.locked)
+      piece.placed = Boolean(item.placed) && !piece.locked
       piece.rotation = normalizeAngle(Number(item.rotation) || 0)
 
       const order = Number(item.trayOrder)
@@ -852,8 +1207,14 @@ export class PolygramPuzzle {
         piece.trayOrder = piece.id
       }
 
+      if (piece.placed && item.boardX != null && item.boardY != null) {
+        piece.element.dataset.boardX = Number(item.boardX) || 0
+        piece.element.dataset.boardY = Number(item.boardY) || 0
+      }
+
       piece.dragging = false
       piece.element.classList.toggle('is-locked', piece.locked)
+      piece.element.classList.toggle('is-placed', piece.placed)
     }
 
     const selectedPieceId = Number(state.selectedPieceId)
@@ -864,6 +1225,13 @@ export class PolygramPuzzle {
       !this.pieces[selectedPieceId].locked
         ? selectedPieceId
         : null
+
+    const rawZoom = Number(state.zoom)
+    this.zoom = Number.isFinite(rawZoom) ? clamp(rawZoom, 1, 4) : 1
+    const clamped = this.clampPan(Number(state.panX) || 0, Number(state.panY) || 0, this.zoom)
+    this.panX = clamped.x
+    this.panY = clamped.y
+    this.updateBoardTransform()
 
     this.completed = Boolean(state.completed) || this.areAllLocked()
     this.syncPieceMounts()
@@ -901,6 +1269,11 @@ export class PolygramPuzzle {
   resetView() {
     this.selectPiece(null)
     this.setReferenceVisible(false)
+    this.zoom = 1
+    this.panX = 0
+    this.panY = 0
+    this.updateBoardTransform()
+    this.emitProgress()
   }
 }
 
@@ -979,6 +1352,19 @@ function getCoverMetrics(imageWidth, imageHeight, boxSize) {
     drawHeight,
     offsetX,
     offsetY,
+  }
+}
+
+function getRotatedBounds(width, height, rotationDeg) {
+  const safeWidth = Math.max(1, Number(width) || 1)
+  const safeHeight = Math.max(1, Number(height) || 1)
+  const radians = (normalizeAngle(rotationDeg) * Math.PI) / 180
+  const cos = Math.abs(Math.cos(radians))
+  const sin = Math.abs(Math.sin(radians))
+
+  return {
+    width: safeWidth * cos + safeHeight * sin,
+    height: safeWidth * sin + safeHeight * cos,
   }
 }
 
@@ -1213,4 +1599,12 @@ function loadImage(url) {
     image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
     image.src = url
   })
+}
+
+function midpoint(a, b) {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+}
+
+function distanceBetween(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y)
 }

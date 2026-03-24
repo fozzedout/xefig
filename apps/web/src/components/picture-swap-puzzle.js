@@ -181,15 +181,29 @@ export class PictureSwapPuzzle {
     this.applyBoardSize()
   }
 
+  getCoverMetrics() {
+    const imgW = this.image?.naturalWidth || this.image?.width || 1
+    const imgH = this.image?.naturalHeight || this.image?.height || 1
+    const scale = Math.max(this.boardSize / imgW, this.boardSize / imgH)
+    const drawW = imgW * scale
+    const drawH = imgH * scale
+    return {
+      bgSize: `${drawW}px ${drawH}px`,
+      offsetX: (this.boardSize - drawW) / 2,
+      offsetY: (this.boardSize - drawH) / 2,
+    }
+  }
+
   paintTileFace(tile) {
     const row = Math.floor(tile.homeIndex / this.gridSize)
     const col = tile.homeIndex % this.gridSize
+    const cover = this.getCoverMetrics()
 
     tile.element.style.width = `${this.tileSize}px`
     tile.element.style.height = `${this.tileSize}px`
     tile.element.style.backgroundImage = `url("${this.imageUrl}")`
-    tile.element.style.backgroundSize = `${this.boardSize}px ${this.boardSize}px`
-    tile.element.style.backgroundPosition = `${-col * this.tileSize}px ${-row * this.tileSize}px`
+    tile.element.style.backgroundSize = cover.bgSize
+    tile.element.style.backgroundPosition = `${cover.offsetX - col * this.tileSize}px ${cover.offsetY - row * this.tileSize}px`
   }
 
   shuffleTiles() {

@@ -149,13 +149,27 @@ export class SlidingTilePuzzle {
     this.paintVictoryTileFace()
   }
 
+  getCoverMetrics() {
+    const imgW = this.image?.naturalWidth || this.image?.width || 1
+    const imgH = this.image?.naturalHeight || this.image?.height || 1
+    const scale = Math.max(this.boardSize / imgW, this.boardSize / imgH)
+    const drawW = imgW * scale
+    const drawH = imgH * scale
+    return {
+      bgSize: `${drawW}px ${drawH}px`,
+      offsetX: (this.boardSize - drawW) / 2,
+      offsetY: (this.boardSize - drawH) / 2,
+    }
+  }
+
   paintTileFace(tile) {
     const tileRow = Math.floor(tile.homeIndex / this.gridSize)
     const tileCol = tile.homeIndex % this.gridSize
+    const cover = this.getCoverMetrics()
 
     tile.element.style.backgroundImage = `url("${this.imageUrl}")`
-    tile.element.style.backgroundSize = `${this.boardSize}px ${this.boardSize}px`
-    tile.element.style.backgroundPosition = `${-tileCol * this.tileSize}px ${-tileRow * this.tileSize}px`
+    tile.element.style.backgroundSize = cover.bgSize
+    tile.element.style.backgroundPosition = `${cover.offsetX - tileCol * this.tileSize}px ${cover.offsetY - tileRow * this.tileSize}px`
     tile.element.style.width = `${this.tileSize}px`
     tile.element.style.height = `${this.tileSize}px`
   }
@@ -164,10 +178,11 @@ export class SlidingTilePuzzle {
     const lastIndex = this.totalSlots - 1
     const tileRow = Math.floor(lastIndex / this.gridSize)
     const tileCol = lastIndex % this.gridSize
+    const cover = this.getCoverMetrics()
 
     this.victoryTile.style.backgroundImage = `url("${this.imageUrl}")`
-    this.victoryTile.style.backgroundSize = `${this.boardSize}px ${this.boardSize}px`
-    this.victoryTile.style.backgroundPosition = `${-tileCol * this.tileSize}px ${-tileRow * this.tileSize}px`
+    this.victoryTile.style.backgroundSize = cover.bgSize
+    this.victoryTile.style.backgroundPosition = `${cover.offsetX - tileCol * this.tileSize}px ${cover.offsetY - tileRow * this.tileSize}px`
     this.victoryTile.style.width = `${this.tileSize}px`
     this.victoryTile.style.height = `${this.tileSize}px`
     this.victoryTile.style.transform = `translate(${tileCol * this.tileSize}px, ${tileRow * this.tileSize}px)`

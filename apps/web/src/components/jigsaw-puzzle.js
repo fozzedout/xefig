@@ -45,6 +45,7 @@ export class JigsawPuzzle {
 
     this.touchPoints = new Map()
     this.pinchState = null
+    this.panState = null
     this.zoom = 1
     this.panX = 0
     this.panY = 0
@@ -110,6 +111,7 @@ export class JigsawPuzzle {
 
     this.touchPoints.clear()
     this.pinchState = null
+    this.panState = null
     this.pieces = []
     this.container.innerHTML = ''
   }
@@ -960,7 +962,10 @@ export class JigsawPuzzle {
     this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
     if (this.touchPoints.size === 2) {
+      this.panState = null
       this.beginPinch()
+    } else if (this.touchPoints.size === 1 && this.zoom > 1) {
+      this.panState = { startX: event.clientX, startY: event.clientY, startPanX: this.panX, startPanY: this.panY }
     }
   }
 
@@ -970,38 +975,51 @@ export class JigsawPuzzle {
     }
 
     this.touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY })
-    if (this.touchPoints.size < 2 || !this.pinchState) {
+
+    // Two-finger pinch zoom
+    if (this.touchPoints.size >= 2 && this.pinchState) {
+      event.preventDefault()
+
+      const points = [...this.touchPoints.values()]
+      const center = midpoint(points[0], points[1])
+      const distance = Math.max(1, distanceBetween(points[0], points[1]))
+      const stageRect = this.stage.getBoundingClientRect()
+
+      const scaleRatio = distance / this.pinchState.startDistance
+      const nextScale = clamp(this.pinchState.startScale * scaleRatio, 1, 4)
+
+      const centerX = center.x - stageRect.left
+      const centerY = center.y - stageRect.top
+
+      const nextPanX = centerX - this.pinchState.anchorX * nextScale
+      const nextPanY = centerY - this.pinchState.anchorY * nextScale
+
+      this.zoom = nextScale
+
+      const clamped = this.clampPan(nextPanX, nextPanY, nextScale)
+      this.panX = clamped.x
+      this.panY = clamped.y
+      this.updateStageTransform()
       return
     }
 
-    event.preventDefault()
-
-    const points = [...this.touchPoints.values()]
-    const center = midpoint(points[0], points[1])
-    const distance = Math.max(1, distanceBetween(points[0], points[1]))
-    const stageRect = this.stage.getBoundingClientRect()
-
-    const scaleRatio = distance / this.pinchState.startDistance
-    const nextScale = clamp(this.pinchState.startScale * scaleRatio, 1, 4)
-
-    const centerX = center.x - stageRect.left
-    const centerY = center.y - stageRect.top
-
-    const nextPanX = centerX - this.pinchState.anchorX * nextScale
-    const nextPanY = centerY - this.pinchState.anchorY * nextScale
-
-    this.zoom = nextScale
-
-    const clamped = this.clampPan(nextPanX, nextPanY, nextScale)
-    this.panX = clamped.x
-    this.panY = clamped.y
-    this.updateStageTransform()
+    // Single-finger pan when zoomed
+    if (this.touchPoints.size === 1 && this.panState) {
+      event.preventDefault()
+      const dx = event.clientX - this.panState.startX
+      const dy = event.clientY - this.panState.startY
+      const clamped = this.clampPan(this.panState.startPanX + dx, this.panState.startPanY + dy, this.zoom)
+      this.panX = clamped.x
+      this.panY = clamped.y
+      this.updateStageTransform()
+    }
   }
 
   onStagePointerUp(event) {
     if (this.draggingPiece || this.pendingLift) {
       this.touchPoints.delete(event.pointerId)
       this.pinchState = null
+      this.panState = null
       return
     }
 
@@ -1013,6 +1031,10 @@ export class JigsawPuzzle {
 
     if (this.touchPoints.size < 2) {
       this.pinchState = null
+    }
+
+    if (this.touchPoints.size === 0) {
+      this.panState = null
     }
 
     if (this.touchPoints.size === 2) {
