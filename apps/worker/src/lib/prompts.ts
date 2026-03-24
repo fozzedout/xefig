@@ -223,9 +223,9 @@ const PROMPT_QUALITY_TEMPLATES = [
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES = [
-  'Output: one landscape 4:3 image, fully edge-to-edge composition with no borders, frames, or vignettes.',
-  'Deliver a single landscape 4:3 image. The composition must fill the full frame with no decorative borders or edges.',
-  'Single 4:3 landscape image only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting.',
+  'Output: one landscape 4:3 image , fully edge-to-edge composition with no borders, frames, or vignettes.',
+  'Deliver a single landscape 4:3 image . The composition must fill the full frame with no decorative borders or edges.',
+  'Single 4:3 landscape image  only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting.',
 ] as const
 
 // Polygram output templates reinforce orientation rather than edge-to-edge fill.
@@ -233,9 +233,9 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 image. The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
-  'Deliver a single landscape 4:3 image. Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
-  'Single 4:3 landscape image only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Output: one landscape 4:3 image . The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Deliver a single landscape 4:3 image . Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Single 4:3 landscape image  only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
 ] as const
 
 // ---------------------------------------------------------------------------

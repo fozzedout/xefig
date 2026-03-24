@@ -7,6 +7,7 @@ export type Bindings = {
   ADMIN_SESSION_SECRET?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
+  GOOGLE_AI_API_KEY?: string
 }
 
 export const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram'] as const
@@ -26,6 +27,8 @@ export type PuzzleAsset = {
   fileName: string
   theme: string
   tags: string[]
+  thumbnailKey?: string
+  thumbnailUrl?: string
 }
 
 export type PuzzleRecord = {

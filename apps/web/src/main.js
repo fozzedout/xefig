@@ -139,6 +139,17 @@ function resolvePuzzleImageUrl(puzzlePayload, gameMode) {
   return resolveAssetUrl(categoryImage || fallbackImage)
 }
 
+function resolvePuzzleThumbnailUrl(puzzlePayload, gameMode) {
+  const normalizedMode = normalizeGameMode(gameMode)
+  const categoryKey = GAME_MODE_TO_PUZZLE_CATEGORY[normalizedMode] || 'jigsaw'
+  const asset = puzzlePayload?.categories?.[categoryKey]
+  const fallback = puzzlePayload?.categories?.jigsaw
+  const thumbUrl = asset?.thumbnailUrl || fallback?.thumbnailUrl
+  if (thumbUrl) return resolveAssetUrl(thumbUrl)
+  // Fall back to full image if no thumbnail exists
+  return resolveAssetUrl(asset?.imageUrl || fallback?.imageUrl)
+}
+
 function readJsonStorage(key) {
   try {
     const raw = localStorage.getItem(key)
@@ -420,7 +431,7 @@ function renderLauncher() {
     const completedModes = getCompletedModesForDate(puzzlePayload?.date || todayDate)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
-        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isPick = mode === getGameModeOfDay(todayDate)
         const badges = []
@@ -569,7 +580,7 @@ function renderArchiveLauncher() {
     const completedModes = getCompletedModesForDate(puzzlePayload?.date || state.archiveDate)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
-        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const completionBadge = completedModes.has(mode)
           ? '<span class="mode-card-badge mode-card-badge-completed">completed</span>'

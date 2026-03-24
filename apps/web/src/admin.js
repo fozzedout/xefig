@@ -22,6 +22,8 @@ const generateBtn = document.getElementById('generate-prompt-btn')
 const copyPackBtn = document.getElementById('copy-pack-btn')
 const refreshModelsBtn = document.getElementById('refresh-models-btn')
 const rewriteModelSelect = document.getElementById('rewrite-model-select')
+const autoGenerateBtn = document.getElementById('auto-generate-btn')
+const batchPollBtn = document.getElementById('batch-poll-btn')
 const submitBtn = document.getElementById('submit-btn')
 const submitLabel = document.getElementById('submit-label')
 const statusBar = document.getElementById('status')
@@ -39,6 +41,13 @@ const thumbEls = {
   slider: document.getElementById('thumb-slider'),
   swap: document.getElementById('thumb-swap'),
   polygram: document.getElementById('thumb-polygram'),
+}
+
+const thumbnailEls = {
+  jigsaw: document.getElementById('thumbnail-jigsaw'),
+  slider: document.getElementById('thumbnail-slider'),
+  swap: document.getElementById('thumbnail-swap'),
+  polygram: document.getElementById('thumbnail-polygram'),
 }
 
 const fileInputs = {
@@ -182,11 +191,32 @@ function setThumb(category, asset) {
   if (!asset?.imageUrl) {
     wrap.hidden = true
     img.src = ''
+  } else {
+    img.src = asset.imageUrl
+    wrap.hidden = false
+  }
+
+  // Thumbnail preview
+  const thumbWrap = thumbnailEls[category]
+  if (!thumbWrap) {
     return
   }
 
-  img.src = asset.imageUrl
-  wrap.hidden = false
+  const thumbImg = thumbWrap.querySelector('img')
+  if (!asset?.thumbnailUrl) {
+    thumbWrap.hidden = true
+    thumbImg.src = ''
+  } else {
+    thumbImg.src = asset.thumbnailUrl
+    thumbWrap.hidden = false
+  }
+
+  // Show/hide "Generate Thumbnail" button
+  const genBtn = document.querySelector(`.gen-thumb-btn[data-mode="${category}"]`)
+  if (genBtn) {
+    // Show if there's a full image but no thumbnail
+    genBtn.hidden = !asset?.imageUrl || !!asset?.thumbnailUrl
+  }
 }
 
 function clearExistingMeta() {
@@ -200,6 +230,11 @@ function clearExistingMeta() {
     }
     if (categoryTagsInput) {
       categoryTagsInput.value = ''
+    }
+
+    const genBtn = document.querySelector(`.gen-thumb-btn[data-mode="${category}"]`)
+    if (genBtn) {
+      genBtn.hidden = true
     }
   }
 }
@@ -694,6 +729,92 @@ async function regenerateCategoryPrompt(category, triggerBtn) {
   }
 }
 
+const THUMBNAIL_WIDTH = 400
+
+async function generateThumbnailFromUrl(imageUrl) {
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.src = imageUrl
+  await img.decode()
+
+  const scale = THUMBNAIL_WIDTH / img.naturalWidth
+  const thumbHeight = Math.round(img.naturalHeight * scale)
+  const width = Math.min(THUMBNAIL_WIDTH, img.naturalWidth)
+  const height = width === img.naturalWidth ? img.naturalHeight : thumbHeight
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(img, 0, 0, width, height)
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Thumbnail generation failed'))),
+      'image/jpeg',
+      0.8,
+    )
+  })
+}
+
+document.querySelectorAll('.gen-thumb-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    if (!requireAuth()) return
+
+    const category = btn.getAttribute('data-mode')
+    if (!CATEGORIES.includes(category)) return
+
+    const date = dateInput.value.trim()
+    if (!date) {
+      setStatus('Select a date first.', 'error')
+      return
+    }
+
+    const thumbEl = thumbEls[category]
+    const fullImg = thumbEl?.querySelector('img')
+    if (!fullImg?.src) {
+      setStatus(`No ${category} image to generate thumbnail from.`, 'error')
+      return
+    }
+
+    btn.disabled = true
+    setStatus(`Generating ${category} thumbnail...`, 'working')
+
+    try {
+      const blob = await generateThumbnailFromUrl(fullImg.src)
+      const formData = new FormData()
+      formData.append('date', date)
+      formData.append('category', category)
+      formData.append('thumbnail', blob, `${category}_thumb.jpg`)
+
+      const { response, payload } = await adminFetch('/api/admin/puzzles/thumbnail', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        setStatus(payload.error || 'Thumbnail upload failed.', 'error')
+        return
+      }
+
+      // Update thumbnail preview
+      const thumbnailWrap = thumbnailEls[category]
+      if (thumbnailWrap) {
+        const thumbImg = thumbnailWrap.querySelector('img')
+        thumbImg.src = payload.thumbnailUrl + '?t=' + Date.now()
+        thumbnailWrap.hidden = false
+      }
+      btn.hidden = true
+
+      setStatus(`${category} thumbnail generated and saved.`, 'ok')
+    } catch {
+      setStatus(`Failed to generate ${category} thumbnail.`, 'error')
+    } finally {
+      btn.disabled = false
+    }
+  })
+})
+
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault()
 
@@ -830,6 +951,142 @@ generateBtn.addEventListener('click', async () => {
   }
 })
 
+autoGenerateBtn.addEventListener('click', async () => {
+  if (!requireAuth()) {
+    return
+  }
+
+  autoGenerateBtn.disabled = true
+  setStatus('Submitting batch image generation job...', 'working')
+  try {
+    const { response, payload } = await adminFetch('/api/admin/generate-images', {
+      method: 'POST',
+    })
+    if (response.status === 401) {
+      setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+      return
+    }
+    if (!response.ok) {
+      setStatus(payload.error || 'Batch submit failed.', 'error')
+      return
+    }
+
+    setStatus(payload.message || 'Batch job submitted. Use Poll Batch to check progress.', 'ok')
+  } catch {
+    setStatus('Network error during batch submit.', 'error')
+  } finally {
+    autoGenerateBtn.disabled = false
+  }
+})
+
+batchPollBtn.addEventListener('click', async () => {
+  if (!requireAuth()) {
+    return
+  }
+
+  batchPollBtn.disabled = true
+  setStatus('Polling batch job status...', 'working')
+  try {
+    // First do a server-side poll (advances the state machine if batch just completed)
+    const { response, payload } = await adminFetch('/api/admin/generate-images/poll', {
+      method: 'POST',
+    })
+    if (response.status === 401) {
+      setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+      return
+    }
+    if (!response.ok) {
+      setStatus(payload.error || 'Batch poll failed.', 'error')
+      return
+    }
+
+    // Check if there are images ready for client-side processing
+    const status = await checkAndProcessBatch()
+    if (!status) {
+      setStatus(payload.message || 'Batch poll completed.', 'ok')
+      await loadDateDetails()
+    }
+  } catch {
+    setStatus('Network error during batch poll.', 'error')
+  } finally {
+    batchPollBtn.disabled = false
+  }
+})
+
+async function checkAndProcessBatch() {
+  const { response, payload } = await adminFetch('/api/admin/generate-images/status')
+  if (!response.ok || !payload.active) return false
+  if (payload.phase !== 'fetched') return false
+
+  const remaining = payload.remainingCategories || []
+  if (remaining.length === 0) return false
+
+  const tempUrls = payload.tempUrls || {}
+  const total = CATEGORIES.length
+  let processed = total - remaining.length
+
+  for (const category of remaining) {
+    const tempUrl = tempUrls[category]
+    if (!tempUrl) continue
+
+    processed++
+    setStatus(`Processing ${category} (${processed}/${total})...`, 'working')
+
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = tempUrl
+      await img.decode()
+
+      // Full-size JPEG
+      const fullCanvas = document.createElement('canvas')
+      fullCanvas.width = img.naturalWidth
+      fullCanvas.height = img.naturalHeight
+      const fullCtx = fullCanvas.getContext('2d')
+      fullCtx.fillStyle = '#fff'
+      fullCtx.fillRect(0, 0, fullCanvas.width, fullCanvas.height)
+      fullCtx.drawImage(img, 0, 0)
+
+      const jpegBlob = await new Promise((resolve, reject) => {
+        fullCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error('JPEG encode failed'))), 'image/jpeg', 0.8)
+      })
+
+      // Thumbnail
+      const thumbBlob = await generateThumbnailFromUrl(tempUrl)
+
+      // Upload both
+      const formData = new FormData()
+      formData.append('category', category)
+      formData.append('image', jpegBlob, `${category}.jpg`)
+      formData.append('thumbnail', thumbBlob, `${category}_thumb.jpg`)
+
+      const { response: completeRes, payload: completePayload } = await adminFetch(
+        '/api/admin/generate-images/complete-category',
+        { method: 'POST', body: formData },
+      )
+
+      if (!completeRes.ok) {
+        setStatus(completePayload.error || `Failed to save ${category}.`, 'error')
+        return true
+      }
+
+      if (completePayload.allDone) {
+        setStatus(completePayload.message || 'All images processed and saved.', 'ok')
+        dateInput.value = payload.targetDate
+        await loadDateDetails()
+        return true
+      }
+    } catch (err) {
+      setStatus(`Failed to process ${category}: ${err.message || 'unknown error'}`, 'error')
+      return true
+    }
+  }
+
+  setStatus('Batch processing complete.', 'ok')
+  await loadDateDetails()
+  return true
+}
+
 copyPackBtn.addEventListener('click', async () => {
   if (!promptPack) {
     setStatus('Generate prompts first.', 'error')
@@ -902,8 +1159,15 @@ form.addEventListener('submit', async (event) => {
     setRecordBadge('Exists', 'existing')
     renderLoadedPuzzle(payload.puzzle || null)
 
+    // Track which categories had new uploads for thumbnail generation
+    const uploadedCategories = []
     for (const category of CATEGORIES) {
       const input = fileInputs[category]
+      const hadFile = input?.files?.[0]?.size > 0
+      if (hadFile) {
+        uploadedCategories.push(category)
+      }
+
       const zone = document.getElementById(`drop-${category}`)
       const nameEl = zone?.querySelector('.drop-name')
       if (input) {
@@ -919,6 +1183,43 @@ form.addEventListener('submit', async (event) => {
     }
 
     setStatus(payload.message || 'Saved.', 'ok')
+
+    // Auto-generate thumbnails for newly uploaded images
+    if (uploadedCategories.length > 0) {
+      const date = dateInput.value.trim()
+      for (const category of uploadedCategories) {
+        const asset = payload.puzzle?.categories?.[category]
+        if (!asset?.imageUrl) continue
+
+        setStatus(`Generating ${category} thumbnail...`, 'working')
+        try {
+          const blob = await generateThumbnailFromUrl(asset.imageUrl)
+          const thumbForm = new FormData()
+          thumbForm.append('date', date)
+          thumbForm.append('category', category)
+          thumbForm.append('thumbnail', blob, `${category}_thumb.jpg`)
+
+          const thumbResult = await adminFetch('/api/admin/puzzles/thumbnail', {
+            method: 'POST',
+            body: thumbForm,
+          })
+
+          if (thumbResult.response.ok) {
+            const thumbnailWrap = thumbnailEls[category]
+            if (thumbnailWrap) {
+              const thumbImg = thumbnailWrap.querySelector('img')
+              thumbImg.src = thumbResult.payload.thumbnailUrl + '?t=' + Date.now()
+              thumbnailWrap.hidden = false
+            }
+            const genBtn = document.querySelector(`.gen-thumb-btn[data-mode="${category}"]`)
+            if (genBtn) genBtn.hidden = true
+          }
+        } catch {
+          // Non-fatal — thumbnail can be generated manually later
+        }
+      }
+      setStatus('Saved with thumbnails.', 'ok')
+    }
   } catch {
     setStatus('Network error while saving.', 'error')
   } finally {

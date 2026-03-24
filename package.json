@@ -12,5 +12,9 @@
     "deploy:dry": "npm --prefix apps/worker run deploy:dry",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "upng-js": "^2.1.0"
   }
 }

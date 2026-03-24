@@ -28,6 +28,7 @@ import {
   rewriteSinglePromptWithOpenRouter,
 } from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
+import { handleBatchSubmit, handleBatchPoll, getBatchJobStatus, completeBatchCategory } from './lib/scheduled'
 import {
   CATEGORIES,
   type Bindings,
@@ -349,6 +350,156 @@ export function createApp() {
     } catch (error) {
       console.error('Admin upload failed', error)
       return c.json({ error: 'Unable to save puzzle images.' }, 500)
+    }
+  })
+
+  app.post('/api/admin/puzzles/thumbnail', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    try {
+      const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
+      const date = getStringField(body.date)?.trim()
+      const category = getStringField(body.category)?.trim() as PuzzleCategory
+
+      if (!date || !isValidDateKey(date)) {
+        return c.json({ error: 'Date is required in YYYY-MM-DD format.' }, 400)
+      }
+      if (!CATEGORIES.includes(category)) {
+        return c.json({ error: 'Invalid category.' }, 400)
+      }
+
+      const file = getFileField(body.thumbnail)
+      if (!file || file.size === 0) {
+        return c.json({ error: 'Thumbnail file is required.' }, 400)
+      }
+
+      const existing = await getPuzzleByDate(c.env.metadata, date)
+      if (!existing) {
+        return c.json({ error: `No puzzle found for ${date}.` }, 404)
+      }
+
+      const asset = existing.categories[category]
+      if (!asset) {
+        return c.json({ error: `No ${category} asset found for ${date}.` }, 404)
+      }
+
+      const thumbKey = `puzzles/${date}/${category}_thumb.jpg`
+      await c.env.assets.put(thumbKey, await file.arrayBuffer(), {
+        httpMetadata: { contentType: 'image/jpeg' },
+      })
+
+      asset.thumbnailKey = thumbKey
+      asset.thumbnailUrl = toCdnUrl(thumbKey)
+      existing.updatedAt = new Date().toISOString()
+
+      await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(existing))
+
+      return c.json({
+        ok: true,
+        category,
+        date,
+        thumbnailUrl: asset.thumbnailUrl,
+      })
+    } catch (error) {
+      console.error('Thumbnail upload failed', error)
+      return c.json({ error: 'Unable to save thumbnail.' }, 500)
+    }
+  })
+
+  app.post('/api/admin/generate-images', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    if (!c.env.GOOGLE_AI_API_KEY) {
+      return c.json({ error: 'GOOGLE_AI_API_KEY is not configured.' }, 500)
+    }
+
+    try {
+      const result = await handleBatchSubmit(c.env)
+      return c.json({ ok: result.submitted, ...result })
+    } catch (error) {
+      console.error('Batch submit failed', error)
+      const message = error instanceof Error ? error.message : 'Batch submit failed.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.post('/api/admin/generate-images/poll', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    if (!c.env.GOOGLE_AI_API_KEY) {
+      return c.json({ error: 'GOOGLE_AI_API_KEY is not configured.' }, 500)
+    }
+
+    try {
+      const result = await handleBatchPoll(c.env)
+      return c.json({ ok: true, ...result })
+    } catch (error) {
+      console.error('Batch poll failed', error)
+      const message = error instanceof Error ? error.message : 'Batch poll failed.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.get('/api/admin/generate-images/status', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const status = await getBatchJobStatus(c.env)
+    return c.json({ ok: true, ...status })
+  })
+
+  app.post('/api/admin/generate-images/complete-category', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    try {
+      const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
+      const category = getStringField(body.category)?.trim() as PuzzleCategory
+
+      if (!CATEGORIES.includes(category)) {
+        return c.json({ error: 'Invalid category.' }, 400)
+      }
+
+      const imageFile = getFileField(body.image)
+      const thumbFile = getFileField(body.thumbnail)
+
+      if (!imageFile || imageFile.size === 0) {
+        return c.json({ error: 'Image file is required.' }, 400)
+      }
+      if (!thumbFile || thumbFile.size === 0) {
+        return c.json({ error: 'Thumbnail file is required.' }, 400)
+      }
+
+      const result = await completeBatchCategory(
+        c.env,
+        category,
+        await imageFile.arrayBuffer(),
+        await thumbFile.arrayBuffer(),
+      )
+
+      return c.json(result)
+    } catch (error) {
+      console.error('Complete category failed', error)
+      const message = error instanceof Error ? error.message : 'Failed to complete category.'
+      return c.json({ error: message }, 500)
     }
   })
 
@@ -688,6 +839,7 @@ export function createApp() {
       headers.set('etag', object.httpEtag)
     }
     headers.set('cache-control', 'public, max-age=3600')
+    headers.set('access-control-allow-origin', '*')
 
     return new Response(object.body, { headers })
   })

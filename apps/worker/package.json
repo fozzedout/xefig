@@ -14,10 +14,14 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "canvas": "^3.2.2",
     "tsx": "^4.20.6",
     "wrangler": "^4.74.0"
   },
   "dependencies": {
-    "hono": "^4.12.8"
+    "gemini-watermark-remover": "^1.0.2",
+    "hono": "^4.12.8",
+    "pngjs": "^7.0.0"
   }
 }

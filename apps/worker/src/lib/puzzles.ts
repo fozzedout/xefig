@@ -72,6 +72,8 @@ function toPuzzleRecord(value: unknown): PuzzleRecord | null {
       fileName: asset.fileName,
       theme: typeof asset.theme === 'string' ? asset.theme : globalTheme,
       tags: Array.isArray(asset.tags) ? normalizeTags(asset.tags) : globalTags,
+      thumbnailKey: typeof asset.thumbnailKey === 'string' ? asset.thumbnailKey : undefined,
+      thumbnailUrl: typeof asset.thumbnailUrl === 'string' ? asset.thumbnailUrl : undefined,
     }
   }
 

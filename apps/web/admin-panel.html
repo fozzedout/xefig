@@ -111,6 +111,19 @@
                 </svg>
                 Copy All
               </button>
+              <button type="button" id="auto-generate-btn" class="btn-outline">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                Submit Batch
+              </button>
+              <button type="button" id="batch-poll-btn" class="btn-outline">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M1 7a6 6 0 0 1 11.5-2M13 7a6 6 0 0 1-11.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <path d="M12.5 1.5v3.5h-3.5M1.5 12.5V9h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Poll Batch
+              </button>
               <div class="rewrite-tools">
                 <label for="rewrite-model-select" class="rewrite-tools-label">Reword Model</label>
                 <select id="rewrite-model-select" class="rewrite-model-select">
@@ -224,10 +237,17 @@
                   <div class="upload-card-header">
                     <div class="mode-tag">Jigsaw</div>
                   </div>
-                  <div id="thumb-jigsaw" class="existing-thumb" hidden>
-                    <img alt="Current jigsaw image" />
-                    <div class="thumb-overlay">Current image</div>
+                  <div class="image-previews">
+                    <div id="thumb-jigsaw" class="existing-thumb" hidden>
+                      <img alt="Current jigsaw image" />
+                      <div class="thumb-overlay">Full image</div>
+                    </div>
+                    <div id="thumbnail-jigsaw" class="existing-thumb thumbnail-preview" hidden>
+                      <img alt="Jigsaw thumbnail" />
+                      <div class="thumb-overlay">Thumbnail</div>
+                    </div>
                   </div>
+                  <button type="button" class="gen-thumb-btn btn-micro" data-mode="jigsaw" hidden>Generate Thumbnail</button>
                   <label class="drop-zone" id="drop-jigsaw">
                     <input name="jigsaw" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
@@ -244,10 +264,17 @@
                   <div class="upload-card-header">
                     <div class="mode-tag">Slider</div>
                   </div>
-                  <div id="thumb-slider" class="existing-thumb" hidden>
-                    <img alt="Current slider image" />
-                    <div class="thumb-overlay">Current image</div>
+                  <div class="image-previews">
+                    <div id="thumb-slider" class="existing-thumb" hidden>
+                      <img alt="Current slider image" />
+                      <div class="thumb-overlay">Full image</div>
+                    </div>
+                    <div id="thumbnail-slider" class="existing-thumb thumbnail-preview" hidden>
+                      <img alt="Slider thumbnail" />
+                      <div class="thumb-overlay">Thumbnail</div>
+                    </div>
                   </div>
+                  <button type="button" class="gen-thumb-btn btn-micro" data-mode="slider" hidden>Generate Thumbnail</button>
                   <label class="drop-zone" id="drop-slider">
                     <input name="slider" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
@@ -264,10 +291,17 @@
                   <div class="upload-card-header">
                     <div class="mode-tag">Swap</div>
                   </div>
-                  <div id="thumb-swap" class="existing-thumb" hidden>
-                    <img alt="Current swap image" />
-                    <div class="thumb-overlay">Current image</div>
+                  <div class="image-previews">
+                    <div id="thumb-swap" class="existing-thumb" hidden>
+                      <img alt="Current swap image" />
+                      <div class="thumb-overlay">Full image</div>
+                    </div>
+                    <div id="thumbnail-swap" class="existing-thumb thumbnail-preview" hidden>
+                      <img alt="Swap thumbnail" />
+                      <div class="thumb-overlay">Thumbnail</div>
+                    </div>
                   </div>
+                  <button type="button" class="gen-thumb-btn btn-micro" data-mode="swap" hidden>Generate Thumbnail</button>
                   <label class="drop-zone" id="drop-swap">
                     <input name="swap" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
@@ -284,10 +318,17 @@
                   <div class="upload-card-header">
                     <div class="mode-tag">Polygram</div>
                   </div>
-                  <div id="thumb-polygram" class="existing-thumb" hidden>
-                    <img alt="Current polygram image" />
-                    <div class="thumb-overlay">Current image</div>
+                  <div class="image-previews">
+                    <div id="thumb-polygram" class="existing-thumb" hidden>
+                      <img alt="Current polygram image" />
+                      <div class="thumb-overlay">Full image</div>
+                    </div>
+                    <div id="thumbnail-polygram" class="existing-thumb thumbnail-preview" hidden>
+                      <img alt="Polygram thumbnail" />
+                      <div class="thumb-overlay">Thumbnail</div>
+                    </div>
                   </div>
+                  <button type="button" class="gen-thumb-btn btn-micro" data-mode="polygram" hidden>Generate Thumbnail</button>
                   <label class="drop-zone" id="drop-polygram">
                     <input name="polygram" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
