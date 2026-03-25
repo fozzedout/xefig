@@ -1528,3 +1528,70 @@ h1 {
 .completion-dismiss:hover {
   opacity: 0.85;
 }
+
+/* ─── Save/resume badge ─── */
+
+.mode-card-badge-save {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ─── Completed puzzle screen ─── */
+
+.completed-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 2rem;
+}
+
+.completed-screen-card {
+  background: var(--surface);
+  border-radius: 1rem;
+  padding: 2.5rem;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.completed-screen-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.completed-screen-mode {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.completed-screen-date {
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.completed-screen-image-wrap {
+  margin: 0 -1rem 1.2rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.completed-screen-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  max-height: 240px;
+}
+
+.completed-screen-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}

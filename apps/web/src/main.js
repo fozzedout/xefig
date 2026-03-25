@@ -261,6 +261,10 @@ function getPlayerGuid() {
   return created
 }
 
+function activeRunKey(puzzleDate, gameMode, difficulty) {
+  return `xefig:run:${puzzleDate}:${normalizeGameMode(gameMode)}:${difficulty}`
+}
+
 function getResumableRun() {
   const run = readJsonStorage(ACTIVE_RUN_KEY)
   if (!run || typeof run !== 'object') {
@@ -276,6 +280,34 @@ function getResumableRun() {
     ...run,
     gameMode: normalizeGameMode(run.gameMode),
   }
+}
+
+function getRunForMode(puzzleDate, gameMode, difficulty) {
+  const key = activeRunKey(puzzleDate, gameMode, difficulty)
+  const run = readJsonStorage(key)
+  if (!run || typeof run !== 'object') return null
+  if (run.completed) return null
+  if (!run.puzzleDate || !run.imageUrl || !run.difficulty) return null
+  return { ...run, gameMode: normalizeGameMode(run.gameMode), _storageKey: key }
+}
+
+function hasActiveRun(puzzleDate, gameMode, difficulty) {
+  return getRunForMode(puzzleDate, gameMode, difficulty) !== null
+}
+
+function saveRunForMode(run) {
+  if (!run?.puzzleDate || !run?.gameMode || !run?.difficulty) return
+  const key = activeRunKey(run.puzzleDate, run.gameMode, run.difficulty)
+  writeJsonStorage(key, run)
+  // Also write to legacy key for backward compat
+  writeJsonStorage(ACTIVE_RUN_KEY, run)
+}
+
+function clearRunForMode(run) {
+  if (!run?.puzzleDate || !run?.gameMode || !run?.difficulty) return
+  const key = activeRunKey(run.puzzleDate, run.gameMode, run.difficulty)
+  removeStorage(key)
+  removeStorage(ACTIVE_RUN_KEY)
 }
 
 function getNowMs() {
@@ -388,7 +420,7 @@ function persistActiveRun(progressState) {
     puzzleState: progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState),
   }
   currentRun = nextRun
-  writeJsonStorage(ACTIVE_RUN_KEY, nextRun)
+  saveRunForMode(nextRun)
 }
 
 async function submitLeaderboard(run) {
@@ -495,7 +527,6 @@ async function fetchPuzzlePayload({ date = null } = {}) {
 function renderLauncher() {
   destroyPuzzle()
 
-  const resumableRun = getResumableRun()
   const todayDate = getIsoDate(new Date())
   state.sourceMode = 'today'
   state.archiveDate = todayDate
@@ -513,21 +544,26 @@ function renderLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    const completedModes = getCompletedModesForDate(puzzlePayload?.date || todayDate, state.difficulty)
+    const puzzleDate = puzzlePayload?.date || todayDate
+    const completedModes = getCompletedModesForDate(puzzleDate, state.difficulty)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isPick = mode === getGameModeOfDay(todayDate)
         const isCompleted = completedModes.has(mode)
-        const entry = isCompleted ? getCompletionEntry(puzzlePayload?.date || todayDate, mode) : null
+        const hasSave = hasActiveRun(puzzleDate, mode, state.difficulty)
+        const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
         const badges = []
         if (isPick) {
           badges.push('<span class="mode-card-badge mode-card-badge-pick">Daily Pick</span>')
         }
         if (isCompleted) {
           const timeLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''
-          badges.push(`<span class="mode-card-badge mode-card-badge-completed">✓ ${timeLabel}</span>`)
+          badges.push(`<span class="mode-card-badge mode-card-badge-completed">\u2713 ${timeLabel}</span>`)
+        }
+        if (hasSave) {
+          badges.push('<span class="mode-card-badge mode-card-badge-save">\u25B6 Resume</span>')
         }
         const badgeMarkup = badges.join('')
 
@@ -574,7 +610,6 @@ function renderLauncher() {
         </div>
 
         <footer class="launcher-footer">
-          ${resumableRun ? '<button id="resume-btn" class="launcher-secondary-btn" type="button">Resume Last Run</button>' : ''}
           <button id="archive-nav-btn" class="launcher-secondary-btn" type="button">Browse Archive</button>
         </footer>
       </section>
@@ -585,7 +620,6 @@ function renderLauncher() {
   const difficultySegmented = document.querySelector('#difficulty-segmented')
   const previewMeta = document.querySelector('#preview-meta')
   const archiveNavBtn = document.querySelector('#archive-nav-btn')
-  const resumeBtn = document.querySelector('#resume-btn')
 
   const bindDifficultyEvents = () => {
     const buttons = difficultySegmented.querySelectorAll('[data-difficulty]')
@@ -594,17 +628,51 @@ function renderLauncher() {
         state.difficulty = btn.dataset.difficulty
         difficultySegmented.innerHTML = renderDifficultyOptions(state.difficulty)
         bindDifficultyEvents()
+        // Re-render mode cards so save/completed badges update for new difficulty
+        if (state.puzzle) {
+          modeCardsContainer.innerHTML = renderModeCards(state.puzzle)
+          bindModeEvents()
+        }
       })
     }
+  }
+
+  const handleModeCardClick = (mode, puzzleDate) => {
+    state.gameMode = normalizeGameMode(mode)
+    state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+
+    // Check for existing save
+    const savedRun = getRunForMode(puzzleDate, state.gameMode, state.difficulty)
+    if (savedRun) {
+      state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+      renderGame({ resumeRun: savedRun })
+      return
+    }
+
+    // Check if completed at this difficulty — show completed state
+    const completedModes = getCompletedModesForDate(puzzleDate, state.difficulty)
+    if (completedModes.has(state.gameMode)) {
+      const entry = getCompletionEntry(puzzleDate, state.gameMode)
+      showCompletedPuzzleScreen({
+        gameMode: state.gameMode,
+        puzzleDate,
+        difficulty: state.difficulty,
+        entry,
+        onReplay: () => renderGame(),
+        onBack: () => renderLauncher(),
+      })
+      return
+    }
+
+    renderGame()
   }
 
   const bindModeEvents = () => {
     const cards = modeCardsContainer.querySelectorAll('.mode-card')
     for (const card of cards) {
       card.addEventListener('click', () => {
-        state.gameMode = normalizeGameMode(card.dataset.mode)
-        state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
-        renderGame()
+        const puzzleDate = state.puzzle?.date || todayDate
+        handleModeCardClick(card.dataset.mode, puzzleDate)
       })
     }
   }
@@ -613,16 +681,11 @@ function renderLauncher() {
     renderArchiveLauncher()
   })
 
-  if (resumeBtn && resumableRun) {
-    resumeBtn.addEventListener('click', () => {
-      state.gameMode = normalizeGameMode(resumableRun.gameMode)
-      state.difficulty = resumableRun.difficulty
-      state.imageUrl = resolveAssetUrl(resumableRun.imageUrl)
-      state.puzzle = {
-        date: resumableRun.puzzleDate,
-      }
-      renderGame({ resumeRun: resumableRun })
-    })
+  // Migrate legacy single-key save to per-mode storage
+  const legacyRun = getResumableRun()
+  if (legacyRun) {
+    saveRunForMode(legacyRun)
+    removeStorage(ACTIVE_RUN_KEY)
   }
 
   bindDifficultyEvents()
@@ -665,19 +728,26 @@ function renderArchiveLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    const completedModes = getCompletedModesForDate(puzzlePayload?.date || state.archiveDate, state.difficulty)
+    const puzzleDate = puzzlePayload?.date || state.archiveDate
+    const completedModes = getCompletedModesForDate(puzzleDate, state.difficulty)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isCompleted = completedModes.has(mode)
-        const entry = isCompleted ? getCompletionEntry(puzzlePayload?.date || state.archiveDate, mode) : null
-        const completionBadge = isCompleted
-          ? `<span class="mode-card-badge mode-card-badge-completed">✓ ${entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''}</span>`
-          : ''
+        const hasSave = hasActiveRun(puzzleDate, mode, state.difficulty)
+        const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
+        const badges = []
+        if (isCompleted) {
+          badges.push(`<span class="mode-card-badge mode-card-badge-completed">\u2713 ${entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''}</span>`)
+        }
+        if (hasSave) {
+          badges.push('<span class="mode-card-badge mode-card-badge-save">\u25B6 Resume</span>')
+        }
+        const badgeMarkup = badges.join('')
         return `
           <button type="button" class="mode-card" data-mode="${mode}">
-            ${completionBadge}
+            ${badgeMarkup}
             <div class="mode-card-image-wrapper">
               <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
               <div class="mode-card-play-overlay">
@@ -742,17 +812,48 @@ function renderArchiveLauncher() {
         state.difficulty = btn.dataset.difficulty
         difficultySegmented.innerHTML = renderDifficultyOptions(state.difficulty)
         bindDifficultyEvents()
+        if (state.puzzle) {
+          modeCardsContainer.innerHTML = renderModeCards(state.puzzle)
+          bindModeEvents()
+        }
       })
     }
+  }
+
+  const handleArchiveModeCardClick = (mode, puzzleDate) => {
+    state.gameMode = normalizeGameMode(mode)
+    state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+
+    const savedRun = getRunForMode(puzzleDate, state.gameMode, state.difficulty)
+    if (savedRun) {
+      state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+      renderGame({ resumeRun: savedRun })
+      return
+    }
+
+    const completedModes = getCompletedModesForDate(puzzleDate, state.difficulty)
+    if (completedModes.has(state.gameMode)) {
+      const entry = getCompletionEntry(puzzleDate, state.gameMode)
+      showCompletedPuzzleScreen({
+        gameMode: state.gameMode,
+        puzzleDate,
+        difficulty: state.difficulty,
+        entry,
+        onReplay: () => renderGame(),
+        onBack: () => renderArchiveLauncher(),
+      })
+      return
+    }
+
+    renderGame()
   }
 
   const bindModeEvents = () => {
     const cards = modeCardsContainer.querySelectorAll('.mode-card')
     for (const card of cards) {
       card.addEventListener('click', () => {
-        state.gameMode = normalizeGameMode(card.dataset.mode)
-        state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
-        renderGame()
+        const puzzleDate = state.puzzle?.date || state.archiveDate
+        handleArchiveModeCardClick(card.dataset.mode, puzzleDate)
       })
     }
   }
@@ -858,6 +959,82 @@ function showCompletionOverlay({ gameMode, difficulty, duration, elapsedMs, rank
       setTimeout(() => overlay.remove(), 200)
     }
   })
+}
+
+function showCompletedPuzzleScreen({ gameMode, puzzleDate, difficulty, entry, onReplay, onBack }) {
+  const durationLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '—'
+  const modeLabel = MODE_LABELS[gameMode] || gameMode
+  const diffLabel = DIFFICULTY_BUTTON_LABELS[difficulty] || difficulty
+  const imageUrl = resolvePuzzleImageUrl(state.puzzle, gameMode)
+
+  app.innerHTML = `
+    <main class="completed-screen">
+      <div class="completed-screen-card">
+        <div class="completed-screen-image-wrap">
+          <img class="completed-screen-image" src="${imageUrl}" alt="${modeLabel} puzzle" />
+        </div>
+        <h2>Puzzle Complete</h2>
+        <p class="completed-screen-mode">${modeLabel} — ${diffLabel}</p>
+        <p class="completed-screen-date">${puzzleDate}</p>
+        <div class="completion-stats">
+          <div class="completion-stat">
+            <span class="stat-value">${durationLabel}</span>
+            <span class="stat-label">Best Time</span>
+          </div>
+          <div class="completion-stat">
+            <span class="stat-value" id="completed-rank">—</span>
+            <span class="stat-label">Rank</span>
+          </div>
+        </div>
+        <div id="completed-leaderboard"></div>
+        <div class="completed-screen-actions">
+          <button id="replay-btn" class="launcher-secondary-btn" type="button">Play Again</button>
+          <button id="completed-back-btn" class="launcher-secondary-btn" type="button">Back</button>
+        </div>
+      </div>
+    </main>
+  `
+
+  document.querySelector('#replay-btn').addEventListener('click', onReplay)
+  document.querySelector('#completed-back-btn').addEventListener('click', onBack)
+
+  // Fetch leaderboard async
+  fetchLeaderboard(puzzleDate, gameMode, difficulty, 20)
+    .then((lb) => {
+      const entries = lb.entries || []
+      const myEntry = entries.find((e) => e.playerGuid === playerGuid)
+      const rankEl = document.querySelector('#completed-rank')
+      if (rankEl && myEntry) {
+        rankEl.textContent = `#${myEntry.rank}`
+      }
+
+      if (entries.length > 0) {
+        const rows = entries.map((e) => {
+          const isMe = e.playerGuid === playerGuid
+          return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
+            <td class="lb-rank">#${e.rank}</td>
+            <td class="lb-time">${formatDuration(e.elapsedMs)}</td>
+            <td class="lb-player">${isMe ? 'You' : e.playerGuid.slice(0, 8)}</td>
+          </tr>`
+        }).join('')
+
+        const container = document.querySelector('#completed-leaderboard')
+        if (container) {
+          container.innerHTML = `
+            <div class="completion-leaderboard">
+              <h3>${diffLabel} Leaderboard</h3>
+              <table class="lb-table">
+                <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `
+        }
+      }
+    })
+    .catch(() => {
+      // Non-fatal
+    })
 }
 
 function renderGame({ resumeRun = null } = {}) {
@@ -1121,8 +1298,7 @@ function renderGame({ resumeRun = null } = {}) {
           currentRun.completed = true
           currentRun.updatedAt = new Date().toISOString()
           recordCompletedRun(currentRun)
-          writeJsonStorage(ACTIVE_RUN_KEY, currentRun)
-          removeStorage(ACTIVE_RUN_KEY)
+          clearRunForMode(currentRun)
 
           // Celebration confetti
           const workspace = document.querySelector('.workspace')
