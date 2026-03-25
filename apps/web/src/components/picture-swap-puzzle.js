@@ -76,34 +76,23 @@ export class PictureSwapPuzzle {
     const containerHeight = this.container.clientHeight || window.innerHeight
     const padding = 6
 
-    const availW = containerWidth - padding * 2
-    const availH = containerHeight - padding * 2
+    const availW = Math.max(240, containerWidth - padding * 2)
+    const availH = Math.max(180, containerHeight - padding * 2)
 
-    const imgW = this.image?.naturalWidth || 1
-    const imgH = this.image?.naturalHeight || 1
-    const imgRatio = imgW / imgH
+    // Calculate grid from target tile size — tiles must be square
+    this.cols = Math.max(MIN_COLS, Math.round(availW / TARGET_TILE_SIZE))
+    this.rows = Math.max(MIN_ROWS, Math.round(availH / TARGET_TILE_SIZE))
 
-    // Fit the board to available space while preserving image aspect ratio
-    let boardW, boardH
-    if (availW / availH > imgRatio) {
-      boardH = availH
-      boardW = Math.round(boardH * imgRatio)
-    } else {
-      boardW = availW
-      boardH = Math.round(boardW / imgRatio)
-    }
+    // Tile size is uniform square — sized to fit the narrower axis
+    const tileFromW = availW / this.cols
+    const tileFromH = availH / this.rows
+    this.tileSize = Math.min(tileFromW, tileFromH)
 
-    boardW = Math.max(240, boardW)
-    boardH = Math.max(180, boardH)
-
-    // Calculate grid from target tile size
-    this.cols = Math.max(MIN_COLS, Math.round(boardW / TARGET_TILE_SIZE))
-    this.rows = Math.max(MIN_ROWS, Math.round(boardH / TARGET_TILE_SIZE))
-
-    this.boardWidth = boardW
-    this.boardHeight = boardH
-    this.tileWidth = boardW / this.cols
-    this.tileHeight = boardH / this.rows
+    // Board sized exactly to the grid of square tiles
+    this.boardWidth = this.tileSize * this.cols
+    this.boardHeight = this.tileSize * this.rows
+    this.tileWidth = this.tileSize
+    this.tileHeight = this.tileSize
   }
 
   createLayout() {
@@ -170,28 +159,20 @@ export class PictureSwapPuzzle {
     const newTotal = this.cols * this.rows
     if (this.tiles.length > 0 && newTotal !== this.tiles.length) {
       // Grid count changed but we can't rebuild mid-game — keep aspect, just resize
-      this.cols = this.tiles.length > 0 ? this._initialCols : this.cols
-      this.rows = this.tiles.length > 0 ? this._initialRows : this.rows
+      this.cols = this._initialCols
+      this.rows = this._initialRows
 
       const containerWidth = this.container.clientWidth || window.innerWidth
       const containerHeight = this.container.clientHeight || window.innerHeight
       const padding = 6
-      const availW = containerWidth - padding * 2
-      const availH = containerHeight - padding * 2
-      const imgRatio = (this.image?.naturalWidth || 1) / (this.image?.naturalHeight || 1)
+      const availW = Math.max(240, containerWidth - padding * 2)
+      const availH = Math.max(180, containerHeight - padding * 2)
 
-      if (availW / availH > imgRatio) {
-        this.boardHeight = availH
-        this.boardWidth = Math.round(this.boardHeight * imgRatio)
-      } else {
-        this.boardWidth = availW
-        this.boardHeight = Math.round(this.boardWidth / imgRatio)
-      }
-
-      this.boardWidth = Math.max(240, this.boardWidth)
-      this.boardHeight = Math.max(180, this.boardHeight)
-      this.tileWidth = this.boardWidth / this.cols
-      this.tileHeight = this.boardHeight / this.rows
+      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
+      this.boardWidth = this.tileSize * this.cols
+      this.boardHeight = this.tileSize * this.rows
+      this.tileWidth = this.tileSize
+      this.tileHeight = this.tileSize
     }
 
     if (!this._initialCols) {

@@ -1008,6 +1008,11 @@ function renderGame({ resumeRun = null } = {}) {
               <path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z" />
             </svg>
           </button>
+          <button id="restart-btn" class="toolbar-btn icon-btn" type="button" aria-label="Restart puzzle" title="Restart">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z" />
+            </svg>
+          </button>
           ${gameMode === GAME_MODE_JIGSAW ? `
           <button id="settings-btn" class="toolbar-btn icon-btn" type="button" aria-label="Puzzle settings" title="Settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1079,6 +1084,15 @@ function renderGame({ resumeRun = null } = {}) {
 
     const active = puzzle.toggleReferenceVisible()
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+  })
+
+  const restartBtn = document.querySelector('#restart-btn')
+  restartBtn.addEventListener('click', () => {
+    if (!currentRun) return
+    if (!confirm('Restart this puzzle? Your current progress will be lost.')) return
+    clearRunForMode(currentRun)
+    currentRun = null
+    renderGame()
   })
 
   // Double-tap/click on puzzle board to toggle reference image

@@ -1,9 +1,6 @@
-const DIFFICULTY_TO_GRID = {
-  easy: 3,
-  medium: 4,
-  hard: 6,
-  extreme: 7,
-}
+const TARGET_TILE_SIZE = 96
+const MIN_COLS = 3
+const MIN_ROWS = 3
 
 const SWIPE_MIN_DISTANCE = 22
 const TAP_MAX_DISTANCE = 10
@@ -24,6 +21,8 @@ export class SlidingTilePuzzle {
     this.completed = false
     this.referenceVisible = false
 
+    this.cols = 0
+    this.rows = 0
     this.tiles = []
     this.slots = []
     this.pointerStarts = new Map()
@@ -35,8 +34,8 @@ export class SlidingTilePuzzle {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
-    this.gridSize = this.resolveGridSize(this.difficulty)
-    this.totalSlots = this.gridSize * this.gridSize
+    this.calculateGrid()
+    this.totalSlots = this.cols * this.rows
     this.tileCount = this.totalSlots - 1
 
     this.createLayout()
@@ -69,22 +68,20 @@ export class SlidingTilePuzzle {
     this.container.innerHTML = ''
   }
 
-  resolveGridSize(difficulty) {
-    if (typeof difficulty === 'number' && Number.isFinite(difficulty)) {
-      return clamp(Math.round(difficulty), 2, 12)
-    }
+  calculateGrid() {
+    const containerWidth = this.container.clientWidth || window.innerWidth
+    const containerHeight = this.container.clientHeight || window.innerHeight
+    const padding = 6
 
-    const normalized = String(difficulty || 'easy').trim().toLowerCase()
-    if (DIFFICULTY_TO_GRID[normalized]) {
-      return DIFFICULTY_TO_GRID[normalized]
-    }
+    const availW = Math.max(240, containerWidth - padding * 2)
+    const availH = Math.max(180, containerHeight - padding * 2)
 
-    const asNumber = Number(normalized)
-    if (Number.isFinite(asNumber)) {
-      return clamp(Math.round(asNumber), 2, 12)
-    }
+    this.cols = Math.max(MIN_COLS, Math.round(availW / TARGET_TILE_SIZE))
+    this.rows = Math.max(MIN_ROWS, Math.round(availH / TARGET_TILE_SIZE))
 
-    return DIFFICULTY_TO_GRID.easy
+    this.tileSize = Math.min(availW / this.cols, availH / this.rows)
+    this.boardWidth = this.tileSize * this.cols
+    this.boardHeight = this.tileSize * this.rows
   }
 
   createLayout() {
@@ -112,6 +109,11 @@ export class SlidingTilePuzzle {
     this.boardFrame.append(this.board)
     this.root.append(this.boardFrame)
     this.container.append(this.root)
+
+    if (!this._initialCols) {
+      this._initialCols = this.cols
+      this._initialRows = this.rows
+    }
 
     this.applyBoardSize()
   }
@@ -152,19 +154,19 @@ export class SlidingTilePuzzle {
   getCoverMetrics() {
     const imgW = this.image?.naturalWidth || this.image?.width || 1
     const imgH = this.image?.naturalHeight || this.image?.height || 1
-    const scale = Math.max(this.boardSize / imgW, this.boardSize / imgH)
+    const scale = Math.max(this.boardWidth / imgW, this.boardHeight / imgH)
     const drawW = imgW * scale
     const drawH = imgH * scale
     return {
       bgSize: `${drawW}px ${drawH}px`,
-      offsetX: (this.boardSize - drawW) / 2,
-      offsetY: (this.boardSize - drawH) / 2,
+      offsetX: (this.boardWidth - drawW) / 2,
+      offsetY: (this.boardHeight - drawH) / 2,
     }
   }
 
   paintTileFace(tile) {
-    const tileRow = Math.floor(tile.homeIndex / this.gridSize)
-    const tileCol = tile.homeIndex % this.gridSize
+    const tileRow = Math.floor(tile.homeIndex / this.cols)
+    const tileCol = tile.homeIndex % this.cols
     const cover = this.getCoverMetrics()
 
     tile.element.style.backgroundImage = `url("${this.imageUrl}")`
@@ -176,8 +178,8 @@ export class SlidingTilePuzzle {
 
   paintVictoryTileFace() {
     const lastIndex = this.totalSlots - 1
-    const tileRow = Math.floor(lastIndex / this.gridSize)
-    const tileCol = lastIndex % this.gridSize
+    const tileRow = Math.floor(lastIndex / this.cols)
+    const tileCol = lastIndex % this.cols
     const cover = this.getCoverMetrics()
 
     this.victoryTile.style.backgroundImage = `url("${this.imageUrl}")`
@@ -189,13 +191,27 @@ export class SlidingTilePuzzle {
   }
 
   applyBoardSize() {
-    const size = this.calculateBoardSize()
-    this.boardSize = size
-    this.tileSize = size / this.gridSize
+    this.calculateGrid()
+
+    const newTotal = this.cols * this.rows
+    if (this.tiles.length > 0 && newTotal !== this.tiles.length + 1) {
+      this.cols = this._initialCols
+      this.rows = this._initialRows
+
+      const containerWidth = this.container.clientWidth || window.innerWidth
+      const containerHeight = this.container.clientHeight || window.innerHeight
+      const padding = 6
+      const availW = Math.max(240, containerWidth - padding * 2)
+      const availH = Math.max(180, containerHeight - padding * 2)
+
+      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
+      this.boardWidth = this.tileSize * this.cols
+      this.boardHeight = this.tileSize * this.rows
+    }
 
     if (this.board) {
-      this.board.style.width = `${this.boardSize}px`
-      this.board.style.height = `${this.boardSize}px`
+      this.board.style.width = `${this.boardWidth}px`
+      this.board.style.height = `${this.boardHeight}px`
     }
 
     for (const tile of this.tiles) {
@@ -206,13 +222,6 @@ export class SlidingTilePuzzle {
     if (this.victoryTile) {
       this.paintVictoryTileFace()
     }
-  }
-
-  calculateBoardSize() {
-    const containerWidth = this.container.clientWidth || window.innerWidth
-    const containerHeight = this.container.clientHeight || window.innerHeight
-    const side = Math.min(containerWidth, containerHeight)
-    return Math.round(clamp(side - 10, 260, 900))
   }
 
   onWindowResize() {
@@ -264,20 +273,20 @@ export class SlidingTilePuzzle {
   }
 
   getNeighborIndices(index) {
-    const row = Math.floor(index / this.gridSize)
-    const col = index % this.gridSize
+    const row = Math.floor(index / this.cols)
+    const col = index % this.cols
     const neighbors = []
 
     if (row > 0) {
-      neighbors.push(index - this.gridSize)
+      neighbors.push(index - this.cols)
     }
-    if (row < this.gridSize - 1) {
-      neighbors.push(index + this.gridSize)
+    if (row < this.rows - 1) {
+      neighbors.push(index + this.cols)
     }
     if (col > 0) {
       neighbors.push(index - 1)
     }
-    if (col < this.gridSize - 1) {
+    if (col < this.cols - 1) {
       neighbors.push(index + 1)
     }
 
@@ -337,10 +346,10 @@ export class SlidingTilePuzzle {
   }
 
   isSwipeTowardEmpty(tile, direction) {
-    const tileRow = Math.floor(tile.slotIndex / this.gridSize)
-    const tileCol = tile.slotIndex % this.gridSize
-    const emptyRow = Math.floor(this.emptyIndex / this.gridSize)
-    const emptyCol = this.emptyIndex % this.gridSize
+    const tileRow = Math.floor(tile.slotIndex / this.cols)
+    const tileCol = tile.slotIndex % this.cols
+    const emptyRow = Math.floor(this.emptyIndex / this.cols)
+    const emptyCol = this.emptyIndex % this.cols
 
     if (tileRow === emptyRow && tileCol + 1 === emptyCol && direction === 'right') {
       return true
@@ -363,7 +372,7 @@ export class SlidingTilePuzzle {
       return false
     }
 
-    if (!isAdjacent(tile.slotIndex, this.emptyIndex, this.gridSize)) {
+    if (!isAdjacent(tile.slotIndex, this.emptyIndex, this.cols)) {
       return false
     }
 
@@ -395,8 +404,8 @@ export class SlidingTilePuzzle {
   }
 
   positionTile(tile, { animate }) {
-    const row = Math.floor(tile.slotIndex / this.gridSize)
-    const col = tile.slotIndex % this.gridSize
+    const row = Math.floor(tile.slotIndex / this.cols)
+    const col = tile.slotIndex % this.cols
 
     tile.element.style.transition = animate ? '' : 'none'
     tile.element.style.transform = `translate(${col * this.tileSize}px, ${row * this.tileSize}px)`
@@ -465,7 +474,8 @@ export class SlidingTilePuzzle {
 
   getProgressState() {
     return {
-      gridSize: this.gridSize,
+      cols: this.cols,
+      rows: this.rows,
       slots: [...this.slots],
       emptyIndex: this.emptyIndex,
       completed: this.completed,
@@ -476,6 +486,36 @@ export class SlidingTilePuzzle {
   applyProgressState(state) {
     if (!state || typeof state !== 'object' || !Array.isArray(state.slots)) {
       return
+    }
+
+    const savedCols = Number(state.cols)
+    const savedRows = Number(state.rows)
+    if (savedCols > 0 && savedRows > 0 && savedCols * savedRows === state.slots.length) {
+      this.cols = savedCols
+      this.rows = savedRows
+      this._initialCols = savedCols
+      this._initialRows = savedRows
+      this.totalSlots = savedCols * savedRows
+      this.tileCount = this.totalSlots - 1
+      this.tileSize = Math.min(this.boardWidth / this.cols, this.boardHeight / this.rows)
+      this.boardWidth = this.tileSize * this.cols
+      this.boardHeight = this.tileSize * this.rows
+
+      if (this.board) {
+        this.board.style.width = `${this.boardWidth}px`
+        this.board.style.height = `${this.boardHeight}px`
+      }
+
+      if (this.tiles.length !== this.tileCount) {
+        for (const tile of this.tiles) {
+          tile.element.removeEventListener('pointerdown', tile.onPointerDown)
+          tile.element.removeEventListener('pointerup', tile.onPointerUp)
+          tile.element.removeEventListener('pointercancel', tile.onPointerCancel)
+        }
+        this.tileLayer.innerHTML = ''
+        this.tiles = []
+        this.createTiles()
+      }
     }
 
     if (state.slots.length !== this.totalSlots) {
@@ -534,11 +574,11 @@ export class SlidingTilePuzzle {
   }
 }
 
-function isAdjacent(indexA, indexB, gridSize) {
-  const rowA = Math.floor(indexA / gridSize)
-  const colA = indexA % gridSize
-  const rowB = Math.floor(indexB / gridSize)
-  const colB = indexB % gridSize
+function isAdjacent(indexA, indexB, cols) {
+  const rowA = Math.floor(indexA / cols)
+  const colA = indexA % cols
+  const rowB = Math.floor(indexB / cols)
+  const colB = indexB % cols
   return Math.abs(rowA - rowB) + Math.abs(colA - colB) === 1
 }
 
