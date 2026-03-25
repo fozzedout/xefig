@@ -623,6 +623,13 @@ export class PolygramPuzzle {
 
   startDraggingPiece(piece, pointer) {
     const wasPlaced = piece.placed
+
+    // Capture bounding rect BEFORE reparenting so we get the correct position
+    let placedRect = null
+    if (wasPlaced) {
+      placedRect = piece.element.getBoundingClientRect()
+    }
+
     piece.dragging = true
     piece.placed = false
     piece.element.classList.add('is-dragging')
@@ -637,11 +644,10 @@ export class PolygramPuzzle {
     this.selectPiece(piece.id)
     this.dragLayer.append(piece.element)
 
-    if (wasPlaced) {
+    if (placedRect) {
       // Recalculate offset so piece center stays under the pointer
-      const rect = piece.element.getBoundingClientRect()
-      const centerClientX = rect.left + rect.width / 2
-      const centerClientY = rect.top + rect.height / 2
+      const centerClientX = placedRect.left + placedRect.width / 2
+      const centerClientY = placedRect.top + placedRect.height / 2
       pointer.offsetX = pointer.startX - centerClientX
       pointer.offsetY = pointer.startY - centerClientY
     }

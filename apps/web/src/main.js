@@ -186,7 +186,7 @@ function getCompletedRunsByDate() {
   return completedRuns
 }
 
-function getCompletedModesForDate(puzzleDate) {
+function getCompletedModesForDate(puzzleDate, difficulty = null) {
   if (!puzzleDate) {
     return new Set()
   }
@@ -197,7 +197,21 @@ function getCompletedModesForDate(puzzleDate) {
     return new Set()
   }
 
-  return new Set(Object.keys(dateRuns).map((mode) => normalizeGameMode(mode)))
+  const modes = new Set()
+  for (const [mode, entry] of Object.entries(dateRuns)) {
+    if (difficulty && entry?.difficulty && entry.difficulty !== difficulty) {
+      continue
+    }
+    modes.add(normalizeGameMode(mode))
+  }
+  return modes
+}
+
+function getCompletionEntry(puzzleDate, gameMode) {
+  const completedRunsByDate = getCompletedRunsByDate()
+  const dateRuns = completedRunsByDate[puzzleDate]
+  if (!dateRuns || typeof dateRuns !== 'object') return null
+  return dateRuns[normalizeGameMode(gameMode)] || null
 }
 
 function recordCompletedRun(run) {
@@ -397,6 +411,77 @@ async function submitLeaderboard(run) {
   return payload
 }
 
+async function fetchLeaderboard(puzzleDate, gameMode, difficulty, limit = 10) {
+  const mode = GAME_MODE_TO_PUZZLE_CATEGORY[normalizeGameMode(gameMode)] || 'jigsaw'
+  const response = await fetch(
+    apiUrl(`/api/leaderboard/${encodeURIComponent(puzzleDate)}?gameMode=${mode}&difficulty=${difficulty}&limit=${limit}`),
+  )
+  const payload = await response.json()
+  if (!response.ok) throw new Error(payload.error || 'Failed to fetch leaderboard.')
+  return payload
+}
+
+const CONFETTI_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
+
+function createConfettiOverlay(container) {
+  const canvas = document.createElement('canvas')
+  canvas.className = 'confetti-overlay'
+  canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1000'
+  container.style.position = container.style.position || 'relative'
+  container.appendChild(canvas)
+
+  const resize = () => {
+    canvas.width = container.clientWidth
+    canvas.height = container.clientHeight
+  }
+  resize()
+
+  const ctx = canvas.getContext('2d')
+  const count = 150
+  const particles = Array.from({ length: count }, () => ({
+    x: Math.random() * canvas.width,
+    y: -Math.random() * canvas.height * 0.4,
+    vx: (Math.random() - 0.5) * 6,
+    vy: Math.random() * 3 + 1.5,
+    size: Math.random() * 5 + 4,
+    angle: Math.random() * Math.PI * 2,
+    spin: (Math.random() - 0.5) * 0.24,
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    life: 1,
+    decay: Math.random() * 0.008 + 0.005,
+  }))
+
+  let frame = null
+  const start = performance.now()
+
+  const animate = (now) => {
+    if (now - start > 3500) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      canvas.remove()
+      return
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    for (const p of particles) {
+      p.x += p.vx
+      p.y += p.vy
+      p.vy += 0.04
+      p.angle += p.spin
+      p.life = Math.max(0, p.life - p.decay)
+      if (p.y > canvas.height + 12) p.y = -Math.random() * 80
+      if (p.life <= 0) continue
+      ctx.save()
+      ctx.globalAlpha = p.life
+      ctx.translate(p.x, p.y)
+      ctx.rotate(p.angle)
+      ctx.fillStyle = p.color
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size)
+      ctx.restore()
+    }
+    frame = requestAnimationFrame(animate)
+  }
+  frame = requestAnimationFrame(animate)
+}
+
 async function fetchPuzzlePayload({ date = null } = {}) {
   const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
   const response = await fetch(apiUrl(endpoint))
@@ -428,18 +513,21 @@ function renderLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    const completedModes = getCompletedModesForDate(puzzlePayload?.date || todayDate)
+    const completedModes = getCompletedModesForDate(puzzlePayload?.date || todayDate, state.difficulty)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isPick = mode === getGameModeOfDay(todayDate)
+        const isCompleted = completedModes.has(mode)
+        const entry = isCompleted ? getCompletionEntry(puzzlePayload?.date || todayDate, mode) : null
         const badges = []
         if (isPick) {
           badges.push('<span class="mode-card-badge mode-card-badge-pick">Daily Pick</span>')
         }
-        if (completedModes.has(mode)) {
-          badges.push('<span class="mode-card-badge mode-card-badge-completed">completed</span>')
+        if (isCompleted) {
+          const timeLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''
+          badges.push(`<span class="mode-card-badge mode-card-badge-completed">✓ ${timeLabel}</span>`)
         }
         const badgeMarkup = badges.join('')
 
@@ -577,13 +665,15 @@ function renderArchiveLauncher() {
   }
 
   const renderModeCards = (puzzlePayload) => {
-    const completedModes = getCompletedModesForDate(puzzlePayload?.date || state.archiveDate)
+    const completedModes = getCompletedModesForDate(puzzlePayload?.date || state.archiveDate, state.difficulty)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
       .map((mode) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
-        const completionBadge = completedModes.has(mode)
-          ? '<span class="mode-card-badge mode-card-badge-completed">completed</span>'
+        const isCompleted = completedModes.has(mode)
+        const entry = isCompleted ? getCompletionEntry(puzzlePayload?.date || state.archiveDate, mode) : null
+        const completionBadge = isCompleted
+          ? `<span class="mode-card-badge mode-card-badge-completed">✓ ${entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''}</span>`
           : ''
         return `
           <button type="button" class="mode-card" data-mode="${mode}">
@@ -702,6 +792,74 @@ function renderArchiveLauncher() {
   loadArchivePreview()
 }
 
+function showCompletionOverlay({ gameMode, difficulty, duration, elapsedMs, rank, leaderboardEntries, totalEntries, playerGuid: myGuid }) {
+  const existing = document.querySelector('.completion-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'completion-overlay'
+
+  let leaderboardHtml = ''
+  if (leaderboardEntries && leaderboardEntries.length > 0) {
+    const rows = leaderboardEntries.map((entry) => {
+      const isMe = entry.playerGuid === myGuid
+      const time = formatDuration(entry.elapsedMs)
+      return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
+        <td class="lb-rank">#${entry.rank}</td>
+        <td class="lb-time">${time}</td>
+        <td class="lb-player">${isMe ? 'You' : entry.playerGuid.slice(0, 8)}</td>
+      </tr>`
+    }).join('')
+
+    leaderboardHtml = `
+      <div class="completion-leaderboard">
+        <h3>${DIFFICULTY_BUTTON_LABELS[difficulty] || difficulty} Leaderboard</h3>
+        <table class="lb-table">
+          <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `
+  }
+
+  overlay.innerHTML = `
+    <div class="completion-card">
+      <h2>Puzzle Complete!</h2>
+      <div class="completion-stats">
+        <div class="completion-stat">
+          <span class="stat-value">${duration}</span>
+          <span class="stat-label">Time</span>
+        </div>
+        <div class="completion-stat">
+          <span class="stat-value">${rank ? `#${rank}` : '—'}</span>
+          <span class="stat-label">Rank</span>
+        </div>
+        <div class="completion-stat">
+          <span class="stat-value">${DIFFICULTY_BUTTON_LABELS[difficulty] || difficulty}</span>
+          <span class="stat-label">Difficulty</span>
+        </div>
+      </div>
+      ${leaderboardHtml}
+      <button type="button" class="completion-dismiss">Continue</button>
+    </div>
+  `
+
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+
+  overlay.querySelector('.completion-dismiss').addEventListener('click', () => {
+    overlay.classList.remove('is-visible')
+    setTimeout(() => overlay.remove(), 200)
+  })
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.classList.remove('is-visible')
+      setTimeout(() => overlay.remove(), 200)
+    }
+  })
+}
+
 function renderGame({ resumeRun = null } = {}) {
   const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
   state.gameMode = gameMode
@@ -803,6 +961,35 @@ function renderGame({ resumeRun = null } = {}) {
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   })
 
+  // Double-tap/click on puzzle board to toggle reference image
+  // Ignores buttons, trays, and other interactive UI controls
+  function isBoardTarget(target) {
+    if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock')) {
+      return false
+    }
+    return mount.contains(target)
+  }
+
+  let lastTapTime = 0
+  mount.addEventListener('touchend', (e) => {
+    if (!puzzle || !isBoardTarget(e.target)) return
+    const now = Date.now()
+    if (now - lastTapTime < 300) {
+      e.preventDefault()
+      const active = puzzle.toggleReferenceVisible()
+      viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+      lastTapTime = 0
+    } else {
+      lastTapTime = now
+    }
+  })
+
+  mount.addEventListener('dblclick', (e) => {
+    if (!puzzle || !isBoardTarget(e.target)) return
+    e.preventDefault()
+    const active = puzzle.toggleReferenceVisible()
+    viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+  })
 
   const highlightBtn = document.querySelector('#highlight-btn')
   const edgesBtn = document.querySelector('#edges-btn')
@@ -937,23 +1124,57 @@ function renderGame({ resumeRun = null } = {}) {
           writeJsonStorage(ACTIVE_RUN_KEY, currentRun)
           removeStorage(ACTIVE_RUN_KEY)
 
+          // Celebration confetti
+          const workspace = document.querySelector('.workspace')
+          if (workspace) createConfettiOverlay(workspace)
+
           const durationLabel = formatDuration(currentRun.elapsedActiveMs)
 
           setStatus(
-            `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Submitting leaderboard...`,
+            `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Submitting...`,
             'ok',
           )
 
+          let rank = null
+          let leaderboardEntries = null
+          let totalEntries = 0
+
           try {
             const result = await submitLeaderboard(currentRun)
+            rank = result.rank
+
+            const lb = await fetchLeaderboard(
+              currentRun.puzzleDate,
+              currentRun.gameMode,
+              currentRun.difficulty,
+              20,
+            )
+            leaderboardEntries = lb.entries || []
+            totalEntries = leaderboardEntries.length
+          } catch {
+            // Non-fatal
+          }
+
+          showCompletionOverlay({
+            gameMode,
+            difficulty: currentRun.difficulty,
+            duration: durationLabel,
+            elapsedMs: currentRun.elapsedActiveMs,
+            rank,
+            leaderboardEntries,
+            totalEntries,
+            playerGuid,
+          })
+
+          if (rank) {
             setStatus(
-              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${result.rank} on ${result.difficulty}.`,
+              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${rank} on ${DIFFICULTY_BUTTON_LABELS[currentRun.difficulty] || currentRun.difficulty}.`,
               'ok',
             )
-          } catch (error) {
+          } else {
             setStatus(
-              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Leaderboard submit failed.`,
-              'error',
+              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
+              'ok',
             )
           }
         },

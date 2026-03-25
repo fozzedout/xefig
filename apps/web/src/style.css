@@ -1384,3 +1384,147 @@ h1 {
     font-size: 0.6rem;
   }
 }
+
+/* ─── Completion overlay ─── */
+
+.completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.completion-overlay.is-visible {
+  opacity: 1;
+}
+
+.completion-card {
+  background: var(--surface);
+  border-radius: 1rem;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transform: translateY(20px);
+  transition: transform 0.2s ease;
+}
+
+.completion-overlay.is-visible .completion-card {
+  transform: translateY(0);
+}
+
+.completion-card h2 {
+  margin: 0 0 1.2rem;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.completion-stats {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.completion-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.completion-leaderboard {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.completion-leaderboard h3 {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.6rem;
+  text-align: center;
+}
+
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.lb-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.lb-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.lb-rank {
+  width: 2.5rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.lb-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.leaderboard-row-me {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.leaderboard-row-me td {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.completion-dismiss {
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.6rem 2rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.completion-dismiss:hover {
+  opacity: 0.85;
+}

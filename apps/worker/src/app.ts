@@ -857,11 +857,19 @@ export function createApp() {
       return c.text('Not Found', 404)
     }
 
-    const response = await c.env.STATIC_ASSETS.fetch(c.req.raw)
-    if (response.status === 404) {
-      return c.text('Not Found', 404)
+    // Only try static assets for paths that could plausibly be ours:
+    // root-level files and /assets/*. Skip everything else to avoid
+    // wasting resources on bot traffic hitting deep bogus paths.
+    const isAppRoute = pathname === '/' || pathname === '/admin-panel' || pathname === '/admin-panel.html'
+    const isStaticAsset = pathname === '/favicon.svg' || pathname === '/icons.svg' || pathname.startsWith('/assets/')
+    if (isAppRoute || isStaticAsset) {
+      const response = await c.env.STATIC_ASSETS.fetch(c.req.raw)
+      if (response.status !== 404) {
+        return response
+      }
     }
-    return response
+
+    return c.html('<!DOCTYPE html><html><head><meta charset="utf-8"><title>404</title></head><body><h1>404</h1><p>Page not found.</p></body></html>', 404)
   })
 
   return app
