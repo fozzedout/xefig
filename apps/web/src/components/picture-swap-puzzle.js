@@ -1,9 +1,6 @@
-const DIFFICULTY_TO_GRID = {
-  easy: 4,
-  medium: 6,
-  hard: 8,
-  extreme: 10,
-}
+const TARGET_TILE_SIZE = 72
+const MIN_COLS = 4
+const MIN_ROWS = 3
 
 const SWAP_COMPLETION_STORAGE_KEY = 'xefig:picture-swap:completion:v1'
 const CONFETTI_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#118ab2', '#ef476f', '#8338ec']
@@ -24,6 +21,8 @@ export class PictureSwapPuzzle {
     this.referenceVisible = false
     this.selectedTileId = null
 
+    this.cols = 0
+    this.rows = 0
     this.tiles = []
     this.slots = []
 
@@ -40,8 +39,8 @@ export class PictureSwapPuzzle {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
-    this.gridSize = this.resolveGridSize(this.difficulty)
-    this.totalTiles = this.gridSize * this.gridSize
+    this.calculateGrid()
+    this.totalTiles = this.cols * this.rows
     this.startedAtMs = Date.now()
 
     this.createLayout()
@@ -72,22 +71,39 @@ export class PictureSwapPuzzle {
     this.container.innerHTML = ''
   }
 
-  resolveGridSize(difficulty) {
-    if (typeof difficulty === 'number' && Number.isFinite(difficulty)) {
-      return clamp(Math.round(difficulty), 2, 12)
+  calculateGrid() {
+    const containerWidth = this.container.clientWidth || window.innerWidth
+    const containerHeight = this.container.clientHeight || window.innerHeight
+    const padding = 6
+
+    const availW = containerWidth - padding * 2
+    const availH = containerHeight - padding * 2
+
+    const imgW = this.image?.naturalWidth || 1
+    const imgH = this.image?.naturalHeight || 1
+    const imgRatio = imgW / imgH
+
+    // Fit the board to available space while preserving image aspect ratio
+    let boardW, boardH
+    if (availW / availH > imgRatio) {
+      boardH = availH
+      boardW = Math.round(boardH * imgRatio)
+    } else {
+      boardW = availW
+      boardH = Math.round(boardW / imgRatio)
     }
 
-    const normalized = String(difficulty || 'medium').trim().toLowerCase()
-    if (DIFFICULTY_TO_GRID[normalized]) {
-      return DIFFICULTY_TO_GRID[normalized]
-    }
+    boardW = Math.max(240, boardW)
+    boardH = Math.max(180, boardH)
 
-    const asNumber = Number(normalized)
-    if (Number.isFinite(asNumber)) {
-      return clamp(Math.round(asNumber), 2, 12)
-    }
+    // Calculate grid from target tile size
+    this.cols = Math.max(MIN_COLS, Math.round(boardW / TARGET_TILE_SIZE))
+    this.rows = Math.max(MIN_ROWS, Math.round(boardH / TARGET_TILE_SIZE))
 
-    return DIFFICULTY_TO_GRID.medium
+    this.boardWidth = boardW
+    this.boardHeight = boardH
+    this.tileWidth = boardW / this.cols
+    this.tileHeight = boardH / this.rows
   }
 
   createLayout() {
@@ -147,31 +163,56 @@ export class PictureSwapPuzzle {
   }
 
   applyBoardSize() {
-    const size = this.calculateBoardSize()
-    this.boardSize = size
-    this.tileSize = size / this.gridSize
+    this.calculateGrid()
+
+    // If tile count changed on resize we can't just reposition — need full rebuild.
+    // For now, keep the original grid and just rescale.
+    const newTotal = this.cols * this.rows
+    if (this.tiles.length > 0 && newTotal !== this.tiles.length) {
+      // Grid count changed but we can't rebuild mid-game — keep aspect, just resize
+      this.cols = this.tiles.length > 0 ? this._initialCols : this.cols
+      this.rows = this.tiles.length > 0 ? this._initialRows : this.rows
+
+      const containerWidth = this.container.clientWidth || window.innerWidth
+      const containerHeight = this.container.clientHeight || window.innerHeight
+      const padding = 6
+      const availW = containerWidth - padding * 2
+      const availH = containerHeight - padding * 2
+      const imgRatio = (this.image?.naturalWidth || 1) / (this.image?.naturalHeight || 1)
+
+      if (availW / availH > imgRatio) {
+        this.boardHeight = availH
+        this.boardWidth = Math.round(this.boardHeight * imgRatio)
+      } else {
+        this.boardWidth = availW
+        this.boardHeight = Math.round(this.boardWidth / imgRatio)
+      }
+
+      this.boardWidth = Math.max(240, this.boardWidth)
+      this.boardHeight = Math.max(180, this.boardHeight)
+      this.tileWidth = this.boardWidth / this.cols
+      this.tileHeight = this.boardHeight / this.rows
+    }
+
+    if (!this._initialCols) {
+      this._initialCols = this.cols
+      this._initialRows = this.rows
+    }
 
     if (this.board) {
-      this.board.style.width = `${this.boardSize}px`
-      this.board.style.height = `${this.boardSize}px`
+      this.board.style.width = `${this.boardWidth}px`
+      this.board.style.height = `${this.boardHeight}px`
     }
 
     if (this.confettiCanvas) {
-      this.confettiCanvas.width = Math.round(this.boardSize)
-      this.confettiCanvas.height = Math.round(this.boardSize)
+      this.confettiCanvas.width = Math.round(this.boardWidth)
+      this.confettiCanvas.height = Math.round(this.boardHeight)
     }
 
     for (const tile of this.tiles) {
       this.paintTileFace(tile)
       this.positionTile(tile, { animate: false })
     }
-  }
-
-  calculateBoardSize() {
-    const containerWidth = this.container.clientWidth || window.innerWidth
-    const containerHeight = this.container.clientHeight || window.innerHeight
-    const side = Math.min(containerWidth, containerHeight)
-    return Math.round(clamp(side - 10, 260, 920))
   }
 
   onWindowResize() {
@@ -184,26 +225,26 @@ export class PictureSwapPuzzle {
   getCoverMetrics() {
     const imgW = this.image?.naturalWidth || this.image?.width || 1
     const imgH = this.image?.naturalHeight || this.image?.height || 1
-    const scale = Math.max(this.boardSize / imgW, this.boardSize / imgH)
+    const scale = Math.max(this.boardWidth / imgW, this.boardHeight / imgH)
     const drawW = imgW * scale
     const drawH = imgH * scale
     return {
       bgSize: `${drawW}px ${drawH}px`,
-      offsetX: (this.boardSize - drawW) / 2,
-      offsetY: (this.boardSize - drawH) / 2,
+      offsetX: (this.boardWidth - drawW) / 2,
+      offsetY: (this.boardHeight - drawH) / 2,
     }
   }
 
   paintTileFace(tile) {
-    const row = Math.floor(tile.homeIndex / this.gridSize)
-    const col = tile.homeIndex % this.gridSize
+    const row = Math.floor(tile.homeIndex / this.cols)
+    const col = tile.homeIndex % this.cols
     const cover = this.getCoverMetrics()
 
-    tile.element.style.width = `${this.tileSize}px`
-    tile.element.style.height = `${this.tileSize}px`
+    tile.element.style.width = `${this.tileWidth}px`
+    tile.element.style.height = `${this.tileHeight}px`
     tile.element.style.backgroundImage = `url("${this.imageUrl}")`
     tile.element.style.backgroundSize = cover.bgSize
-    tile.element.style.backgroundPosition = `${cover.offsetX - col * this.tileSize}px ${cover.offsetY - row * this.tileSize}px`
+    tile.element.style.backgroundPosition = `${cover.offsetX - col * this.tileWidth}px ${cover.offsetY - row * this.tileHeight}px`
   }
 
   shuffleTiles() {
@@ -220,7 +261,6 @@ export class PictureSwapPuzzle {
     } while (!isDerangement(this.slots) && attempts < maxAttempts)
 
     if (!isDerangement(this.slots)) {
-      // Deterministic fallback to avoid any fixed-position tile.
       this.slots = Array.from({ length: this.totalTiles }, (_, index) => (index + 1) % this.totalTiles)
     }
 
@@ -301,11 +341,11 @@ export class PictureSwapPuzzle {
   }
 
   positionTile(tile, { animate }) {
-    const row = Math.floor(tile.slotIndex / this.gridSize)
-    const col = tile.slotIndex % this.gridSize
+    const row = Math.floor(tile.slotIndex / this.cols)
+    const col = tile.slotIndex % this.cols
 
     tile.element.style.transition = animate ? '' : 'none'
-    tile.element.style.transform = `translate(${col * this.tileSize}px, ${row * this.tileSize}px)`
+    tile.element.style.transform = `translate(${col * this.tileWidth}px, ${row * this.tileHeight}px)`
 
     if (!animate) {
       requestAnimationFrame(() => {
@@ -366,7 +406,7 @@ export class PictureSwapPuzzle {
 
     const width = this.confettiCanvas.width
     const height = this.confettiCanvas.height
-    const count = clamp(Math.round(this.gridSize * 22), 90, 240)
+    const count = clamp(Math.round((this.cols + this.rows) * 12), 90, 240)
 
     this.confettiParticles = Array.from({ length: count }, () => ({
       x: Math.random() * width,
@@ -445,8 +485,8 @@ export class PictureSwapPuzzle {
     const payload = {
       completedAt: new Date().toISOString(),
       elapsedMs,
-      difficulty: String(this.difficulty),
-      gridSize: this.gridSize,
+      cols: this.cols,
+      rows: this.rows,
       imageUrl: this.imageUrl,
     }
 
@@ -459,7 +499,8 @@ export class PictureSwapPuzzle {
 
   getProgressState() {
     return {
-      gridSize: this.gridSize,
+      cols: this.cols,
+      rows: this.rows,
       slots: [...this.slots],
       selectedTileId: this.selectedTileId,
       completed: this.completed,
@@ -471,6 +512,29 @@ export class PictureSwapPuzzle {
   applyProgressState(state) {
     if (!state || typeof state !== 'object' || !Array.isArray(state.slots)) {
       return
+    }
+
+    // Restore grid dimensions from saved state if they match
+    const savedCols = Number(state.cols)
+    const savedRows = Number(state.rows)
+    if (savedCols > 0 && savedRows > 0 && savedCols * savedRows === state.slots.length) {
+      this.cols = savedCols
+      this.rows = savedRows
+      this._initialCols = savedCols
+      this._initialRows = savedRows
+      this.totalTiles = savedCols * savedRows
+      this.tileWidth = this.boardWidth / this.cols
+      this.tileHeight = this.boardHeight / this.rows
+
+      // Rebuild tiles if count changed
+      if (this.tiles.length !== this.totalTiles) {
+        for (const tile of this.tiles) {
+          tile.element.removeEventListener('click', tile.onClick)
+        }
+        this.tileLayer.innerHTML = ''
+        this.tiles = []
+        this.createTiles()
+      }
     }
 
     if (state.slots.length !== this.totalTiles || !isValidPermutation(state.slots, this.totalTiles)) {

@@ -722,7 +722,7 @@ function renderArchiveLauncher() {
 
         <div class="archive-date-row">
           <button id="archive-prev-btn" class="archive-nav-arrow" type="button" aria-label="Previous day">&lsaquo;</button>
-          <input id="archive-date-input" type="date" value="${state.archiveDate}" max="${todayDate}" class="archive-date-input" />
+          <input id="archive-date-input" type="date" value="${state.archiveDate}" min="2026-03-17" max="${todayDate}" class="archive-date-input" />
           <button id="archive-next-btn" class="archive-nav-arrow" type="button" aria-label="Next day">&rsaquo;</button>
         </div>
 
@@ -751,7 +751,9 @@ function renderArchiveLauncher() {
   }
 
   prevBtn.addEventListener('click', () => {
-    state.archiveDate = addDays(state.archiveDate, -1)
+    const prev = addDays(state.archiveDate, -1)
+    if (prev < '2026-03-17') return
+    state.archiveDate = prev
     dateInput.value = state.archiveDate
     loadArchivePreview()
   })
