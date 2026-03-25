@@ -343,22 +343,67 @@ h1 {
   }
 }
 
-.archive-date-label {
-  display: grid;
-  gap: 0.26rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  font-weight: 700;
+.archive-date-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-.archive-date-label input {
+.archive-date-input {
+  flex: 1;
   font: inherit;
   border: 1px solid color-mix(in oklab, var(--line) 82%, transparent);
-  border-radius: 0.74rem;
+  border-radius: 0.5rem;
   background: color-mix(in oklab, var(--surface) 86%, white);
   color: var(--text);
-  padding: 0.4rem 0.68rem;
+  padding: 0.4rem 0.6rem;
   min-height: 2.3rem;
+  font-size: 0.9rem;
+}
+
+.archive-nav-arrow {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 0.5rem;
+  width: 2.3rem;
+  height: 2.3rem;
+  font-size: 1.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+
+.archive-nav-arrow:hover {
+  background: var(--surface-2);
+}
+
+.launcher-difficulty-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.difficulty-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.difficulty-select {
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.35rem 0.5rem;
+  min-height: 2rem;
+  cursor: pointer;
 }
 
 @keyframes launcher-float {
