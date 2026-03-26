@@ -1107,6 +1107,11 @@ function renderGame({ resumeRun = null } = {}) {
   let lastTapTime = 0
   mount.addEventListener('touchend', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
+    // Ignore multi-touch (e.g. two-finger rotate)
+    if (e.touches.length > 0) {
+      lastTapTime = 0
+      return
+    }
     const now = Date.now()
     if (now - lastTapTime < 300) {
       e.preventDefault()
