@@ -8,9 +8,56 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Xefig | Jigsaw Prototype</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Pre-rendered slice launcher shell: replaced by JS once the module loads. -->
+      <main class="slice-launcher">
+        <div class="slice-container">
+          <div class="slice" style="--flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem">
+            Loading puzzles&hellip;
+          </div>
+        </div>
+        <div class="slice-logo">Xefig &middot; Daily</div>
+      </main>
+    </div>
+    <script>
+      // Start the daily puzzle fetch immediately — runs in parallel with module download
+      // instead of waiting for main.js to load, parse, and execute.
+      window.__earlyPuzzle=fetch('/api/puzzles/today').then(function(r){
+        if(!r.ok)throw new Error('Puzzle fetch failed');
+        return r.json();
+      }).then(function(p){
+        // Cache today's image URLs so repeat visits can preload without waiting for API
+        if(p&&p.date&&p.categories){
+          try{localStorage.setItem('xefig:daily-cache',JSON.stringify({
+            date:p.date,categories:p.categories
+          }))}catch(e){}
+        }
+        return p;
+      }).catch(function(){return null});
+
+      // Preload all four mode images from cache — images change once per day
+      // so this is almost always correct and lets the LCP image start immediately.
+      (function(){
+        try{
+          var c=JSON.parse(localStorage.getItem('xefig:daily-cache'));
+          if(!c||!c.categories)return;
+          var cats=['jigsaw','slider','swap','polygram'];
+          for(var i=0;i<cats.length;i++){
+            var a=c.categories[cats[i]];
+            var u=a&&(a.imageUrl);
+            if(u){
+              var link=document.createElement('link');
+              link.rel='preload';link.as='image';link.href=u;
+              if(i===0)link.fetchPriority='high';
+              document.head.appendChild(link);
+            }
+          }
+        }catch(e){}
+      })();
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

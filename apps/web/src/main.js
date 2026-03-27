@@ -1,9 +1,13 @@
 import './style.css'
 import sampleImage from './assets/hero.png'
-import { JigsawPuzzle } from './components/jigsaw-puzzle.js'
-import { SlidingTilePuzzle } from './components/sliding-tile-puzzle.js'
-import { PictureSwapPuzzle } from './components/picture-swap-puzzle.js'
-import { PolygramPuzzle } from './components/polygram-puzzle.js'
+// Puzzle engines are loaded on demand in renderGame() via dynamic import()
+// to keep the homepage bundle free of gameplay code.
+const puzzleLoaders = {
+  jigsaw: () => import('./components/jigsaw-puzzle.js').then((m) => m.JigsawPuzzle),
+  sliding: () => import('./components/sliding-tile-puzzle.js').then((m) => m.SlidingTilePuzzle),
+  swap: () => import('./components/picture-swap-puzzle.js').then((m) => m.PictureSwapPuzzle),
+  polygram: () => import('./components/polygram-puzzle.js').then((m) => m.PolygramPuzzle),
+}
 
 const app = document.querySelector('#app')
 const API_BASE = ''
@@ -507,14 +511,50 @@ function createConfettiOverlay(container) {
   frame = requestAnimationFrame(animate)
 }
 
+function cacheDailyPayload(payload) {
+  if (payload?.date && payload?.categories) {
+    writeJsonStorage('xefig:daily-cache', { date: payload.date, categories: payload.categories })
+  }
+}
+
 async function fetchPuzzlePayload({ date = null } = {}) {
+  // For the default "today" request, use the early fetch started in index.html
+  // so we don't wait for the module to load before hitting the API.
+  if (!date && window.__earlyPuzzle) {
+    const early = await window.__earlyPuzzle
+    window.__earlyPuzzle = null
+    if (early) return early
+  }
+
   const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
   const response = await fetch(apiUrl(endpoint))
   const payload = await response.json()
   if (!response.ok) {
     throw new Error(payload.error || 'Puzzle not found.')
   }
+  if (!date) cacheDailyPayload(payload)
   return payload
+}
+
+const SLICE_ICONS = {
+  [GAME_MODE_JIGSAW]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M14 4h-8a2 2 0 00-2 2v8m0 0c1.5 0 3 1 3 3s-1.5 3-3 3v6a2 2 0 002 2h6c0-1.5 1-3 3-3s3 1.5 3 3h6a2 2 0 002-2v-6c1.5 0 3-1 3-3s-1.5-3-3-3V6a2 2 0 00-2-2h-6c0 1.5-1 3-3 3s-3-1.5-3-3z"/></svg>',
+  [GAME_MODE_SLIDING]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="10" height="10" rx="1"/><rect x="18" y="4" width="10" height="10" rx="1"/><rect x="4" y="18" width="10" height="10" rx="1"/><path d="M22 20v8M18 24h8" stroke-linecap="round"/></svg>',
+  [GAME_MODE_SWAP]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M8 10h6M18 10h6M8 22h6M18 22h6" stroke-linecap="round" stroke-width="2"/><path d="M14 10l4 12M18 10l-4 12" stroke-dasharray="2 2"/><circle cx="11" cy="10" r="3"/><circle cx="21" cy="22" r="3"/></svg>',
+  [GAME_MODE_POLYGRAM]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><polygon points="16,3 28,11 24,25 8,25 4,11"/><polygon points="16,8 23,13 21,22 11,22 9,13"/><line x1="16" y1="3" x2="16" y2="8"/><line x1="28" y1="11" x2="23" y2="13"/><line x1="24" y1="25" x2="21" y2="22"/><line x1="8" y1="25" x2="11" y2="22"/><line x1="4" y1="11" x2="9" y2="13"/></svg>',
+}
+
+const SLICE_DESCRIPTIONS = {
+  [GAME_MODE_JIGSAW]: 'Drag and place interlocking pieces to reconstruct the full image. Start with edges and corners, then work inward.',
+  [GAME_MODE_SLIDING]: 'Slide tiles into the empty space to reorder the scrambled image. Deceptively simple, maddeningly strategic.',
+  [GAME_MODE_SWAP]: 'Select any two tiles and swap their positions. No empty space needed \u2014 challenges spatial memory and pattern recognition.',
+  [GAME_MODE_POLYGRAM]: 'The image shatters into irregular polygon shards. Rotate and place geometric fragments to piece reality back together.',
+}
+
+const SLICE_TAGS = {
+  [GAME_MODE_JIGSAW]: ['Drag & Drop', '64\u2013225 pcs', 'Classic'],
+  [GAME_MODE_SLIDING]: ['Slide', '3\u00d73 \u2014 7\u00d77', 'Strategy'],
+  [GAME_MODE_SWAP]: ['Tap & Swap', '4\u00d74 \u2014 10\u00d710', 'Spatial'],
+  [GAME_MODE_POLYGRAM]: ['Rotate & Place', 'Freeform', 'Artistic'],
 }
 
 function renderLauncher() {
@@ -526,81 +566,78 @@ function renderLauncher() {
   state.gameMode = getGameModeOfDay(todayDate)
   state.difficulty = state.difficulty || 'medium'
 
-  const renderModeCards = (puzzlePayload) => {
+  const ACTIVE_FLEX = 2.2
+  const INACTIVE_FLEX = 0.9
+  const pickMode = getGameModeOfDay(todayDate)
+  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+
+  const renderSlices = (puzzlePayload) => {
     const puzzleDate = puzzlePayload?.date || todayDate
     const completedModes = getCompletedModesForDate(puzzleDate)
-    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
-      .map((mode) => {
-        const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
+    return modes
+      .map((mode, index) => {
+        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
-        const isPick = mode === getGameModeOfDay(todayDate)
+        const isPick = mode === pickMode
+        const isActive = isPick
         const isCompleted = completedModes.has(mode)
         const hasSave = hasActiveRun(puzzleDate, mode)
         const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
+        const flex = isActive ? ACTIVE_FLEX : INACTIVE_FLEX
+        const isLCP = index === 0
+
         const badges = []
-        if (isPick) {
-          badges.push('<span class="mode-card-badge mode-card-badge-pick">Daily Pick</span>')
-        }
+        if (isPick) badges.push('<span class="slice-badge slice-badge-pick">Daily Pick</span>')
         if (isCompleted) {
-          const timeLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''
-          badges.push(`<span class="mode-card-badge mode-card-badge-completed">\u2713 ${timeLabel}</span>`)
+          const t = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''
+          badges.push(`<span class="slice-badge slice-badge-completed">\u2713 ${t}</span>`)
         }
-        if (hasSave) {
-          badges.push('<span class="mode-card-badge mode-card-badge-save">\u25B6 Resume</span>')
-        }
-        const badgeMarkup = badges.join('')
+        if (hasSave) badges.push('<span class="slice-badge slice-badge-save">\u25B6 Resume</span>')
 
         return `
-          <button type="button" class="mode-card" data-mode="${mode}">
-            ${badgeMarkup}
-            <div class="mode-card-image-wrapper">
-              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
-              <div class="mode-card-play-overlay">
-                <div class="play-icon">
-                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                </div>
+          <div class="slice${isActive ? ' active' : ''}" data-mode="${mode}" style="--flex: ${flex};">
+            <img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
+            <div class="slice-overlay"></div>
+            <div class="slice-icon">${SLICE_ICONS[mode]}</div>
+            <div class="slice-content">
+              <div class="slice-number">Mode ${String(index + 1).padStart(2, '0')}</div>
+              <div class="slice-title">
+                ${title}
+                <span class="slice-accent-bar"></span>
+              </div>
+              <div class="slice-badges">${badges.join('')}</div>
+              <div class="slice-details">
+                <p class="slice-desc">${SLICE_DESCRIPTIONS[mode]}</p>
+                <div class="slice-tags">${SLICE_TAGS[mode].map((t) => `<span class="slice-tag">${t}</span>`).join('')}</div>
+                <button class="slice-play-btn" data-mode="${mode}" type="button">
+                  ${hasSave ? 'Resume' : 'Play'}
+                  <svg viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
+                </button>
               </div>
             </div>
-            <div class="mode-card-info">
-              <span class="mode-card-title">${title}</span>
-            </div>
-          </button>
+          </div>
         `
       })
       .join('')
   }
 
   app.innerHTML = `
-    <main class="launcher-shell">
-      <section class="launcher-main">
-        <header class="launcher-header">
-          <p class="eyebrow">Xefig Daily</p>
-          <h1>Pick a Puzzle</h1>
-          <p id="preview-meta" class="launcher-copy">Loading today's puzzle...</p>
-        </header>
-
-        <div id="mode-cards" class="mode-cards-grid">
-          <div class="mode-card-skeleton" style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--muted);">
-            Loading puzzles...
-          </div>
-        </div>
-
-        <footer class="launcher-footer">
-          <button id="archive-nav-btn" class="launcher-secondary-btn" type="button">Browse Archive</button>
-        </footer>
-      </section>
+    <main class="slice-launcher">
+      <div id="slice-container" class="slice-container">
+        <div class="slice" style="--flex:1;opacity:0"></div>
+      </div>
+      <div class="slice-logo">Xefig &middot; Daily</div>
+      <button id="archive-nav-btn" class="slice-archive-btn" type="button">Archive</button>
     </main>
   `
 
-  const modeCardsContainer = document.querySelector('#mode-cards')
-  const previewMeta = document.querySelector('#preview-meta')
+  const container = document.querySelector('#slice-container')
   const archiveNavBtn = document.querySelector('#archive-nav-btn')
 
-  const handleModeCardClick = (mode, puzzleDate) => {
+  const handleSliceClick = (mode, puzzleDate) => {
     state.gameMode = normalizeGameMode(mode)
     state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
 
-    // Check for existing save
     const savedRun = getRunForMode(puzzleDate, state.gameMode)
     if (savedRun) {
       state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
@@ -608,7 +645,6 @@ function renderLauncher() {
       return
     }
 
-    // Check if completed at this difficulty — show completed state
     const completedModes = getCompletedModesForDate(puzzleDate)
     if (completedModes.has(state.gameMode)) {
       const entry = getCompletionEntry(puzzleDate, state.gameMode)
@@ -625,14 +661,37 @@ function renderLauncher() {
     renderGame()
   }
 
-  const bindModeEvents = () => {
-    const cards = modeCardsContainer.querySelectorAll('.mode-card')
-    for (const card of cards) {
-      card.addEventListener('click', () => {
-        const puzzleDate = state.puzzle?.date || todayDate
-        handleModeCardClick(card.dataset.mode, puzzleDate)
+  const bindSliceEvents = () => {
+    const slices = container.querySelectorAll('.slice')
+
+    const setActive = (index) => {
+      slices.forEach((s, i) => {
+        const isActive = i === index
+        s.classList.toggle('active', isActive)
+        s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
       })
     }
+
+    slices.forEach((slice, i) => {
+      slice.addEventListener('click', () => {
+        if (!slice.classList.contains('active')) {
+          setActive(i)
+          return
+        }
+        // Active slice click → play
+        const puzzleDate = state.puzzle?.date || todayDate
+        handleSliceClick(slice.dataset.mode, puzzleDate)
+      })
+    })
+
+    // Play buttons inside expanded slices
+    container.querySelectorAll('.slice-play-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const puzzleDate = state.puzzle?.date || todayDate
+        handleSliceClick(btn.dataset.mode, puzzleDate)
+      })
+    })
   }
 
   archiveNavBtn.addEventListener('click', () => {
@@ -650,13 +709,11 @@ function renderLauncher() {
     try {
       const payload = await fetchPuzzlePayload()
       state.puzzle = payload
-      previewMeta.textContent = `${payload.date}`
-      modeCardsContainer.innerHTML = renderModeCards(payload)
-      bindModeEvents()
-    } catch (error) {
-      previewMeta.textContent = error.message || 'Unable to load daily puzzle.'
-      modeCardsContainer.innerHTML = `
-        <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--error);">
+      container.innerHTML = renderSlices(payload)
+      bindSliceEvents()
+    } catch {
+      container.innerHTML = `
+        <div style="flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;">
           Failed to load today's puzzles.
         </div>
       `
@@ -677,12 +734,13 @@ function renderArchiveLauncher() {
     const puzzleDate = puzzlePayload?.date || state.archiveDate
     const completedModes = getCompletedModesForDate(puzzleDate)
     return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
-      .map((mode) => {
+      .map((mode, index) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isCompleted = completedModes.has(mode)
         const hasSave = hasActiveRun(puzzleDate, mode)
         const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
+        const isLCP = index === 0
         const badges = []
         if (isCompleted) {
           badges.push(`<span class="mode-card-badge mode-card-badge-completed">\u2713 ${entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''}</span>`)
@@ -695,7 +753,7 @@ function renderArchiveLauncher() {
           <button type="button" class="mode-card" data-mode="${mode}">
             ${badgeMarkup}
             <div class="mode-card-image-wrapper">
-              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" />
+              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" width="220" height="165" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
               <div class="mode-card-play-overlay">
                 <div class="play-icon">
                   <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -738,6 +796,11 @@ function renderArchiveLauncher() {
       </section>
     </main>
   `
+
+  requestAnimationFrame(() => {
+    const shell = app.querySelector('.launcher-shell')
+    if (shell) shell.classList.add('fx-ready')
+  })
 
   const dateInput = document.querySelector('#archive-date-input')
   const previewMeta = document.querySelector('#archive-preview-meta')
@@ -1231,14 +1294,11 @@ function renderGame({ resumeRun = null } = {}) {
       startActiveTimer(currentRun.elapsedActiveMs)
       bindGameActivity(() => persistActiveRun())
 
-      const PuzzleClass =
-        gameMode === GAME_MODE_SLIDING
-          ? SlidingTilePuzzle
-          : gameMode === GAME_MODE_SWAP
-            ? PictureSwapPuzzle
-            : gameMode === GAME_MODE_POLYGRAM
-              ? PolygramPuzzle
-            : JigsawPuzzle
+      const loaderKey = gameMode === GAME_MODE_SLIDING ? 'sliding'
+        : gameMode === GAME_MODE_SWAP ? 'swap'
+        : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
+        : 'jigsaw'
+      const PuzzleClass = await puzzleLoaders[loaderKey]()
       const puzzleConfig = {
         container: mount,
         imageUrl: state.imageUrl,

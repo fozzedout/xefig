@@ -2,7 +2,7 @@ import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type 
 import { generatePromptPacks } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
 import { processPngImage } from './image'
-import { findNextUnscheduledDate, getUtcDateKey, toCdnUrl, toPuzzleKey } from './puzzles'
+import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, toPuzzleKey } from './puzzles'
 
 const BATCH_JOB_KEY = 'batch-job:pending'
 
@@ -22,6 +22,7 @@ export type BatchSubmitResult = {
   batchName?: string
   targetDate?: string
   themes?: Record<string, string>
+  existingDate?: boolean
 }
 
 export type BatchPollResult = {
@@ -41,15 +42,18 @@ export type BatchPollResult = {
 // Phase 1: Submit batch job (daily cron)
 // ---------------------------------------------------------------------------
 
-export async function handleBatchSubmit(env: Bindings): Promise<BatchSubmitResult> {
+export async function handleBatchSubmit(
+  env: Bindings,
+  opts: { date?: string; force?: boolean } = {},
+): Promise<BatchSubmitResult> {
   if (!env.GOOGLE_AI_API_KEY) {
     return { submitted: false, message: 'GOOGLE_AI_API_KEY not configured.' }
   }
 
-  const existing = await env.metadata.get(BATCH_JOB_KEY)
-  if (existing) {
+  const existingJob = await env.metadata.get(BATCH_JOB_KEY)
+  if (existingJob) {
     let pendingJob: PendingBatchJob | null = null
-    try { pendingJob = JSON.parse(existing) as PendingBatchJob } catch {}
+    try { pendingJob = JSON.parse(existingJob) as PendingBatchJob } catch {}
     return {
       submitted: false,
       message: `Batch job already pending for ${pendingJob?.targetDate ?? 'unknown date'}.`,
@@ -58,10 +62,29 @@ export async function handleBatchSubmit(env: Bindings): Promise<BatchSubmitResul
     }
   }
 
-  const today = getUtcDateKey()
-  const targetDate = await findNextUnscheduledDate(env.metadata, today, 14)
-  if (!targetDate) {
-    return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
+  let targetDate: string | null
+  if (opts.date) {
+    if (!isValidDateKey(opts.date)) {
+      return { submitted: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
+    }
+    targetDate = opts.date
+
+    // Check if images already exist for this date
+    const existingPuzzle = await getPuzzleByDate(env.metadata, targetDate)
+    if (existingPuzzle && !opts.force) {
+      return {
+        submitted: false,
+        message: `Puzzle images already exist for ${targetDate}. Submit again with force to overwrite.`,
+        targetDate,
+        existingDate: true,
+      }
+    }
+  } else {
+    const today = getUtcDateKey()
+    targetDate = await findNextUnscheduledDate(env.metadata, today, 14)
+    if (!targetDate) {
+      return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
+    }
   }
 
   const [pack] = await generatePromptPacks(env.metadata, 1)

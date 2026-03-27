@@ -58,6 +58,393 @@ h1 {
   line-height: 1.1;
 }
 
+/* ─── Slice launcher (daily homepage) ─── */
+
+.slice-launcher {
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --accent-jigsaw: #f0c040;
+  --accent-slider: #40d0f0;
+  --accent-swap: #f06050;
+  --accent-polygram: #a060f0;
+  --text-light: #e8e6e0;
+  --text-dim: rgba(232, 230, 224, 0.5);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #0a0a0f;
+  overflow: hidden;
+}
+
+.slice-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.slice {
+  position: relative;
+  flex: var(--flex, 0.9);
+  overflow: hidden;
+  cursor: pointer;
+  transition: flex 0.8s var(--ease-expo);
+}
+
+.slice-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.15) contrast(1.05);
+}
+
+.slice-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.55);
+  transition: background 0.6s var(--ease-expo);
+}
+
+.slice.active .slice-overlay {
+  background: rgba(10, 10, 15, 0.2);
+}
+
+.slice:not(.active):hover .slice-overlay {
+  background: rgba(10, 10, 15, 0.38);
+}
+
+.slice-icon {
+  position: absolute;
+  top: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.7;
+  transition: opacity 0.4s, top 0.4s var(--ease-expo), left 0.4s var(--ease-expo), transform 0.4s var(--ease-expo);
+  z-index: 3;
+  color: var(--text-light);
+}
+
+.slice.active .slice-icon {
+  top: 2.5rem;
+  left: 2.5rem;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.slice-icon svg {
+  width: 32px;
+  height: 32px;
+  stroke-width: 1.5;
+}
+
+.slice-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.5rem;
+  z-index: 2;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--text-light);
+}
+
+.slice-number {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
+  transition: opacity 0.5s;
+}
+
+.slice-title {
+  font-size: clamp(1.8rem, 3vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+.slice-accent-bar {
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  height: 3px;
+  width: 0;
+  border-radius: 2px;
+  transition: width 0.6s var(--ease-expo);
+}
+
+.slice.active .slice-accent-bar {
+  width: 60px;
+}
+
+.slice-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.slice-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.slice-badge-pick {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-light);
+}
+
+.slice-badge-completed {
+  background: rgba(106, 195, 148, 0.35);
+  color: #b0f0d0;
+  text-transform: none;
+}
+
+.slice-badge-save {
+  background: rgba(104, 169, 231, 0.35);
+  color: #b0d8ff;
+}
+
+.slice-details {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.7s var(--ease-expo), opacity 0.5s 0.1s;
+}
+
+.slice.active .slice-details {
+  max-height: 300px;
+  opacity: 1;
+}
+
+.slice-desc {
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--text-dim);
+  margin: 0 0 1.2rem;
+  max-width: 340px;
+  font-weight: 400;
+}
+
+.slice-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.4rem;
+}
+
+.slice-tag {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  color: var(--text-dim);
+}
+
+.slice-play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #0a0a0f;
+  transition: transform 0.3s var(--ease-out-back), box-shadow 0.3s;
+  width: fit-content;
+  font-family: inherit;
+}
+
+.slice-play-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+}
+
+.slice-play-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Accent colors per mode */
+.slice[data-mode="jigsaw"] .slice-accent-bar,
+.slice[data-mode="jigsaw"] .slice-play-btn { background: var(--accent-jigsaw); }
+.slice[data-mode="jigsaw"] .slice-number { color: var(--accent-jigsaw); }
+
+.slice[data-mode="sliding"] .slice-accent-bar,
+.slice[data-mode="sliding"] .slice-play-btn { background: var(--accent-slider); }
+.slice[data-mode="sliding"] .slice-number { color: var(--accent-slider); }
+
+.slice[data-mode="swap"] .slice-accent-bar,
+.slice[data-mode="swap"] .slice-play-btn { background: var(--accent-swap); }
+.slice[data-mode="swap"] .slice-number { color: var(--accent-swap); }
+
+.slice[data-mode="polygram"] .slice-accent-bar,
+.slice[data-mode="polygram"] .slice-play-btn { background: var(--accent-polygram); }
+.slice[data-mode="polygram"] .slice-number { color: var(--accent-polygram); }
+
+/* Divider lines */
+.slice::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 10%;
+  height: 80%;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.08) 70%, transparent);
+  z-index: 5;
+}
+.slice:last-child::after { display: none; }
+
+/* Entrance animation */
+.slice {
+  opacity: 0;
+  transform: scaleX(0.92);
+  animation: sliceIn 0.8s var(--ease-expo) forwards;
+}
+.slice:nth-child(1) { animation-delay: 0.1s; }
+.slice:nth-child(2) { animation-delay: 0.2s; }
+.slice:nth-child(3) { animation-delay: 0.3s; }
+.slice:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes sliceIn {
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+/* Corner branding */
+.slice-logo {
+  position: absolute;
+  top: 1.5rem;
+  right: 2rem;
+  z-index: 100;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+/* Archive link */
+.slice-archive-btn {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 2rem;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.45rem 1rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  backdrop-filter: blur(8px);
+}
+
+.slice-archive-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-light);
+}
+
+/* ─── Portrait / Mobile ─── */
+@media (orientation: portrait), (max-width: 768px) {
+  .slice-container {
+    flex-direction: column;
+  }
+
+  .slice {
+    border-right: none;
+    transform: scaleY(0.92);
+    animation-name: sliceInV;
+  }
+
+  .slice::after {
+    right: 10%;
+    top: auto;
+    bottom: 0;
+    height: 1px;
+    width: 80%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.08) 70%, transparent);
+  }
+
+  .slice-content {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+
+  .slice.active .slice-content {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+
+  .slice-icon {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+  }
+
+  .slice.active .slice-icon {
+    position: absolute;
+    top: 1.5rem;
+    left: 1.5rem;
+  }
+
+  .slice-title {
+    font-size: clamp(1.4rem, 5vw, 2.2rem);
+  }
+
+  .slice-desc {
+    max-width: 100%;
+  }
+
+  .slice-logo {
+    top: auto;
+    bottom: 0.8rem;
+    right: 1rem;
+    font-size: 0.65rem;
+  }
+
+  .slice-archive-btn {
+    bottom: 0.8rem;
+    left: 1rem;
+    right: auto;
+    padding: 0.35rem 0.75rem;
+  }
+
+  @keyframes sliceInV {
+    to { opacity: 1; transform: scaleY(1); }
+  }
+}
+
+/* ─── Launcher shell (archive view) ─── */
+
 .launcher-shell {
   min-height: 100%;
   display: grid;
@@ -76,9 +463,15 @@ h1 {
   content: '';
   position: absolute;
   border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Defer expensive blur + animation until after first paint */
+.launcher-shell.fx-ready::before,
+.launcher-shell.fx-ready::after {
   filter: blur(32px);
   opacity: 0.42;
-  pointer-events: none;
   animation: launcher-float 11s ease-in-out infinite alternate;
 }
 

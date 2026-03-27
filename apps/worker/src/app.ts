@@ -95,7 +95,9 @@ export function createApp() {
       )
     }
 
-    return c.json(puzzle)
+    return c.json(puzzle, 200, {
+      'cache-control': 'public, s-maxage=300, max-age=60, stale-while-revalidate=600',
+    })
   })
 
   app.get('/api/puzzles/:date', async (c) => {
@@ -114,7 +116,9 @@ export function createApp() {
       )
     }
 
-    return c.json(puzzle)
+    return c.json(puzzle, 200, {
+      'cache-control': 'public, s-maxage=300, max-age=60, stale-while-revalidate=600',
+    })
   })
 
   app.get('/api/admin/puzzles/next-empty', async (c) => {
@@ -422,7 +426,16 @@ export function createApp() {
     }
 
     try {
-      const result = await handleBatchSubmit(c.env)
+      let body: { date?: string; force?: boolean } | null = null
+      try {
+        body = (await c.req.json()) as { date?: string; force?: boolean }
+      } catch {
+        // No body is fine — falls back to next unscheduled date
+      }
+      const date = typeof body?.date === 'string' ? body.date.trim() : undefined
+      const force = body?.force === true
+
+      const result = await handleBatchSubmit(c.env, { date, force })
       return c.json({ ok: result.submitted, ...result })
     } catch (error) {
       console.error('Batch submit failed', error)

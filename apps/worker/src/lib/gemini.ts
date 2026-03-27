@@ -1,7 +1,7 @@
 import type { PuzzleCategory } from '../types'
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image'
+const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
 
 // ---------------------------------------------------------------------------
 // Batch job types

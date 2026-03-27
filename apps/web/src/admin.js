@@ -956,16 +956,42 @@ autoGenerateBtn.addEventListener('click', async () => {
     return
   }
 
+  const selectedDate = dateInput.value.trim() || undefined
+
   autoGenerateBtn.disabled = true
   setStatus('Submitting batch image generation job...', 'working')
   try {
-    const { response, payload } = await adminFetch('/api/admin/generate-images', {
-      method: 'POST',
-    })
+    const submitBatch = async (force = false) => {
+      const body = {}
+      if (selectedDate) body.date = selectedDate
+      if (force) body.force = true
+      return adminFetch('/api/admin/generate-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    }
+
+    let { response, payload } = await submitBatch()
+
     if (response.status === 401) {
       setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
       return
     }
+
+    // If images already exist, ask for confirmation before overwriting
+    if (!response.ok && payload.existingDate) {
+      if (!confirm(`Puzzle images already exist for ${payload.targetDate}. Overwrite them?`)) {
+        setStatus('Batch submit cancelled.', 'error')
+        return
+      }
+      ;({ response, payload } = await submitBatch(true))
+      if (response.status === 401) {
+        setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+        return
+      }
+    }
+
     if (!response.ok) {
       setStatus(payload.error || 'Batch submit failed.', 'error')
       return
