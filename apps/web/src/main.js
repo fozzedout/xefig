@@ -14,6 +14,41 @@ const API_BASE = ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
+const BOARD_COLOR_KEY = 'xefig:board-color:v1'
+
+const BOARD_COLORS_LIGHT = [
+  { name: 'birch', color: '#d6cbb5' },
+  { name: 'maple', color: '#cba96a' },
+  { name: 'oak', color: '#b08848' },
+  { name: 'cherry', color: '#9a5e42' },
+  { name: 'image', color: null },
+]
+
+const BOARD_COLORS_DARK = [
+  { name: 'walnut', color: '#3d2e22' },
+  { name: 'mahogany', color: '#3a2222' },
+  { name: 'dark oak', color: '#2e2518' },
+  { name: 'ebony', color: '#1e1a16' },
+  { name: 'image', color: null },
+]
+
+function isDarkMode() {
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches
+}
+
+function getBoardColors() {
+  return isDarkMode() ? BOARD_COLORS_DARK : BOARD_COLORS_LIGHT
+}
+
+function getGlobalBoardColorIndex() {
+  const saved = Number(localStorage.getItem(BOARD_COLOR_KEY))
+  const colors = getBoardColors()
+  return Number.isFinite(saved) && saved >= 0 && saved < colors.length ? saved : 0
+}
+
+function setGlobalBoardColorIndex(index) {
+  localStorage.setItem(BOARD_COLOR_KEY, String(index))
+}
 const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
 const GAME_MODE_SWAP = 'swap'
@@ -576,7 +611,7 @@ function renderLauncher() {
     const completedModes = getCompletedModesForDate(puzzleDate)
     return modes
       .map((mode, index) => {
-        const imageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const title = MODE_LABELS[mode]
         const isPick = mode === pickMode
         const isActive = isPick
@@ -586,53 +621,36 @@ function renderLauncher() {
         const flex = isActive ? ACTIVE_FLEX : INACTIVE_FLEX
         const isLCP = index === 0
 
-        const badges = []
-        if (isPick) badges.push('<span class="slice-badge slice-badge-pick">Daily Pick</span>')
-        if (isCompleted) {
-          const t = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''
-          badges.push(`<span class="slice-badge slice-badge-completed">\u2713 ${t}</span>`)
-        }
-        if (hasSave) badges.push('<span class="slice-badge slice-badge-save">\u25B6 Resume</span>')
-
         return `
           <div class="slice${isActive ? ' active' : ''}" data-mode="${mode}" style="--flex: ${flex};">
             <img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
             <div class="slice-overlay"></div>
             <div class="slice-icon">${SLICE_ICONS[mode]}</div>
-            <div class="slice-content">
-              <div class="slice-number">Mode ${String(index + 1).padStart(2, '0')}</div>
-              <div class="slice-title">
-                ${title}
-                <span class="slice-accent-bar"></span>
+            <div class="slice-bar">
+              <span class="bar-title">${title}</span>
+              <div class="bar-icon info-btn" title="More info">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 7v5M8 4.5v.5"/></svg>
               </div>
-              <div class="slice-badges">${badges.join('')}</div>
-              <div class="slice-details">
-                <p class="slice-desc">${SLICE_DESCRIPTIONS[mode]}</p>
-                <div class="slice-tags">${SLICE_TAGS[mode].map((t) => `<span class="slice-tag">${t}</span>`).join('')}</div>
-                <button class="slice-play-btn" data-mode="${mode}" type="button">
-                  ${hasSave ? 'Resume' : 'Play'}
-                  <svg viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
-                </button>
-              </div>
+              <div class="bar-spacer"></div>
+              ${hasSave ? `<div class="bar-icon has-save" title="Save exists"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg></div>` : ''}
             </div>
+            <div class="info-panel" data-mode="${mode}"></div>
           </div>
         `
       })
       .join('')
   }
 
-  app.innerHTML = `
+  const pageEl = document.querySelector('#page-play')
+  pageEl.innerHTML = `
     <main class="slice-launcher">
       <div id="slice-container" class="slice-container">
         <div class="slice" style="--flex:1;opacity:0"></div>
       </div>
-      <div class="slice-logo">Xefig &middot; Daily</div>
-      <button id="archive-nav-btn" class="slice-archive-btn" type="button">Archive</button>
     </main>
   `
 
-  const container = document.querySelector('#slice-container')
-  const archiveNavBtn = document.querySelector('#archive-nav-btn')
+  const container = pageEl.querySelector('#slice-container')
 
   const handleSliceClick = (mode, puzzleDate) => {
     state.gameMode = normalizeGameMode(mode)
@@ -653,7 +671,7 @@ function renderLauncher() {
         puzzleDate,
         entry,
         onReplay: () => renderGame(),
-        onBack: () => renderLauncher(),
+        onBack: () => returnFromGame(),
       })
       return
     }
@@ -661,10 +679,38 @@ function renderLauncher() {
     renderGame()
   }
 
+  const ACCENT_MAP = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0' }
+
+  const buildInfoPanel = (panel, mode, index) => {
+    const title = MODE_LABELS[mode]
+    const accent = ACCENT_MAP[mode]
+    const puzzleDate = state.puzzle?.date || todayDate
+    const hasSave = hasActiveRun(puzzleDate, mode)
+    panel.innerHTML = `
+      <div class="info-close"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 1l8 8M9 1l-8 8"/></svg></div>
+      <div class="info-title">${title}<span class="info-accent-bar" style="background:${accent}"></span></div>
+      <p class="info-description">${SLICE_DESCRIPTIONS[mode]}</p>
+      <button class="info-play-btn" data-mode="${mode}" style="background:${accent}">${hasSave ? 'Resume' : 'Play'} <svg viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg></button>
+    `
+    panel.querySelector('.info-close').addEventListener('click', (e) => {
+      e.stopPropagation()
+      panel.classList.remove('open')
+    })
+    panel.querySelector('.info-play-btn').addEventListener('click', (e) => {
+      e.stopPropagation()
+      handleSliceClick(panel.dataset.mode, state.puzzle?.date || todayDate)
+    })
+  }
+
   const bindSliceEvents = () => {
     const slices = container.querySelectorAll('.slice')
 
+    const closeAllPanels = () => {
+      container.querySelectorAll('.info-panel.open').forEach(p => p.classList.remove('open'))
+    }
+
     const setActive = (index) => {
+      closeAllPanels()
       slices.forEach((s, i) => {
         const isActive = i === index
         s.classList.toggle('active', isActive)
@@ -673,7 +719,23 @@ function renderLauncher() {
     }
 
     slices.forEach((slice, i) => {
-      slice.addEventListener('click', () => {
+      const infoBtn = slice.querySelector('.bar-icon.info-btn')
+      const panel = slice.querySelector('.info-panel')
+
+      if (infoBtn && panel) {
+        infoBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          if (!panel.innerHTML.trim()) {
+            buildInfoPanel(panel, slice.dataset.mode, i)
+          }
+          panel.classList.toggle('open')
+        })
+      }
+
+      slice.addEventListener('click', (e) => {
+        // Ignore clicks on info panel or info button
+        if (e.target.closest('.info-panel') || e.target.closest('.info-btn')) return
+
         if (!slice.classList.contains('active')) {
           setActive(i)
           return
@@ -683,20 +745,7 @@ function renderLauncher() {
         handleSliceClick(slice.dataset.mode, puzzleDate)
       })
     })
-
-    // Play buttons inside expanded slices
-    container.querySelectorAll('.slice-play-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const puzzleDate = state.puzzle?.date || todayDate
-        handleSliceClick(btn.dataset.mode, puzzleDate)
-      })
-    })
   }
-
-  archiveNavBtn.addEventListener('click', () => {
-    renderArchiveLauncher()
-  })
 
   // Migrate legacy single-key save to per-mode storage
   const legacyRun = getResumableRun()
@@ -721,117 +770,51 @@ function renderLauncher() {
   })()
 }
 
-function renderArchiveLauncher() {
-  destroyPuzzle()
+const ARCHIVE_START_DATE = '2026-03-17'
+const ARCHIVE_ACCENT_MAP = {
+  [GAME_MODE_JIGSAW]: '#f0c040',
+  [GAME_MODE_SLIDING]: '#40d0f0',
+  [GAME_MODE_SWAP]: '#f06050',
+  [GAME_MODE_POLYGRAM]: '#a060f0',
+}
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
+function renderArchivePage() {
+  const pageEl = document.querySelector('#page-archive')
   const todayDate = getIsoDate(new Date())
   state.sourceMode = 'archive'
-  state.archiveDate = state.archiveDate || todayDate
-  state.gameMode = normalizeGameMode(state.gameMode || getGameModeOfDay(state.archiveDate))
   state.difficulty = state.difficulty || 'medium'
 
-  const renderModeCards = (puzzlePayload) => {
-    const puzzleDate = puzzlePayload?.date || state.archiveDate
-    const completedModes = getCompletedModesForDate(puzzleDate)
-    return [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
-      .map((mode, index) => {
-        const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
-        const title = MODE_LABELS[mode]
-        const isCompleted = completedModes.has(mode)
-        const hasSave = hasActiveRun(puzzleDate, mode)
-        const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
-        const isLCP = index === 0
-        const badges = []
-        if (isCompleted) {
-          badges.push(`<span class="mode-card-badge mode-card-badge-completed">\u2713 ${entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : ''}</span>`)
-        }
-        if (hasSave) {
-          badges.push('<span class="mode-card-badge mode-card-badge-save">\u25B6 Resume</span>')
-        }
-        const badgeMarkup = badges.join('')
-        return `
-          <button type="button" class="mode-card" data-mode="${mode}">
-            ${badgeMarkup}
-            <div class="mode-card-image-wrapper">
-              <img class="mode-card-image" src="${imageUrl}" alt="${title} preview" width="220" height="165" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
-              <div class="mode-card-play-overlay">
-                <div class="play-icon">
-                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                </div>
-              </div>
-            </div>
-            <div class="mode-card-info">
-              <span class="mode-card-title">${title}</span>
-            </div>
-          </button>
-        `
-      })
-      .join('')
-  }
-
-  app.innerHTML = `
-    <main class="launcher-shell">
-      <section class="launcher-main">
-        <header class="launcher-header">
-          <p class="eyebrow">Archive Mode</p>
-          <h1>Pick Any Day</h1>
-          <p id="archive-preview-meta" class="launcher-copy">Select a date to load a puzzle.</p>
-        </header>
-
-        <div class="archive-date-row">
-          <button id="archive-prev-btn" class="archive-nav-arrow" type="button" aria-label="Previous day">&lsaquo;</button>
-          <input id="archive-date-input" type="date" value="${state.archiveDate}" min="2026-03-17" max="${todayDate}" class="archive-date-input" />
-          <button id="archive-next-btn" class="archive-nav-arrow" type="button" aria-label="Next day">&rsaquo;</button>
+  pageEl.innerHTML = `
+    <div class="archive-page">
+      <div class="archive-top-bar">
+        <h2>Archive</h2>
+        <div class="archive-filters">
+          <button class="filter-chip active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="in-progress">In Progress</button>
+          <button class="filter-chip" data-filter="completed">Completed</button>
         </div>
-
-        <div id="archive-mode-cards" class="mode-cards-grid">
-           <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--muted);">
-            Select a date to see puzzles...
-          </div>
-        </div>
-
-        <footer class="launcher-footer">
-          <button id="archive-back-btn" class="launcher-secondary-btn" type="button">Back To Daily</button>
-        </footer>
-      </section>
-    </main>
+      </div>
+      <div class="timeline" id="archive-timeline"></div>
+    </div>
   `
 
-  requestAnimationFrame(() => {
-    const shell = app.querySelector('.launcher-shell')
-    if (shell) shell.classList.add('fx-ready')
-  })
-
-  const dateInput = document.querySelector('#archive-date-input')
-  const previewMeta = document.querySelector('#archive-preview-meta')
-  const modeCardsContainer = document.querySelector('#archive-mode-cards')
-  const prevBtn = document.querySelector('#archive-prev-btn')
-  const nextBtn = document.querySelector('#archive-next-btn')
-  const backBtn = document.querySelector('#archive-back-btn')
+  const timeline = pageEl.querySelector('#archive-timeline')
+  const allDays = []
+  let loadedCount = 0
+  const BATCH_SIZE = 10
 
   function addDays(dateKey, n) {
     return new Date(Date.parse(`${dateKey}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
   }
 
-  prevBtn.addEventListener('click', () => {
-    const prev = addDays(state.archiveDate, -1)
-    if (prev < '2026-03-17') return
-    state.archiveDate = prev
-    dateInput.value = state.archiveDate
-    loadArchivePreview()
-  })
-
-  nextBtn.addEventListener('click', () => {
-    const next = addDays(state.archiveDate, 1)
-    if (next > todayDate) return
-    state.archiveDate = next
-    dateInput.value = state.archiveDate
-    loadArchivePreview()
-  })
-
-  const handleArchiveModeCardClick = (mode, puzzleDate) => {
+  function handleThumbClick(puzzlePayload, mode, puzzleDate) {
+    state.sourceMode = 'archive'
+    state.archiveDate = puzzleDate
+    state.puzzle = puzzlePayload
     state.gameMode = normalizeGameMode(mode)
-    state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+    state.imageUrl = resolvePuzzleImageUrl(puzzlePayload, state.gameMode)
 
     const savedRun = getRunForMode(puzzleDate, state.gameMode)
     if (savedRun) {
@@ -848,7 +831,7 @@ function renderArchiveLauncher() {
         puzzleDate,
         entry,
         onReplay: () => renderGame(),
-        onBack: () => renderArchiveLauncher(),
+        onBack: () => returnFromGame(),
       })
       return
     }
@@ -856,48 +839,174 @@ function renderArchiveLauncher() {
     renderGame()
   }
 
-  const bindModeEvents = () => {
-    const cards = modeCardsContainer.querySelectorAll('.mode-card')
-    for (const card of cards) {
-      card.addEventListener('click', () => {
-        const puzzleDate = state.puzzle?.date || state.archiveDate
-        handleArchiveModeCardClick(card.dataset.mode, puzzleDate)
+  function renderDayEntry(puzzlePayload, dateKey, index) {
+    const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
+    const isToday = dateKey === todayDate
+    const completedModes = getCompletedModesForDate(dateKey)
+    const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+
+    const thumbsHtml = modes
+      .map((mode) => {
+        const title = MODE_LABELS[mode]
+        const accent = ARCHIVE_ACCENT_MAP[mode]
+        const isCompleted = completedModes.has(mode)
+        const hasSave = hasActiveRun(dateKey, mode)
+        const thumbUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
+        let statusClass = 'new'
+        let statusLabel = 'new'
+        if (isCompleted) {
+          statusClass = 'completed'
+          const entry = getCompletionEntry(dateKey, mode)
+          statusLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '\u2713'
+        } else if (hasSave) {
+          statusClass = 'resume'
+          statusLabel = '\u25B6 resume'
+        }
+
+        return `<div class="puzzle-thumb" data-mode="${mode}" data-date="${dateKey}">
+          <div class="thumb-accent" style="background:${accent}"></div>
+          <div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>
+          <div class="thumb-info">
+            <div class="thumb-mode" style="color:${accent}">${title}</div>
+            <div class="thumb-right">
+              <span class="thumb-status ${statusClass}">${statusLabel}</span>
+              ${hasSave ? '<svg class="thumb-save-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg>' : ''}
+            </div>
+          </div>
+        </div>`
       })
-    }
+      .join('')
+
+    const dayName = DAY_NAMES[d.getUTCDay()]
+    const monthStr = MONTH_NAMES[d.getUTCMonth()].slice(0, 3)
+
+    const el = document.createElement('div')
+    el.className = 'timeline-day' + (isToday ? ' today' : '')
+    el.style.animationDelay = (index * 0.06) + 's'
+    el.dataset.date = dateKey
+    el.dataset.hasCompleted = completedModes.size > 0 ? '1' : ''
+    el.dataset.hasResume = modes.some((m) => hasActiveRun(dateKey, m)) ? '1' : ''
+    el.innerHTML = `
+      <div class="day-header">
+        <div class="day-date">${monthStr} ${d.getUTCDate()}</div>
+        <div class="day-label${isToday ? ' today-label' : ''}">${isToday ? 'Today' : dayName}</div>
+      </div>
+      <div class="day-puzzles">${thumbsHtml}</div>
+    `
+
+    // Bind click handlers on thumbs
+    el.querySelectorAll('.puzzle-thumb').forEach((thumb) => {
+      thumb.addEventListener('click', () => {
+        handleThumbClick(puzzlePayload, thumb.dataset.mode, thumb.dataset.date)
+      })
+    })
+
+    return el
   }
 
-  const loadArchivePreview = async () => {
-    if (!dateInput.value) {
-      previewMeta.textContent = 'Choose an archive date.'
-      return
+  let loading = false
+  let exhausted = false
+
+  // Sentinel element at the bottom — triggers loading when scrolled into view
+  const sentinel = document.createElement('div')
+  sentinel.className = 'timeline-loading'
+  sentinel.textContent = 'Loading\u2026'
+  timeline.appendChild(sentinel)
+
+  async function loadBatch() {
+    if (loading || exhausted) return
+    loading = true
+
+    const fragment = document.createDocumentFragment()
+    let lastMonth = -1
+
+    if (loadedCount > 0) {
+      const prevDate = new Date(Date.parse(`${addDays(todayDate, -(loadedCount - 1))}T00:00:00Z`))
+      lastMonth = prevDate.getUTCMonth()
     }
 
-    state.archiveDate = dateInput.value
-    previewMeta.textContent = 'Loading archive puzzle...'
+    let loaded = 0
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      const dateKey = addDays(todayDate, -(loadedCount + i))
+      if (dateKey < ARCHIVE_START_DATE) {
+        exhausted = true
+        break
+      }
 
-    try {
-      const payload = await fetchPuzzlePayload({ date: state.archiveDate })
-      state.puzzle = payload
-      previewMeta.textContent = `${payload.date}`
-      modeCardsContainer.innerHTML = renderModeCards(payload)
-      bindModeEvents()
-    } catch (error) {
-      state.puzzle = null
-      previewMeta.textContent = error.message || 'Unable to load archive puzzle.'
-      modeCardsContainer.innerHTML = `
-        <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--error);">
-          Failed to load archive puzzles.
-        </div>
-      `
+      const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
+      const m = d.getUTCMonth()
+
+      if (m !== lastMonth) {
+        lastMonth = m
+        const divider = document.createElement('div')
+        divider.className = 'month-divider'
+        divider.innerHTML = `<span>${MONTH_NAMES[m]} ${d.getUTCFullYear()}</span>`
+        fragment.appendChild(divider)
+      }
+
+      try {
+        const payload = await fetchPuzzlePayload({ date: dateKey })
+        const dayEl = renderDayEntry(payload, dateKey, i)
+        allDays.push({ dateKey, el: dayEl, payload })
+        fragment.appendChild(dayEl)
+      } catch {
+        // Day has no puzzle — skip
+      }
+      loaded++
     }
+
+    timeline.insertBefore(fragment, sentinel)
+    loadedCount += loaded
+
+    if (exhausted || loaded === 0) {
+      sentinel.remove()
+      observer.disconnect()
+    }
+
+    loading = false
   }
 
-  dateInput.addEventListener('change', loadArchivePreview)
-  backBtn.addEventListener('click', () => {
-    renderLauncher()
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) loadBatch()
+    },
+    { root: pageEl.querySelector('.archive-page'), rootMargin: '200px' },
+  )
+  observer.observe(sentinel)
+
+  // Filter chips
+  pageEl.querySelectorAll('.filter-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      pageEl.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'))
+      chip.classList.add('active')
+      const filter = chip.dataset.filter
+
+      timeline.querySelectorAll('.timeline-day').forEach((day) => {
+        if (filter === 'all') {
+          day.style.display = ''
+        } else if (filter === 'in-progress') {
+          day.style.display = day.dataset.hasResume ? '' : 'none'
+        } else if (filter === 'completed') {
+          day.style.display = day.dataset.hasCompleted ? '' : 'none'
+        }
+      })
+      // Also hide/show month dividers based on next visible day
+      timeline.querySelectorAll('.month-divider').forEach((div) => {
+        let next = div.nextElementSibling
+        while (next && !next.classList.contains('timeline-day') && !next.classList.contains('month-divider')) {
+          next = next.nextElementSibling
+        }
+        if (!next || next.classList.contains('month-divider')) {
+          div.style.display = 'none'
+        } else {
+          div.style.display = next.style.display
+        }
+      })
+    })
   })
 
-  loadArchivePreview()
+  loadBatch()
+  archiveRendered = true
 }
 
 function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboardEntries, totalEntries, playerGuid: myGuid }) {
@@ -969,7 +1078,9 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
   const modeLabel = MODE_LABELS[gameMode] || gameMode
   const imageUrl = resolvePuzzleImageUrl(state.puzzle, gameMode)
 
-  app.innerHTML = `
+  showGamePage()
+  const gameEl = document.querySelector('#page-game')
+  gameEl.innerHTML = `
     <main class="completed-screen">
       <div class="completed-screen-card">
         <div class="completed-screen-image-wrap">
@@ -1043,7 +1154,9 @@ function renderGame({ resumeRun = null } = {}) {
   const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
   state.gameMode = gameMode
 
-  app.innerHTML = `
+  showGamePage()
+  const gameEl = document.querySelector('#page-game')
+  gameEl.innerHTML = `
     <main class="game-shell">
       <header class="game-toolbar">
         <button id="back-btn" class="toolbar-btn back-btn" type="button" aria-label="Back to launcher">
@@ -1076,13 +1189,6 @@ function renderGame({ resumeRun = null } = {}) {
               <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z" />
             </svg>
           </button>
-          ${gameMode === GAME_MODE_JIGSAW ? `
-          <button id="settings-btn" class="toolbar-btn icon-btn" type="button" aria-label="Puzzle settings" title="Settings">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M19.14 12.94a7.07 7.07 0 0 0 .06-.94c0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.04 7.04 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.3.59.22l2.39-.96c.49.37 1.03.7 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z" />
-            </svg>
-          </button>
-          ` : ''}
         </div>
       </header>
 
@@ -1090,31 +1196,12 @@ function renderGame({ resumeRun = null } = {}) {
         <div id="puzzle-mount" class="puzzle-mount"></div>
       </section>
     </main>
-
-    ${gameMode === GAME_MODE_JIGSAW ? `
-    <div id="settings-modal" class="settings-overlay" hidden>
-      <div class="settings-panel">
-        <div class="settings-header">
-          <span class="settings-title">Settings</span>
-          <button id="settings-close-btn" class="toolbar-btn icon-btn" type="button" aria-label="Close settings">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12 5.7 16.89a1 1 0 1 0 1.41 1.41L12 13.41l4.89 4.89a1 1 0 0 0 1.41-1.41L13.41 12l4.89-4.89a1 1 0 0 0 0-1.4Z" />
-            </svg>
-          </button>
-        </div>
-        <div class="settings-body">
-          <label class="settings-label">Board background</label>
-          <div id="board-color-options" class="board-color-options"></div>
-        </div>
-      </div>
-    </div>
-    ` : ''}
   `
 
-  const statusEl = document.querySelector('#status')
-  const mount = document.querySelector('#puzzle-mount')
-  const backBtn = document.querySelector('#back-btn')
-  const viewBtn = document.querySelector('#view-btn')
+  const statusEl = gameEl.querySelector('#status')
+  const mount = gameEl.querySelector('#puzzle-mount')
+  const backBtn = gameEl.querySelector('#back-btn')
+  const viewBtn = gameEl.querySelector('#view-btn')
 
   const setStatus = (message, variant = '') => {
     statusEl.textContent = message
@@ -1133,11 +1220,7 @@ function renderGame({ resumeRun = null } = {}) {
     document.removeEventListener('gesturechange', preventBrowserZoom)
     document.removeEventListener('gestureend', preventBrowserZoom)
     persistActiveRun()
-    if (state.sourceMode === 'archive') {
-      renderArchiveLauncher()
-    } else {
-      renderLauncher()
-    }
+    returnFromGame()
   })
 
   viewBtn.addEventListener('click', () => {
@@ -1149,7 +1232,7 @@ function renderGame({ resumeRun = null } = {}) {
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   })
 
-  const restartBtn = document.querySelector('#restart-btn')
+  const restartBtn = gameEl.querySelector('#restart-btn')
   restartBtn.addEventListener('click', () => {
     if (!currentRun) return
     if (!confirm('Restart this puzzle? Your current progress will be lost.')) return
@@ -1193,13 +1276,8 @@ function renderGame({ resumeRun = null } = {}) {
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   })
 
-  const highlightBtn = document.querySelector('#highlight-btn')
-  const edgesBtn = document.querySelector('#edges-btn')
-  const settingsBtn = document.querySelector('#settings-btn')
-  const settingsModal = document.querySelector('#settings-modal')
-  const settingsCloseBtn = document.querySelector('#settings-close-btn')
-  const boardColorOptions = document.querySelector('#board-color-options')
-
+  const highlightBtn = gameEl.querySelector('#highlight-btn')
+  const edgesBtn = gameEl.querySelector('#edges-btn')
   if (highlightBtn) {
     highlightBtn.addEventListener('click', () => {
       puzzle?.highlightLoosePieces()
@@ -1211,51 +1289,6 @@ function renderGame({ resumeRun = null } = {}) {
       if (!puzzle) return
       const active = puzzle.toggleEdgesOnly()
       edgesBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
-    })
-  }
-
-  const renderBoardColorOptions = () => {
-    if (!boardColorOptions || !puzzle) return
-    const options = puzzle.getBoardColorOptions()
-    boardColorOptions.innerHTML = options
-      .map(
-        (opt, i) =>
-          `<button class="board-color-swatch${opt.active ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${opt.name}" title="${opt.name}"${opt.color ? ` style="background:${opt.color}"` : ''}>${opt.color ? '' : '🖼'}</button>`,
-      )
-      .join('')
-  }
-
-  if (boardColorOptions) {
-    boardColorOptions.addEventListener('click', (event) => {
-      const btn = event.target.closest('[data-index]')
-      if (!btn || !puzzle) return
-      puzzle.setBoardColorIndex(Number(btn.dataset.index))
-      renderBoardColorOptions()
-    })
-  }
-
-  const openSettings = () => {
-    if (!settingsModal) return
-    renderBoardColorOptions()
-    settingsModal.hidden = false
-  }
-
-  const closeSettings = () => {
-    if (!settingsModal) return
-    settingsModal.hidden = true
-  }
-
-  if (settingsBtn) {
-    settingsBtn.addEventListener('click', openSettings)
-  }
-
-  if (settingsCloseBtn) {
-    settingsCloseBtn.addEventListener('click', closeSettings)
-  }
-
-  if (settingsModal) {
-    settingsModal.addEventListener('click', (event) => {
-      if (event.target === settingsModal) closeSettings()
     })
   }
 
@@ -1303,6 +1336,7 @@ function renderGame({ resumeRun = null } = {}) {
         container: mount,
         imageUrl: state.imageUrl,
         difficulty: state.difficulty,
+        boardColorIndex: getGlobalBoardColorIndex(),
         onProgress: ({ completed, state: progressState }) => {
           if (currentRun) {
             currentRun.completed = Boolean(completed)
@@ -1415,4 +1449,158 @@ function destroyPuzzle() {
   }
 }
 
-renderLauncher()
+// ─── Nav + page shell ───
+
+const NAV_HTML = `
+<nav class="top-nav" id="topNav">
+  <div class="nav-brand">Xefig</div>
+  <div class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-page="play">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+        <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+      </svg>
+      <span>Play</span>
+    </button>
+    <button class="nav-tab" data-page="archive">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12M3 4v8a1 1 0 001 1h8a1 1 0 001-1V4"/><path d="M6 7h4"/>
+      </svg>
+      <span>Archive</span>
+    </button>
+    <button class="nav-tab" data-page="settings">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="2.5"/>
+        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4"/>
+      </svg>
+      <span>Settings</span>
+    </button>
+    <div class="nav-indicator" id="navIndicator"></div>
+  </div>
+</nav>
+<div class="app-page visible" id="page-play"></div>
+<div class="app-page" id="page-archive"></div>
+<div class="app-page" id="page-settings"></div>
+<div class="app-page" id="page-game"></div>
+`
+
+let currentPage = 'play'
+let archiveRendered = false
+let settingsRendered = false
+
+function initAppShell() {
+  app.innerHTML = NAV_HTML
+
+  const topNav = document.querySelector('#topNav')
+  const tabs = [...document.querySelectorAll('.nav-tab')]
+  const indicator = document.querySelector('#navIndicator')
+
+  function updateIndicator(tab) {
+    const r = tab.getBoundingClientRect()
+    const pr = tab.parentElement.getBoundingClientRect()
+    indicator.style.left = (r.left - pr.left) + 'px'
+    indicator.style.width = r.width + 'px'
+  }
+
+  function switchPage(pageName) {
+    if (pageName === currentPage) return
+    currentPage = pageName
+
+    // If coming back from game, clean up
+    if (puzzle) destroyPuzzle()
+    document.querySelector('#page-game').innerHTML = ''
+
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
+    document.querySelectorAll('.app-page').forEach((p) => {
+      p.classList.toggle('visible', p.id === `page-${pageName}`)
+    })
+    const activeTab = tabs.find((t) => t.dataset.page === pageName)
+    if (activeTab) updateIndicator(activeTab)
+    topNav.classList.toggle('solid', pageName !== 'play')
+    topNav.classList.remove('hidden')
+
+    if (pageName === 'play') {
+      renderLauncher()
+    } else if (pageName === 'archive') {
+      if (!archiveRendered) renderArchivePage()
+    } else if (pageName === 'settings') {
+      renderSettingsPage()
+    }
+  }
+
+  window.switchToPage = switchPage
+
+  tabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
+  requestAnimationFrame(() => updateIndicator(tabs[0]))
+  window.addEventListener('resize', () => {
+    const active = tabs.find((t) => t.classList.contains('active'))
+    if (active) updateIndicator(active)
+  })
+
+  renderLauncher()
+}
+
+function showGamePage() {
+  currentPage = 'game'
+  document.querySelector('#topNav').classList.add('hidden')
+  document.querySelectorAll('.app-page').forEach((p) => {
+    p.classList.toggle('visible', p.id === 'page-game')
+  })
+}
+
+function returnFromGame() {
+  if (state.sourceMode === 'archive') {
+    archiveRendered = false
+    window.switchToPage('archive')
+  } else {
+    window.switchToPage('play')
+  }
+}
+
+function renderSettingsPage() {
+  const container = document.querySelector('#page-settings')
+  const colors = getBoardColors()
+  const activeIndex = getGlobalBoardColorIndex()
+
+  container.innerHTML = `
+    <div class="settings-page">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <p>Customize your puzzle experience.</p>
+      </div>
+      <div class="settings-sections">
+        <div class="settings-group">
+          <div class="settings-group-title">Board Background</div>
+          <div id="settings-board-colors" class="settings-color-grid">
+            ${colors
+              .map(
+                (c, i) =>
+                  `<div style="text-align:center">
+                    <button class="settings-color-swatch${i === activeIndex ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${c.name}" title="${c.name}"${c.color ? ` style="background:${c.color}"` : ''}>
+                      ${c.color ? '' : '\ud83d\uddbc'}
+                    </button>
+                    <div class="settings-color-label">${c.name}</div>
+                  </div>`,
+              )
+              .join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+
+  const grid = container.querySelector('#settings-board-colors')
+  grid.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-index]')
+    if (!btn) return
+    const index = Number(btn.dataset.index)
+    setGlobalBoardColorIndex(index)
+    grid.querySelectorAll('.settings-color-swatch').forEach((s, i) => {
+      s.classList.toggle('is-active', i === index)
+    })
+  })
+
+  settingsRendered = true
+}
+
+initAppShell()

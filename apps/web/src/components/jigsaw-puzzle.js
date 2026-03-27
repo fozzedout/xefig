@@ -26,7 +26,7 @@ const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
 
 export class JigsawPuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress }) {
+  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, boardColorIndex } = {}) {
     if (!container) {
       throw new Error('JigsawPuzzle requires a container element.')
     }
@@ -54,9 +54,10 @@ export class JigsawPuzzle {
     this.pendingLift = null
     this.referenceVisible = false
     this.audioContext = null
-    this.boardColorIndex = 0
     this.boardColors = this.isDarkMode() ? BOARD_COLORS_DARK : BOARD_COLORS_LIGHT
-    this.boardColor = this.boardColors[0].color
+    const initColorIdx = Number(boardColorIndex)
+    this.boardColorIndex = Number.isFinite(initColorIdx) && initColorIdx >= 0 && initColorIdx < this.boardColors.length ? initColorIdx : 0
+    this.boardColor = this.boardColors[this.boardColorIndex].color
     this.edgesOnly = false
     this.renderScale = this.resolveRenderScale()
 

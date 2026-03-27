@@ -12,15 +12,10 @@
   </head>
   <body>
     <div id="app">
-      <!-- Pre-rendered slice launcher shell: replaced by JS once the module loads. -->
-      <main class="slice-launcher">
-        <div class="slice-container">
-          <div class="slice" style="--flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem">
-            Loading puzzles&hellip;
-          </div>
-        </div>
-        <div class="slice-logo">Xefig &middot; Daily</div>
-      </main>
+      <!-- Pre-rendered shell: replaced by initAppShell() once the module loads. -->
+      <div class="app-page visible" style="background:#0a0a0f;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;height:100%">
+        Loading&hellip;
+      </div>
     </div>
     <script>
       // Start the daily puzzle fetch immediately — runs in parallel with module download
@@ -47,7 +42,7 @@
           var cats=['jigsaw','slider','swap','polygram'];
           for(var i=0;i<cats.length;i++){
             var a=c.categories[cats[i]];
-            var u=a&&(a.imageUrl);
+            var u=a&&(a.thumbnailUrl||a.imageUrl);
             if(u){
               var link=document.createElement('link');
               link.rel='preload';link.as='image';link.href=u;
