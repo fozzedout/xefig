@@ -1,6 +1,6 @@
-const TARGET_TILE_SIZE = 96
 const MIN_COLS = 3
 const MIN_ROWS = 3
+const TARGET_TILE_COUNTS = { easy: 20, medium: 35, hard: 56 }
 
 const SWIPE_MIN_DISTANCE = 22
 const TAP_MAX_DISTANCE = 10
@@ -75,9 +75,15 @@ export class SlidingTilePuzzle {
 
     const availW = Math.max(240, containerWidth - padding * 2)
     const availH = Math.max(180, containerHeight - padding * 2)
+    const aspect = availW / availH
 
-    this.cols = Math.max(MIN_COLS, Math.round(availW / TARGET_TILE_SIZE))
-    this.rows = Math.max(MIN_ROWS, Math.round(availH / TARGET_TILE_SIZE))
+    // Target a fixed tile count regardless of screen size
+    const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
+    // Distribute tiles to match the viewport aspect ratio
+    // cols/rows ≈ aspect, cols*rows ≈ targetTotal
+    // cols ≈ sqrt(targetTotal * aspect), rows ≈ targetTotal / cols
+    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+    this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
 
     this.tileSize = Math.min(availW / this.cols, availH / this.rows)
     this.boardWidth = this.tileSize * this.cols

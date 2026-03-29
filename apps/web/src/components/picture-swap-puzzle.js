@@ -1,6 +1,6 @@
-const TARGET_TILE_SIZE = 72
 const MIN_COLS = 4
 const MIN_ROWS = 3
+const TARGET_TILE_COUNTS = { easy: 24, medium: 42, hard: 72 }
 
 const SWAP_COMPLETION_STORAGE_KEY = 'xefig:picture-swap:completion:v1'
 const CONFETTI_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#118ab2', '#ef476f', '#8338ec']
@@ -78,10 +78,12 @@ export class PictureSwapPuzzle {
 
     const availW = Math.max(240, containerWidth - padding * 2)
     const availH = Math.max(180, containerHeight - padding * 2)
+    const aspect = availW / availH
 
-    // Calculate grid from target tile size — tiles must be square
-    this.cols = Math.max(MIN_COLS, Math.round(availW / TARGET_TILE_SIZE))
-    this.rows = Math.max(MIN_ROWS, Math.round(availH / TARGET_TILE_SIZE))
+    // Target a fixed tile count regardless of screen size
+    const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
+    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+    this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
 
     // Tile size is uniform square — sized to fit the narrower axis
     const tileFromW = availW / this.cols
