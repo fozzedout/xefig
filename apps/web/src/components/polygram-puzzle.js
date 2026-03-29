@@ -8,7 +8,7 @@ const SHARD_COUNT_RANGES = {
 const SNAP_POSITION_MARGIN = 0.08
 const SNAP_ROTATION_MARGIN_DEG = 22
 const MIN_BOARD_SIZE = 180
-const MAX_BOARD_SIZE = 980
+const MAX_BOARD_SIZE = 1400
 const WHEEL_ROTATION_DEG = 15
 
 export class PolygramPuzzle {
@@ -276,6 +276,11 @@ export class PolygramPuzzle {
   }
 
   holdPiece(piece, clientX, clientY) {
+    // Auto-hide reference overlay when picking up a piece
+    if (this.referenceVisible) {
+      this.setReferenceVisible(false)
+    }
+
     if (this.heldPieceId != null && this.heldPieceId !== piece.id) {
       this.returnHeldToTray()
     }
@@ -314,8 +319,8 @@ export class PolygramPuzzle {
     if (!piece) return
 
     const boardRect = this.board.getBoundingClientRect()
-    const boardRelX = (clientX - boardRect.left - this.panX * (boardRect.width / this.boardMetrics.size)) / this.zoom
-    const boardRelY = (clientY - boardRect.top - this.panY * (boardRect.height / this.boardMetrics.size)) / this.zoom
+    const boardRelX = (clientX - boardRect.left - this.panX * (boardRect.width / this.boardMetrics.width)) / this.zoom
+    const boardRelY = (clientY - boardRect.top - this.panY * (boardRect.height / this.boardMetrics.height)) / this.zoom
 
     piece.state = 'placed'
     this.heldPieceId = null
@@ -381,7 +386,6 @@ export class PolygramPuzzle {
 
   showRing(piece) {
     this.ringPieceId = piece.id
-    const boardSize = this.boardMetrics.size
     const centerX = parseFloat(piece.element.dataset.boardX) || 0
     const centerY = parseFloat(piece.element.dataset.boardY) || 0
 
@@ -691,10 +695,10 @@ export class PolygramPuzzle {
   }
 
   clampPan(panX, panY, scale) {
-    const boardSize = this.boardMetrics.size || 1
-    const scaledSize = boardSize * scale
-    const minX = Math.min(0, boardSize - scaledSize)
-    const minY = Math.min(0, boardSize - scaledSize)
+    const bw = this.boardMetrics.width || 1
+    const bh = this.boardMetrics.height || 1
+    const minX = Math.min(0, bw - bw * scale)
+    const minY = Math.min(0, bh - bh * scale)
     return { x: clamp(panX, minX, 0), y: clamp(panY, minY, 0) }
   }
 
@@ -715,11 +719,11 @@ export class PolygramPuzzle {
   }
 
   canSnapPlacedPiece(piece) {
-    if (!this.boardMetrics.size) return false
+    if (!this.boardMetrics.width) return false
     const boardRelX = parseFloat(piece.element.dataset.boardX) || 0
     const boardRelY = parseFloat(piece.element.dataset.boardY) || 0
-    const currentCenterX = boardRelX / this.boardMetrics.size
-    const currentCenterY = boardRelY / this.boardMetrics.size
+    const currentCenterX = boardRelX / this.boardMetrics.width
+    const currentCenterY = boardRelY / this.boardMetrics.height
     const targetCenterX = piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2
     const targetCenterY = piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2
 
@@ -733,10 +737,11 @@ export class PolygramPuzzle {
   }
 
   getSnapState(piece) {
-    if (!this.boardMetrics.size) return null
-    const boardSize = this.boardMetrics.size
-    const currentCenterX = (piece.boardSnapX ?? ((piece.dragX - this.boardMetrics.x - this.panX) / this.zoom)) / boardSize
-    const currentCenterY = (piece.boardSnapY ?? ((piece.dragY - this.boardMetrics.y - this.panY) / this.zoom)) / boardSize
+    if (!this.boardMetrics.width) return null
+    const bw = this.boardMetrics.width
+    const bh = this.boardMetrics.height
+    const currentCenterX = (piece.boardSnapX ?? ((piece.dragX - this.boardMetrics.x - this.panX) / this.zoom)) / bw
+    const currentCenterY = (piece.boardSnapY ?? ((piece.dragY - this.boardMetrics.y - this.panY) / this.zoom)) / bh
     const targetCenterX = piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2
     const targetCenterY = piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2
 
@@ -748,8 +753,8 @@ export class PolygramPuzzle {
     return {
       canSnap,
       nearTarget,
-      targetCenterX: targetCenterX * boardSize,
-      targetCenterY: targetCenterY * boardSize,
+      targetCenterX: targetCenterX * bw,
+      targetCenterY: targetCenterY * bh,
     }
   }
 
@@ -805,8 +810,8 @@ export class PolygramPuzzle {
   }
 
   placePieceOnBoard(piece) {
-    const x = (piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2) * this.boardMetrics.size
-    const y = (piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2) * this.boardMetrics.size
+    const x = (piece.blueprint.bbox.x + piece.blueprint.bbox.w / 2) * this.boardMetrics.width
+    const y = (piece.blueprint.bbox.y + piece.blueprint.bbox.h / 2) * this.boardMetrics.height
     this.applyPieceTransform(piece, x, y, 1)
   }
 
@@ -844,24 +849,29 @@ export class PolygramPuzzle {
     const rootWidth = this.root.clientWidth || this.container.clientWidth || window.innerWidth
     const rootHeight = this.root.clientHeight || this.container.clientHeight || window.innerHeight
 
-    const trayHeight = Math.round(clamp(rootHeight * 0.22, 120, 220))
-    this.tray.style.height = `${trayHeight}px`
+    const isLandscapeDesktop = rootWidth >= 1024 && rootWidth > rootHeight
+    const isPortrait = rootHeight > rootWidth
 
-    const boardSide = Math.round(
-      clamp(Math.min(rootWidth - 12, rootHeight - trayHeight - 14), MIN_BOARD_SIZE, MAX_BOARD_SIZE),
-    )
+    if (isLandscapeDesktop) {
+      // Tray is a right sidebar — CSS handles the width via grid column
+      this.tray.style.height = ''
+    } else {
+      const trayHeight = Math.round(clamp(rootHeight * (isPortrait ? 0.18 : 0.22), 100, 200))
+      this.tray.style.height = `${trayHeight}px`
+    }
 
-    this.board.style.width = `${boardSide}px`
-    this.board.style.height = `${boardSide}px`
+    // Let CSS grid handle sizing, then read the actual board dimensions
+    this.board.style.width = '100%'
+    this.board.style.height = '100%'
 
     const rootRect = this.root.getBoundingClientRect()
     const boardRect = this.board.getBoundingClientRect()
-    const boardInnerSize = this.board.clientWidth
 
     this.boardMetrics = {
       x: boardRect.left - rootRect.left + this.board.clientLeft,
       y: boardRect.top - rootRect.top + this.board.clientTop,
-      size: boardInnerSize,
+      width: this.board.clientWidth,
+      height: this.board.clientHeight,
     }
 
     this.paintAllPieces()
@@ -870,15 +880,16 @@ export class PolygramPuzzle {
   }
 
   paintAllPieces() {
-    const boardSize = this.boardMetrics.size
-    const cover = getCoverMetrics(this.image.naturalWidth || this.image.width, this.image.naturalHeight || this.image.height, boardSize)
+    const bw = this.boardMetrics.width
+    const bh = this.boardMetrics.height
+    const cover = getCoverMetrics(this.image.naturalWidth || this.image.width, this.image.naturalHeight || this.image.height, bw, bh)
 
     for (const piece of this.pieces) {
-      piece.widthPx = piece.blueprint.bbox.w * boardSize
-      piece.heightPx = piece.blueprint.bbox.h * boardSize
+      piece.widthPx = piece.blueprint.bbox.w * bw
+      piece.heightPx = piece.blueprint.bbox.h * bh
 
-      const pieceBoardX = piece.blueprint.bbox.x * boardSize
-      const pieceBoardY = piece.blueprint.bbox.y * boardSize
+      const pieceBoardX = piece.blueprint.bbox.x * bw
+      const pieceBoardY = piece.blueprint.bbox.y * bh
 
       piece.element.style.width = `${piece.widthPx}px`
       piece.element.style.height = `${piece.heightPx}px`
@@ -921,7 +932,7 @@ export class PolygramPuzzle {
 
     const viewportWidth = this.tray.clientWidth || this.root.clientWidth || 320
     const isCompact = viewportWidth <= 760
-    const slotSize = Math.round(clamp(this.boardMetrics.size * (isCompact ? 0.2 : 0.14), 48, 80))
+    const slotSize = Math.round(clamp(Math.min(this.boardMetrics.width, this.boardMetrics.height) * (isCompact ? 0.2 : 0.14), 48, 80))
 
     for (const piece of unlocked) {
       const bounds = getRotatedBounds(piece.widthPx, piece.heightPx, piece.rotation)
@@ -932,15 +943,13 @@ export class PolygramPuzzle {
 
       piece.element.style.position = 'relative'
       piece.element.style.zIndex = '1'
+      piece.element.style.flex = '0 0 auto'
       const centerX = piece.widthPx / 2
       const centerY = piece.heightPx / 2
       piece.element.style.transform = `rotate(${piece.rotation}deg) scale(${scale})`
       piece.element.style.transformOrigin = `${centerX}px ${centerY}px`
-      piece.element.style.margin = `${Math.max(0, (slotSize - piece.heightPx * scale) / 2)}px ${Math.max(0, (slotSize - piece.widthPx * scale) / 2)}px`
+      piece.element.style.margin = ''
     }
-
-    // Set grid cell size
-    this.trayGrid.style.setProperty('--cell-size', `${slotSize + 8}px`)
   }
 
   applyPieceTransform(piece, centerX, centerY, scale = 1) {
@@ -986,7 +995,6 @@ export class PolygramPuzzle {
       version: 1,
       shardCount: this.shardCount,
       completed: this.completed,
-      referenceVisible: this.referenceVisible,
       zoom: this.zoom,
       panX: this.panX,
       panY: this.panY,
@@ -1051,7 +1059,6 @@ export class PolygramPuzzle {
     this.completed = Boolean(state.completed) || this.areAllLocked()
     this.syncPieceMounts()
     this.layoutTrayPieces()
-    this.setReferenceVisible(Boolean(state.referenceVisible))
     this.emitProgress()
   }
 
@@ -1126,13 +1133,14 @@ function buildBlueprintFromPolygon(polygon, id) {
   return { id, area, polygon, bbox, localPoints }
 }
 
-function getCoverMetrics(imageWidth, imageHeight, boxSize) {
+function getCoverMetrics(imageWidth, imageHeight, boxWidth, boxHeight) {
+  const bh = boxHeight ?? boxWidth
   const safeWidth = Math.max(1, Number(imageWidth) || 1)
   const safeHeight = Math.max(1, Number(imageHeight) || 1)
-  const scale = Math.max(boxSize / safeWidth, boxSize / safeHeight)
+  const scale = Math.max(boxWidth / safeWidth, bh / safeHeight)
   const drawWidth = safeWidth * scale
   const drawHeight = safeHeight * scale
-  return { drawWidth, drawHeight, offsetX: (boxSize - drawWidth) / 2, offsetY: (boxSize - drawHeight) / 2 }
+  return { drawWidth, drawHeight, offsetX: (boxWidth - drawWidth) / 2, offsetY: (bh - drawHeight) / 2 }
 }
 
 function getRotatedBounds(width, height, rotationDeg) {

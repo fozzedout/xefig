@@ -880,3 +880,120 @@ button { font-family: var(--font-ui); cursor: pointer; }
   .save-row { flex-direction: column; align-items: flex-start; }
   .btn-save { width: 100%; justify-content: center; }
 }
+
+/* ─── Messages ─── */
+
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.msg-count {
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.msg-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.85rem;
+}
+
+.msg-card {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface-1);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.msg-card:hover {
+  border-color: var(--border-hover, rgba(255,255,255,0.12));
+}
+
+.msg-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.msg-card-header:hover {
+  background: var(--surface-2, rgba(255,255,255,0.02));
+}
+
+.msg-sender {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-1);
+}
+
+.msg-email {
+  font-size: 0.72rem;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+}
+
+.msg-date {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.msg-chevron {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  transition: transform 0.2s;
+}
+
+.msg-card.is-open .msg-chevron {
+  transform: rotate(90deg);
+}
+
+.msg-card-body {
+  display: none;
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.msg-card.is-open .msg-card-body {
+  display: block;
+}
+
+.msg-text {
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-1);
+  margin-bottom: 0.75rem;
+  padding-top: 0.65rem;
+}
+
+.msg-meta {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  margin-bottom: 0.65rem;
+}
+
+.msg-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.msg-card-actions .btn-sm {
+  font-size: 0.7rem;
+}

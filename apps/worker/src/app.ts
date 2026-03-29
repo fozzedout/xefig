@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 
 import { ensureLeaderboardTable, isLeaderboardDifficulty, isLeaderboardGameMode } from './lib/leaderboard'
+import { ensureContactTable, validateContact as validateContactForm, storeContactMessage } from './lib/contact'
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_SECONDS,
@@ -832,6 +833,111 @@ export function createApp() {
     }
   })
 
+  // ─── Admin: Contact Messages ───
+
+  app.get('/api/admin/messages', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    try {
+      await ensureContactTable(c.env.DB)
+      const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50))
+      const offset = Math.max(0, Number(c.req.query('offset')) || 0)
+
+      const rows = await c.env.DB.prepare(
+        `SELECT id, name, email, message, ip, submitted_at FROM contact_messages ORDER BY id DESC LIMIT ? OFFSET ?`,
+      )
+        .bind(limit, offset)
+        .all<{ id: number; name: string; email: string; message: string; ip: string; submitted_at: string }>()
+
+      const countRow = await c.env.DB.prepare(`SELECT COUNT(*) as total FROM contact_messages`).first<{ total: number }>()
+
+      return c.json({
+        ok: true,
+        messages: rows.results || [],
+        total: countRow?.total ?? 0,
+      })
+    } catch (error) {
+      console.error('Messages list failed', error)
+      return c.json({ error: 'Unable to load messages.' }, 500)
+    }
+  })
+
+  app.delete('/api/admin/messages/:id', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const id = Number(c.req.param('id'))
+    if (!Number.isFinite(id) || id <= 0) {
+      return c.json({ error: 'Invalid message ID.' }, 400)
+    }
+
+    try {
+      await c.env.DB.prepare(`DELETE FROM contact_messages WHERE id = ?`).bind(id).run()
+      return c.json({ ok: true })
+    } catch (error) {
+      console.error('Message delete failed', error)
+      return c.json({ error: 'Unable to delete message.' }, 500)
+    }
+  })
+
+  // ─── Public: Contact Form ───
+
+  app.post('/api/contact', async (c) => {
+    let body: { name?: string; email?: string; message?: string; website?: string; _ts?: number } | null = null
+    try {
+      body = (await c.req.json()) as { name?: string; email?: string; message?: string; website?: string; _ts?: number }
+    } catch {
+      return c.json({ error: 'Invalid request.' }, 400)
+    }
+
+    const validation = validateContactForm(body || {})
+    if (!validation.valid) {
+      return c.json({ error: validation.error }, 400)
+    }
+
+    const name = (body?.name || '').trim()
+    const email = (body?.email || '').trim()
+    const message = (body?.message || '').trim()
+    const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null
+
+    try {
+      await storeContactMessage(c.env.DB, name, email, message, ip)
+
+      // Attempt to send email notification
+      try {
+        const recipient = (c.env.CONTACT_EMAIL || '').trim()
+        if (recipient && c.env.SEND_EMAIL) {
+          const { createMimeMessage } = await import('mimetext')
+          const msg = createMimeMessage()
+          msg.setSender({ name: 'Xefig Contact', addr: 'noreply@xefig.com' })
+          msg.setRecipient(recipient)
+          msg.setSubject(`Xefig Contact: ${name}`)
+          msg.addMessage({
+            contentType: 'text/plain',
+            data: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}\n\n---\nIP: ${ip || 'unknown'}\nDate: ${new Date().toISOString()}`,
+          })
+          const { EmailMessage } = await import('cloudflare:email')
+          const emailMsg = new EmailMessage('noreply@xefig.com', recipient, msg.asRaw())
+          await c.env.SEND_EMAIL.send(emailMsg)
+        }
+      } catch (emailErr) {
+        console.error('Contact email send failed (message still saved)', emailErr)
+      }
+
+      return c.json({ ok: true, message: 'Thank you! Your message has been sent.' })
+    } catch (error) {
+      console.error('Contact form failed', error)
+      return c.json({ error: 'Unable to send message. Please try again.' }, 500)
+    }
+  })
+
   app.get('/cdn/*', async (c) => {
     const pathname = new URL(c.req.url).pathname
     const encodedKey = pathname.replace(/^\/cdn\//, '')
@@ -851,7 +957,7 @@ export function createApp() {
     if (object.httpEtag) {
       headers.set('etag', object.httpEtag)
     }
-    headers.set('cache-control', 'public, max-age=3600')
+    headers.set('cache-control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=43200')
     headers.set('access-control-allow-origin', '*')
 
     return new Response(object.body, { headers })
@@ -878,6 +984,12 @@ export function createApp() {
     if (isAppRoute || isStaticAsset) {
       const response = await c.env.STATIC_ASSETS.fetch(c.req.raw)
       if (response.status !== 404) {
+        // Hashed assets (/assets/*) are immutable — cache for 1 year
+        if (pathname.startsWith('/assets/')) {
+          const cached = new Response(response.body, response)
+          cached.headers.set('cache-control', 'public, max-age=31536000, immutable')
+          return cached
+        }
         return response
       }
     }

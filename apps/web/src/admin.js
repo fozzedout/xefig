@@ -1253,6 +1253,106 @@ form.addEventListener('submit', async (event) => {
   }
 })
 
+// ─── Contact Messages ───
+
+const loadMessagesBtn = document.getElementById('load-messages-btn')
+const messagesList = document.getElementById('messages-list')
+const msgCountEl = document.getElementById('msg-count')
+
+async function loadMessages() {
+  if (!requireAuth()) return
+
+  loadMessagesBtn.disabled = true
+  setStatus('Loading messages...', 'working')
+
+  try {
+    const { response, payload } = await adminFetch('/api/admin/messages?limit=100')
+    if (!response.ok) {
+      setStatus(payload.error || 'Failed to load messages.', 'error')
+      return
+    }
+
+    const messages = payload.messages || []
+    msgCountEl.textContent = `${messages.length} of ${payload.total || 0}`
+
+    if (messages.length === 0) {
+      messagesList.innerHTML = '<div class="msg-empty">No messages yet.</div>'
+      setStatus('No messages.', 'idle')
+      return
+    }
+
+    messagesList.innerHTML = messages
+      .map((msg) => {
+        const date = new Date(msg.submitted_at + 'Z').toLocaleString()
+        return `
+          <div class="msg-card" data-id="${msg.id}">
+            <div class="msg-card-header">
+              <span class="msg-chevron">\u25B6</span>
+              <span class="msg-sender">${escapeHtml(msg.name)}</span>
+              <span class="msg-email">${escapeHtml(msg.email)}</span>
+              <span class="msg-date">${date}</span>
+            </div>
+            <div class="msg-card-body">
+              <div class="msg-text">${escapeHtml(msg.message)}</div>
+              <div class="msg-meta">IP: ${escapeHtml(msg.ip || 'unknown')} &middot; ${date}</div>
+              <div class="msg-card-actions">
+                <a href="mailto:${escapeHtml(msg.email)}?subject=Re:%20Xefig%20Contact&body=${encodeURIComponent('Hi ' + msg.name + ',\n\n')}" class="btn-sm btn-outline">Reply</a>
+                <button type="button" class="btn-sm btn-ghost msg-delete-btn" data-id="${msg.id}">Delete</button>
+              </div>
+            </div>
+          </div>
+        `
+      })
+      .join('')
+
+    // Toggle expand on header click
+    messagesList.querySelectorAll('.msg-card-header').forEach((header) => {
+      header.addEventListener('click', () => {
+        header.parentElement.classList.toggle('is-open')
+      })
+    })
+
+    // Delete buttons
+    messagesList.querySelectorAll('.msg-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id
+        if (!confirm('Delete this message?')) return
+        btn.disabled = true
+        try {
+          const { response: delRes } = await adminFetch(`/api/admin/messages/${id}`, { method: 'DELETE' })
+          if (delRes.ok) {
+            const card = btn.closest('.msg-card')
+            card.remove()
+            const remaining = messagesList.querySelectorAll('.msg-card').length
+            msgCountEl.textContent = `${remaining}`
+            if (remaining === 0) {
+              messagesList.innerHTML = '<div class="msg-empty">No messages.</div>'
+            }
+          }
+        } catch {
+          // Non-fatal
+        }
+      })
+    })
+
+    setStatus(`Loaded ${messages.length} message${messages.length === 1 ? '' : 's'}.`, 'ok')
+  } catch {
+    setStatus('Network error loading messages.', 'error')
+  } finally {
+    loadMessagesBtn.disabled = false
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div')
+  div.textContent = str || ''
+  return div.innerHTML
+}
+
+loadMessagesBtn.addEventListener('click', loadMessages)
+
+// ─── Init ───
+
 if (rewriteModelSelect && rewriteModelSelect.options.length === 0) {
   populateRewriteModels([], 'openrouter/free')
 }

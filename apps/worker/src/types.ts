@@ -3,11 +3,13 @@ export type Bindings = {
   metadata: KVNamespace
   DB: D1Database
   STATIC_ASSETS: Fetcher
+  SEND_EMAIL: { send: (message: unknown) => Promise<void> }
   ADMIN_PASSWORD?: string
   ADMIN_SESSION_SECRET?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   GOOGLE_AI_API_KEY?: string
+  CONTACT_EMAIL?: string
 }
 
 export const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram'] as const

@@ -479,7 +479,6 @@ export class SlidingTilePuzzle {
       slots: [...this.slots],
       emptyIndex: this.emptyIndex,
       completed: this.completed,
-      referenceVisible: this.referenceVisible,
     }
   }
 
@@ -539,7 +538,6 @@ export class SlidingTilePuzzle {
     this.completed = Boolean(state.completed) || this.isSolved()
     this.syncAllTilePositions({ animate: false })
     this.showVictoryTile(this.completed)
-    this.setReferenceVisible(Boolean(state.referenceVisible))
     this.emitProgress()
   }
 

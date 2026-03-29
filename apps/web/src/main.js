@@ -445,9 +445,15 @@ function persistActiveRun(progressState) {
     return
   }
 
+  // Don't save until the player has actually interacted (timer started)
+  const elapsed = getActiveElapsedMs()
+  if (elapsed === 0 && !progressState) {
+    return
+  }
+
   const nextRun = {
     ...currentRun,
-    elapsedActiveMs: getActiveElapsedMs(),
+    elapsedActiveMs: elapsed,
     updatedAt: new Date().toISOString(),
     puzzleState: progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState),
   }
@@ -553,16 +559,25 @@ function cacheDailyPayload(payload) {
 }
 
 async function fetchPuzzlePayload({ date = null } = {}) {
+  const today = getIsoDate(new Date())
+
   // For the default "today" request, use the early fetch started in index.html
   // so we don't wait for the module to load before hitting the API.
   if (!date && window.__earlyPuzzle) {
     const early = await window.__earlyPuzzle
     window.__earlyPuzzle = null
-    if (early) return early
+    // Only use the early result if it matches today's date
+    if (early && early.date === today) {
+      cacheDailyPayload(early)
+      return early
+    }
+    // Stale — fall through to a fresh fetch
   }
 
   const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
-  const response = await fetch(apiUrl(endpoint))
+  // Bust browser cache for "today" if the day has rolled over
+  const cacheBust = !date ? `?_=${today}` : ''
+  const response = await fetch(apiUrl(endpoint + cacheBust))
   const payload = await response.json()
   if (!response.ok) {
     throw new Error(payload.error || 'Puzzle not found.')
@@ -632,7 +647,8 @@ function renderLauncher() {
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"/><path d="M8 7v5M8 4.5v.5"/></svg>
               </div>
               <div class="bar-spacer"></div>
-              ${hasSave ? `<div class="bar-icon has-save" title="Save exists"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg></div>` : ''}
+              ${isCompleted ? `<span class="bar-completed" title="Completed${entry?.bestElapsedMs ? ' \u2014 ' + formatDuration(entry.bestElapsedMs) : ''}"><svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm3.35 5.35a.5.5 0 0 0-.7-.7L7 8.29 5.35 6.65a.5.5 0 0 0-.7.7l2 2a.5.5 0 0 0 .7 0l4-4Z"/></svg>${entry?.bestElapsedMs ? ` <span class="bar-completed-time">${formatDuration(entry.bestElapsedMs)}</span>` : ''}</span>` : ''}
+              ${hasSave && !isCompleted ? `<div class="bar-icon has-save" title="Save exists"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg></div>` : ''}
             </div>
             <div class="info-panel" data-mode="${mode}"></div>
           </div>
@@ -760,6 +776,21 @@ function renderLauncher() {
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
+
+      // Progressive image upgrade: swap thumbnails for full-size images once loaded
+      const sliceImages = container.querySelectorAll('.slice-image')
+      sliceImages.forEach((img, index) => {
+        const mode = modes[index]
+        const fullUrl = resolvePuzzleImageUrl(payload, mode)
+        const thumbUrl = img.src
+        if (fullUrl === thumbUrl) return
+
+        const full = new Image()
+        full.src = fullUrl
+        full.onload = () => {
+          if (img.isConnected) img.src = fullUrl
+        }
+      })
     } catch {
       container.innerHTML = `
         <div style="flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;">
@@ -1156,40 +1187,48 @@ function renderGame({ resumeRun = null } = {}) {
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
+  const accentColor = gameMode === GAME_MODE_JIGSAW ? '#f0c040'
+    : gameMode === GAME_MODE_SLIDING ? '#40d0f0'
+    : gameMode === GAME_MODE_SWAP ? '#f06050'
+    : '#a060f0'
+  const dateLabel = state.puzzle?.date
+    ? new Date(Date.parse(`${state.puzzle.date}T00:00:00Z`)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+    : ''
+  const titleLabel = `${MODE_LABELS[gameMode]}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
+
   gameEl.innerHTML = `
     <main class="game-shell">
       <header class="game-toolbar">
-        <button id="back-btn" class="toolbar-btn back-btn" type="button" aria-label="Back to launcher">
-          <span class="back-chevron">‹</span>
-          <span>Back</span>
+        <button id="back-btn" class="gt-icon-btn" type="button" aria-label="Back to launcher" title="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
 
-        <p id="status" class="status toolbar-status">Loading puzzle...</p>
+        <div class="gt-title">${titleLabel}</div>
 
-        <div class="toolbar-actions">
+        <div class="gt-actions">
           ${gameMode === GAME_MODE_JIGSAW ? `
-          <button id="highlight-btn" class="toolbar-btn icon-btn" type="button" aria-label="Highlight loose pieces" title="Highlight loose pieces">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z" />
-            </svg>
+          <button id="highlight-btn" class="gt-icon-btn" type="button" aria-label="Highlight loose pieces" title="Highlight">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
           </button>
-          <button id="edges-btn" class="toolbar-btn icon-btn" type="button" aria-label="Show edge pieces only" aria-pressed="false" title="Edge pieces only">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
-            </svg>
+          <button id="edges-btn" class="gt-icon-btn" type="button" aria-label="Show edge pieces only" aria-pressed="false" title="Edges only">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
           </button>
           ` : ''}
-          <button id="view-btn" class="toolbar-btn icon-btn" type="button" aria-label="Toggle reference image" aria-pressed="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z" />
-            </svg>
+          <button id="view-btn" class="gt-icon-btn" type="button" aria-label="Toggle reference image" aria-pressed="false" title="Reference">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
           </button>
-          <button id="restart-btn" class="toolbar-btn icon-btn" type="button" aria-label="Restart puzzle" title="Restart">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z" />
-            </svg>
+          <button id="restart-btn" class="gt-icon-btn" type="button" aria-label="Restart puzzle" title="Restart">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
           </button>
         </div>
+
+        <div class="gt-stats">
+          <span id="piece-count" class="gt-counter"></span>
+          <span class="gt-divider"></span>
+          <span id="timer" class="gt-timer">00:00</span>
+        </div>
+
+        <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
       </header>
 
       <section class="workspace">
@@ -1202,10 +1241,26 @@ function renderGame({ resumeRun = null } = {}) {
   const mount = gameEl.querySelector('#puzzle-mount')
   const backBtn = gameEl.querySelector('#back-btn')
   const viewBtn = gameEl.querySelector('#view-btn')
+  const pieceCountEl = gameEl.querySelector('#piece-count')
+  const timerEl = gameEl.querySelector('#timer')
+
+  let timerRaf = null
+  const updateTimer = () => {
+    timerEl.textContent = formatDuration(getActiveElapsedMs())
+    timerRaf = requestAnimationFrame(updateTimer)
+  }
+  const startTimerDisplay = () => { if (!timerRaf) timerRaf = requestAnimationFrame(updateTimer) }
+  const stopTimerDisplay = () => { if (timerRaf) { cancelAnimationFrame(timerRaf); timerRaf = null } }
+
+  const updatePieceCount = () => {
+    if (!puzzle) return
+    const locked = puzzle.pieces?.filter((p) => p.locked).length ?? 0
+    const total = puzzle.pieces?.length ?? 0
+    pieceCountEl.textContent = `${locked}/${total}`
+  }
 
   const setStatus = (message, variant = '') => {
     statusEl.textContent = message
-    statusEl.className = `status toolbar-status ${variant}`.trim()
   }
 
   let leaderboardDone = false
@@ -1236,6 +1291,7 @@ function renderGame({ resumeRun = null } = {}) {
   restartBtn.addEventListener('click', () => {
     if (!currentRun) return
     if (!confirm('Restart this puzzle? Your current progress will be lost.')) return
+    stopTimerDisplay()
     clearRunForMode(currentRun)
     currentRun = null
     renderGame()
@@ -1324,7 +1380,13 @@ function renderGame({ resumeRun = null } = {}) {
         }
       }
 
-      startActiveTimer(currentRun.elapsedActiveMs)
+      // For resumed games, start timer immediately. For new games, defer until first interaction.
+      const isResume = Boolean(resumeRun)
+      let timerStarted = isResume
+      let initDone = false
+      if (isResume) {
+        startActiveTimer(currentRun.elapsedActiveMs)
+      }
       bindGameActivity(() => persistActiveRun())
 
       const loaderKey = gameMode === GAME_MODE_SLIDING ? 'sliding'
@@ -1341,7 +1403,18 @@ function renderGame({ resumeRun = null } = {}) {
           if (currentRun) {
             currentRun.completed = Boolean(completed)
           }
+          // Start timer on first piece interaction (not on puzzle load / init)
+          if (!timerStarted && initDone) {
+            timerStarted = true
+            startActiveTimer(0)
+            startTimerDisplay()
+          }
           persistActiveRun(progressState)
+          updatePieceCount()
+          // Sync view button if puzzle auto-hid the reference
+          if (puzzle && !puzzle.referenceVisible) {
+            viewBtn.setAttribute('aria-pressed', 'false')
+          }
         },
         onComplete: async () => {
           if (!currentRun || leaderboardDone) {
@@ -1349,6 +1422,7 @@ function renderGame({ resumeRun = null } = {}) {
           }
           leaderboardDone = true
 
+          stopTimerDisplay()
           pauseActiveTimer()
           currentRun.elapsedActiveMs = getActiveElapsedMs()
           currentRun.completed = true
@@ -1413,6 +1487,7 @@ function renderGame({ resumeRun = null } = {}) {
       puzzle = new PuzzleClass(puzzleConfig)
 
       await puzzle.init()
+      initDone = true
 
       if (resumeRun?.puzzleState) {
         puzzle.applyProgressState(resumeRun.puzzleState)
@@ -1424,7 +1499,10 @@ function renderGame({ resumeRun = null } = {}) {
         }
       }
 
-      persistActiveRun(puzzle.getProgressState())
+      if (isResume) persistActiveRun(puzzle.getProgressState())
+
+      updatePieceCount()
+      if (isResume) startTimerDisplay()
 
       const puzzleLabel = state.puzzle ? `${state.puzzle.date}` : 'Puzzle ready'
       const elapsedLabel = formatDuration(getActiveElapsedMs())
@@ -1475,18 +1553,31 @@ const NAV_HTML = `
       </svg>
       <span>Settings</span>
     </button>
+    <button class="nav-tab" data-page="about">
+      <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6.5"/><path d="M8 7v5M8 4.5v.5"/>
+      </svg>
+      <span>About</span>
+    </button>
     <div class="nav-indicator" id="navIndicator"></div>
   </div>
 </nav>
 <div class="app-page visible" id="page-play"></div>
 <div class="app-page" id="page-archive"></div>
 <div class="app-page" id="page-settings"></div>
+<div class="app-page" id="page-about"></div>
 <div class="app-page" id="page-game"></div>
 `
 
 let currentPage = 'play'
 let archiveRendered = false
 let settingsRendered = false
+let lastSetHash = ''
+
+function setHash(hash) {
+  lastSetHash = hash
+  window.location.hash = hash
+}
 
 function initAppShell() {
   app.innerHTML = NAV_HTML
@@ -1502,7 +1593,7 @@ function initAppShell() {
     indicator.style.width = r.width + 'px'
   }
 
-  function switchPage(pageName) {
+  function switchPage(pageName, { updateHash = true } = {}) {
     if (pageName === currentPage) return
     currentPage = pageName
 
@@ -1521,10 +1612,16 @@ function initAppShell() {
 
     if (pageName === 'play') {
       renderLauncher()
+      if (updateHash) setHash('#play')
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
+      if (updateHash) setHash('#archive')
     } else if (pageName === 'settings') {
       renderSettingsPage()
+      if (updateHash) setHash('#settings')
+    } else if (pageName === 'about') {
+      renderAboutPage()
+      if (updateHash) setHash('#about')
     }
   }
 
@@ -1537,7 +1634,97 @@ function initAppShell() {
     if (active) updateIndicator(active)
   })
 
-  renderLauncher()
+  // Route based on current hash
+  const initialRoute = parseHash()
+  if (initialRoute.page === 'game' && initialRoute.mode && initialRoute.date) {
+    // Resume into a game directly
+    renderLauncher()
+    resumeGameFromHash(initialRoute.mode, initialRoute.date)
+  } else if (initialRoute.page === 'archive') {
+    switchPage('archive', { updateHash: false })
+  } else if (initialRoute.page === 'settings') {
+    switchPage('settings', { updateHash: false })
+  } else if (initialRoute.page === 'about') {
+    switchPage('about', { updateHash: false })
+  } else {
+    renderLauncher()
+  }
+
+  // Handle browser back/forward — ignore hash changes we set ourselves
+  window.addEventListener('hashchange', () => {
+    const currentHash = window.location.hash
+    if (currentHash === lastSetHash) return
+    lastSetHash = currentHash
+    const route = parseHash()
+    if (route.page === 'game' && route.mode && route.date) {
+      resumeGameFromHash(route.mode, route.date)
+    } else if (['play', 'archive', 'settings', 'about'].includes(route.page)) {
+      switchPage(route.page, { updateHash: false })
+    } else {
+      switchPage('play', { updateHash: false })
+    }
+  })
+}
+
+function parseHash() {
+  const hash = window.location.hash.replace(/^#/, '')
+  const parts = hash.split('/')
+  // #game/jigsaw/2026-03-27 or #play or #archive or #settings
+  if (parts[0] === 'game' && parts.length >= 3) {
+    return { page: 'game', mode: parts[1], date: parts[2] }
+  }
+  return { page: parts[0] || 'play' }
+}
+
+function resumeGameFromHash(mode, date) {
+  const normalizedMode = normalizeGameMode(mode)
+  state.gameMode = normalizedMode
+  state.sourceMode = 'today'
+  state.difficulty = state.difficulty || 'medium'
+
+  // Try to find a saved run for this mode+date
+  const savedRun = getRunForMode(date, normalizedMode)
+  if (savedRun) {
+    state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+    state.puzzle = { date }
+    renderGame({ resumeRun: savedRun })
+    return
+  }
+
+  // Check if this puzzle was already completed
+  const completedModes = getCompletedModesForDate(date)
+  if (completedModes.has(normalizedMode)) {
+    ;(async () => {
+      try {
+        const payload = await fetchPuzzlePayload({ date })
+        state.puzzle = payload
+        const entry = getCompletionEntry(date, normalizedMode)
+        showCompletedPuzzleScreen({
+          gameMode: normalizedMode,
+          puzzleDate: date,
+          entry,
+          onReplay: () => renderGame(),
+          onBack: () => returnFromGame(),
+        })
+      } catch {
+        window.switchToPage('play')
+      }
+    })()
+    return
+  }
+
+  // No saved run — fetch the puzzle and start fresh
+  ;(async () => {
+    try {
+      const payload = await fetchPuzzlePayload({ date })
+      state.puzzle = payload
+      state.imageUrl = resolvePuzzleImageUrl(payload, normalizedMode)
+      renderGame()
+    } catch {
+      // Can't load puzzle — fall back to launcher
+      window.switchToPage('play')
+    }
+  })()
 }
 
 function showGamePage() {
@@ -1546,6 +1733,10 @@ function showGamePage() {
   document.querySelectorAll('.app-page').forEach((p) => {
     p.classList.toggle('visible', p.id === 'page-game')
   })
+  // Set hash: #game/mode/date
+  const gameMode = state.gameMode || 'jigsaw'
+  const puzzleDate = state.puzzle?.date || getIsoDate(new Date())
+  setHash(`#game/${gameMode}/${puzzleDate}`)
 }
 
 function returnFromGame() {
@@ -1601,6 +1792,99 @@ function renderSettingsPage() {
   })
 
   settingsRendered = true
+}
+
+function renderAboutPage() {
+  const container = document.querySelector('#page-about')
+  const formTs = Date.now()
+
+  container.innerHTML = `
+    <div class="settings-page">
+      <div class="settings-header">
+        <h2>About Xefig</h2>
+        <p>A daily puzzle game with four modes. New puzzles every day.</p>
+      </div>
+      <div class="settings-sections">
+        <div class="settings-group">
+          <div class="settings-group-title">AI-Generated Content</div>
+          <p class="about-text">
+            All puzzle images on Xefig are generated using artificial intelligence
+            (Google Gemini). No real photographs are used. In accordance with EU
+            AI Act transparency requirements, we disclose that this content is
+            AI-generated and should not be mistaken for authentic photographs.
+          </p>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Contact</div>
+          <form id="contact-form" class="contact-form" autocomplete="off">
+            <div class="contact-field">
+              <label class="contact-label" for="contact-name">Name</label>
+              <input class="contact-input" type="text" id="contact-name" name="name" required minlength="2" maxlength="100" placeholder="Your name" />
+            </div>
+            <div class="contact-field">
+              <label class="contact-label" for="contact-email">Email</label>
+              <input class="contact-input" type="email" id="contact-email" name="email" required placeholder="you@example.com" />
+            </div>
+            <div class="contact-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;tab-index:-1">
+              <label for="contact-website">Website</label>
+              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" />
+            </div>
+            <div class="contact-field">
+              <label class="contact-label" for="contact-message">Message</label>
+              <textarea class="contact-input contact-textarea" id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Your message..."></textarea>
+            </div>
+            <div id="contact-status" class="contact-status"></div>
+            <button type="submit" class="contact-submit" id="contact-submit">Send Message</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `
+
+  const form = container.querySelector('#contact-form')
+  const statusEl = container.querySelector('#contact-status')
+  const submitBtn = container.querySelector('#contact-submit')
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    statusEl.textContent = ''
+    statusEl.className = 'contact-status'
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Sending...'
+
+    const name = form.querySelector('#contact-name').value.trim()
+    const email = form.querySelector('#contact-email').value.trim()
+    const message = form.querySelector('#contact-message').value.trim()
+    const website = form.querySelector('#contact-website').value
+
+    try {
+      const response = await fetch(apiUrl('/api/contact'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message, website, _ts: formTs }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        statusEl.textContent = payload.error || 'Failed to send. Please try again.'
+        statusEl.className = 'contact-status contact-status-error'
+        submitBtn.disabled = false
+        submitBtn.textContent = 'Send Message'
+        return
+      }
+
+      statusEl.textContent = payload.message || 'Message sent!'
+      statusEl.className = 'contact-status contact-status-ok'
+      form.reset()
+      submitBtn.textContent = 'Sent'
+    } catch {
+      statusEl.textContent = 'Network error. Please try again.'
+      statusEl.className = 'contact-status contact-status-error'
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Send Message'
+    }
+  })
 }
 
 initAppShell()

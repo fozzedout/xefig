@@ -7,8 +7,32 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <title>Xefig | Jigsaw Prototype</title>
+    <title>Xefig | Daily Puzzle Game</title>
+    <meta name="description" content="Xefig — a daily puzzle game with four modes: jigsaw, slider, tile swap, and polygram." />
+    <meta name="ai-content-declaration" content="Puzzle images on this site are generated using artificial intelligence (Google Gemini)." />
+    <meta name="generator" content="AI-generated imagery via Google Gemini" />
     <link rel="stylesheet" href="/src/style.css" />
+    <script>
+      // Preload the LCP image (first slice thumbnail) from localStorage cache.
+      // Images change once per day so the cached URL is almost always correct.
+      // Only preload the first image to avoid competing bandwidth for non-LCP images.
+      (function(){
+        try{
+          var c=JSON.parse(localStorage.getItem('xefig:daily-cache'));
+          if(!c||!c.categories||!c.date)return;
+          // Only preload if cache is from today
+          var today=new Date().toISOString().slice(0,10);
+          if(c.date!==today)return;
+          var a=c.categories.jigsaw;
+          var u=a&&(a.thumbnailUrl||a.imageUrl);
+          if(u){
+            var l=document.createElement('link');l.rel='preload';l.as='image';l.href=u;
+            l.fetchPriority='high';
+            document.head.appendChild(l);
+          }
+        }catch(e){}
+      })();
+    </script>
   </head>
   <body>
     <div id="app">
@@ -18,13 +42,11 @@
       </div>
     </div>
     <script>
-      // Start the daily puzzle fetch immediately — runs in parallel with module download
-      // instead of waiting for main.js to load, parse, and execute.
+      // Start the daily puzzle fetch immediately — runs in parallel with module download.
       window.__earlyPuzzle=fetch('/api/puzzles/today').then(function(r){
         if(!r.ok)throw new Error('Puzzle fetch failed');
         return r.json();
       }).then(function(p){
-        // Cache today's image URLs so repeat visits can preload without waiting for API
         if(p&&p.date&&p.categories){
           try{localStorage.setItem('xefig:daily-cache',JSON.stringify({
             date:p.date,categories:p.categories
@@ -32,26 +54,6 @@
         }
         return p;
       }).catch(function(){return null});
-
-      // Preload all four mode images from cache — images change once per day
-      // so this is almost always correct and lets the LCP image start immediately.
-      (function(){
-        try{
-          var c=JSON.parse(localStorage.getItem('xefig:daily-cache'));
-          if(!c||!c.categories)return;
-          var cats=['jigsaw','slider','swap','polygram'];
-          for(var i=0;i<cats.length;i++){
-            var a=c.categories[cats[i]];
-            var u=a&&(a.thumbnailUrl||a.imageUrl);
-            if(u){
-              var link=document.createElement('link');
-              link.rel='preload';link.as='image';link.href=u;
-              if(i===0)link.fetchPriority='high';
-              document.head.appendChild(link);
-            }
-          }
-        }catch(e){}
-      })();
     </script>
     <script type="module" src="/src/main.js"></script>
   </body>

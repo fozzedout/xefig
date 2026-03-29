@@ -29,5 +29,9 @@ database_id = "d15bf548-6546-4a58-9d90-a1697b19af08"
 [triggers]
 crons = ["0 0 * * *", "15 * * * *"]
 
+[[send_email]]
+name = "SEND_EMAIL"
+
 [vars]
 OPENROUTER_MODEL = "openrouter/free"
+CONTACT_EMAIL = "paul.aspinall@gmail.com"

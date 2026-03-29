@@ -493,7 +493,7 @@ export class JigsawPuzzle {
   }
 
   getBoardOutlineStroke() {
-    return this.isDarkMode() ? 'rgba(234, 243, 252, 0.86)' : 'rgba(8, 20, 32, 0.46)'
+    return this.isDarkMode() ? 'rgba(0, 0, 0, 0.35)' : 'rgba(0, 0, 0, 0.25)'
   }
 
   paintGhostImage() {
@@ -505,25 +505,22 @@ export class JigsawPuzzle {
     ctx.clearRect(0, 0, this.ghostCanvas.width, this.ghostCanvas.height)
     ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0)
 
+    const crop = this.imageCrop
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+
     if (this.boardColor) {
       ctx.fillStyle = this.boardColor
       ctx.fillRect(0, 0, this.boardWidth, this.boardHeight)
+      // Faint desaturated ghost for orientation
+      ctx.globalAlpha = 0.06
+      ctx.filter = 'grayscale(0.5)'
+      ctx.drawImage(this.image, crop.x, crop.y, crop.width, crop.height, 0, 0, this.boardWidth, this.boardHeight)
+      ctx.filter = 'none'
+      ctx.globalAlpha = 1
     } else {
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = 'high'
       ctx.globalAlpha = 0.1
-      const crop = this.imageCrop
-      ctx.drawImage(
-        this.image,
-        crop.x,
-        crop.y,
-        crop.width,
-        crop.height,
-        0,
-        0,
-        this.boardWidth,
-        this.boardHeight,
-      )
+      ctx.drawImage(this.image, crop.x, crop.y, crop.width, crop.height, 0, 0, this.boardWidth, this.boardHeight)
       ctx.globalAlpha = 1
     }
   }
@@ -641,6 +638,11 @@ export class JigsawPuzzle {
     event.stopPropagation()
     event.preventDefault()
 
+    // Auto-hide reference overlay when dragging a piece
+    if (this.referenceVisible) {
+      this.setReferenceVisible(false)
+    }
+
     if (event.pointerType === 'touch') {
       this.touchPoints.clear()
       this.pinchState = null
@@ -681,8 +683,8 @@ export class JigsawPuzzle {
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
       const dx = event.clientX - this.pendingLift.startX
       const dy = event.clientY - this.pendingLift.startY
-      const isUpwardLift = dy < -16 && Math.abs(dy) > Math.abs(dx) + 6
-      const isHorizontalScroll = Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) + 4
+      const isUpwardLift = dy < -12 && Math.abs(dy) > Math.abs(dx) * 0.4
+      const isHorizontalScroll = Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 2.5
 
       if (isHorizontalScroll) {
         this.cancelPendingLift()
@@ -854,7 +856,6 @@ export class JigsawPuzzle {
       zoom: this.zoom,
       panX: this.panX,
       panY: this.panY,
-      referenceVisible: this.referenceVisible,
       boardColorIndex: this.boardColorIndex,
       edgesOnly: this.edgesOnly,
       pieces: this.pieces.map((piece) => ({
@@ -925,8 +926,6 @@ export class JigsawPuzzle {
     this.panX = clampedPan.x
     this.panY = clampedPan.y
     this.updateStageTransform()
-    this.setReferenceVisible(Boolean(payload.referenceVisible))
-
     const rawColorIndex = Number(payload.boardColorIndex)
     if (Number.isFinite(rawColorIndex) && rawColorIndex >= 0 && rawColorIndex < this.boardColors.length) {
       this.boardColorIndex = rawColorIndex

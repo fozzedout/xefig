@@ -485,7 +485,6 @@ export class PictureSwapPuzzle {
       slots: [...this.slots],
       selectedTileId: this.selectedTileId,
       completed: this.completed,
-      referenceVisible: this.referenceVisible,
       startedAtMs: this.startedAtMs,
     }
   }
@@ -539,7 +538,6 @@ export class PictureSwapPuzzle {
 
     this.completed = Boolean(state.completed) || this.isSolved()
     this.syncAllTilePositions({ animate: false })
-    this.setReferenceVisible(Boolean(state.referenceVisible))
 
     const selectedTileId = Number(state.selectedTileId)
     if (
