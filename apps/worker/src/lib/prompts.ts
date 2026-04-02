@@ -15,97 +15,123 @@ const DESCRIPTORS_PER_PACK = ROLES.length
 
 const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   concept: [
-    'clockwork', 'observatory', 'market', 'library', 'foundry', 'aqueduct', 'lighthouse', 
-    'cathedral', 'workshop', 'greenhouse', 'arcade', 'monastery', 'terrace', 'promenade', 
-    'harbor', 'station', 'shrine', 'temple', 'palace', 'courtyard', 'plaza', 'boulevard', 
-    'dockyard', 'gantries', 'orchard', 'railway', 'bridge', 'monolith', 'obelisk', 
-    'pyramid', 'statue', 'airship', 'sanctuary', 'atrium', 'fountain', 'garden',
-    'fox', 'wolf', 'jaguar', 'elephant', 'whale', 'dolphin', 'jellyfish', 'owl', 'koi',
-    'parade', 'skate park', 'ballroom', 'still-life', 'abstract ink', 'fluid marbling',
-    'waterfall', 'wind farm', 'solar array', 'canyon', 'glacier', 'reef', 'oasis',
-    'staircase', 'colonnade', 'sequestration hub', 'transit node', 'vault', 'archives'
+    // architecture & structures
+    'clockwork', 'observatory', 'library', 'foundry', 'aqueduct', 'lighthouse',
+    'cathedral', 'workshop', 'arcade', 'monastery', 'promenade', 'harbor',
+    'station', 'shrine', 'temple', 'palace', 'courtyard', 'plaza', 'boulevard',
+    'dockyard', 'orchard', 'railway', 'bridge', 'monolith', 'obelisk',
+    'pyramid', 'statue', 'sanctuary', 'atrium', 'fountain', 'colonnade',
+    'vault', 'amphitheatre', 'gatehouse', 'minaret', 'pagoda', 'ziggurat',
+    'windmill', 'mill', 'barn', 'farmstead', 'boathouse', 'pier', 'jetty',
+    'suspension bridge', 'viaduct', 'dam', 'lock gate', 'canal', 'wharf',
+    'bell tower', 'cupola', 'dome', 'spire', 'battlement', 'drawbridge',
+    'portcullis', 'rampart', 'keep', 'citadel', 'watchtower', 'bastion',
+    // nature & geography
+    'waterfall', 'canyon', 'glacier', 'reef', 'oasis', 'hot spring',
+    'geyser', 'cenote', 'sinkhole', 'tide pool', 'kelp forest', 'mangrove',
+    'bamboo grove', 'cherry blossom grove', 'lavender field', 'sunflower field',
+    'rice terrace', 'vineyard', 'tea plantation', 'wildflower meadow',
+    'aurora', 'thunderhead', 'supercell', 'rainbow', 'ice cave', 'sea arch',
+    'sea stack', 'coral atoll', 'volcanic caldera', 'lava flow', 'basalt columns',
+    'slot canyon', 'hoodoo formations', 'sand dunes', 'salt flat', 'petrified forest',
+    // wildlife
+    'fox', 'wolf', 'jaguar', 'elephant', 'whale', 'dolphin', 'jellyfish',
+    'owl', 'koi', 'eagle', 'heron', 'flamingo', 'peacock', 'tiger',
+    'snow leopard', 'red panda', 'orca', 'manta ray', 'sea turtle',
+    'hummingbird', 'kingfisher', 'stag', 'bison', 'polar bear', 'lynx',
+    'octopus', 'seahorse', 'butterfly swarm', 'starling murmuration',
+    'bee colony', 'dragonfly', 'chameleon', 'pangolin', 'narwhal',
+    // human activity & culture
+    'market', 'parade', 'ballroom', 'carnival', 'regatta', 'lantern festival',
+    'night bazaar', 'spice market', 'flower market', 'fish market',
+    'street musicians', 'rooftop garden', 'reading room', 'apothecary',
+    'blacksmith forge', 'pottery studio', 'weaving loom', 'glassblowing',
+    'calligraphy', 'tea ceremony', 'harvest festival', 'bonfire gathering',
+    // transport & machines
+    'airship', 'galleon', 'steamship', 'narrowboat', 'gondola',
+    'cable car', 'funicular', 'hot air balloon', 'biplane', 'locomotive',
+    'tram', 'rickshaw', 'caravan', 'covered wagon',
+    // abstract & artistic
+    'still-life', 'abstract ink', 'fluid marbling', 'mosaic', 'stained glass',
+    'tapestry', 'fresco', 'mandala', 'origami', 'kinetic sculpture',
+    'light installation', 'paper lanterns', 'wind chimes',
   ],
 
   location: [
-    'ruins', 'tower', 'alley', 'forest', 'cave', 'mountain', 'valley', 'coast', 'island', 
-    'cliffs', 'gorge', 'canyon', 'desert', 'savanna', 'jungle', 'tundra', 'glacier', 
-    'village', 'city', 'rooftops', 'sky', 'underwater', 'lunar', 'nebula', 'void', 
-    'abyss', 'cavern', 'meadow', 'swamp', 'marsh', 'delta', 'fjord', 'plateau', 
-    'mesa', 'volcano', 'observatory', 'sanctuary', 'outpost', 'stronghold'
+    'ruins', 'tower', 'alley', 'forest', 'cave', 'mountain', 'valley',
+    'coast', 'island', 'cliffs', 'gorge', 'canyon', 'desert', 'savanna',
+    'jungle', 'tundra', 'glacier', 'village', 'city', 'rooftops', 'sky',
+    'underwater', 'lunar', 'nebula', 'cavern', 'meadow', 'swamp', 'delta',
+    'fjord', 'plateau', 'mesa', 'volcano', 'outpost', 'stronghold',
+    'archipelago', 'lagoon', 'estuary', 'wetlands', 'steppe', 'taiga',
+    'rainforest canopy', 'cloud forest', 'alpine lake', 'mountain pass',
+    'river bend', 'waterfront', 'harbor town', 'hilltop village',
+    'cliff dwelling', 'floating village', 'terraced hillside', 'vineyard slope',
+    'coastal path', 'sea cave', 'rocky shoreline', 'sandbar', 'tidal flat',
+    'bamboo forest', 'birch grove', 'autumn woodland', 'misty highlands',
+    'rolling hills', 'chalk cliffs', 'volcanic island', 'crater lake',
+    'frozen lake', 'mountain ridge', 'ravine', 'grotto', 'cenote',
+    'abandoned quarry', 'overgrown railway', 'sunken garden', 'walled garden',
+    'courtyard garden', 'rooftop terrace', 'balcony overlook', 'bell tower view',
+    'marketplace square', 'cobblestone street', 'lantern-lit alley',
+    'canal district', 'old town', 'fishing village', 'mountain monastery',
+    'desert oasis', 'palm grove', 'mangrove coast', 'coral shallows',
   ],
 
   state: [
-    'neon', 'floating', 'submerged', 'volcanic', 'bioluminescent', 'ancient', 'retro', 
-    'futuristic', 'industrial', 'organic', 'geometric', 'maximalist', 'minimalist', 
-    'overgrown', 'frozen', 'burning', 'steampunk', 'cyberpunk', 'solarpunk', 'fantasy', 
-    'mythological', 'ethereal', 'surreal', 'mystical', 'abandoned', 'decaying', 
-    'pristine', 'lush', 'barren', 'stormy', 'serene', 'vibrant', 'monochrome',
-    'misty', 'shimmering', 'clockwork', 'crystalline', 'decaying', 'ossified'
+    'neon', 'floating', 'submerged', 'volcanic', 'bioluminescent', 'ancient',
+    'retro', 'futuristic', 'industrial', 'organic', 'geometric', 'maximalist',
+    'minimalist', 'overgrown', 'frozen', 'burning', 'steampunk', 'cyberpunk',
+    'solarpunk', 'fantasy', 'mythological', 'ethereal', 'surreal', 'mystical',
+    'abandoned', 'pristine', 'lush', 'barren', 'stormy', 'serene', 'vibrant',
+    'misty', 'shimmering', 'crystalline', 'ossified', 'weathered', 'mossy',
+    'sun-bleached', 'rain-soaked', 'frost-covered', 'dew-laden', 'blooming',
+    'autumnal', 'twilight', 'dawn-lit', 'moonlit', 'star-filled', 'cloud-wrapped',
+    'windswept', 'sun-dappled', 'shadow-draped', 'golden', 'silver', 'copper-toned',
+    'patinated', 'hand-painted', 'gilded', 'carved', 'terraced', 'layered',
+    'reflected', 'translucent', 'iridescent', 'pearlescent', 'textured',
+    'crumbling', 'restored', 'timeworn', 'freshly built', 'half-finished',
+    'ceremonial', 'sacred', 'wild', 'domesticated', 'migratory', 'seasonal',
   ],
 
   lighting: [
-    'golden hour sunlight',
-    'moonlit reflections',
-    'dramatic thunderclouds',
-    'soft overcast lighting',
-    'crisp desert air',
-    'after-rain shimmer',
-    'warm tungsten glow',
-    'cool cyan shadows',
-    'amber rim light',
-    'dappled canopy light',
-    'high contrast lighting',
-    'diffused cinematic haze',
-    'subsurface underwater rays',
-    'volumetric god rays',
-    'silhouette backlighting',
-    'low key lighting',
-    'aurora sky ribbons',
-    'starlit twilight gradient',
-    'bright midday clarity',
-    'sunset magenta horizon',
-    'pre-dawn blue tones',
-    'mist and rain droplets',
-    'dry heat shimmer',
-    'fresh snowfall powder',
-    'stormy ocean spray',
-    'tranquil lake mirror',
-    'cloud sea backdrop',
+    'golden hour sunlight', 'moonlit reflections', 'dramatic thunderclouds',
+    'soft overcast lighting', 'crisp desert air', 'after-rain shimmer',
+    'warm tungsten glow', 'cool cyan shadows', 'amber rim light',
+    'dappled canopy light', 'high contrast lighting', 'diffused cinematic haze',
+    'subsurface underwater rays', 'volumetric god rays', 'silhouette backlighting',
+    'low key lighting', 'aurora sky ribbons', 'starlit twilight gradient',
+    'bright midday clarity', 'sunset magenta horizon', 'pre-dawn blue tones',
+    'mist and rain droplets', 'dry heat shimmer', 'fresh snowfall powder',
+    'stormy ocean spray', 'tranquil lake mirror', 'cloud sea backdrop',
+    'firelight flicker', 'candlelit warmth', 'lantern glow', 'neon reflections',
+    'bioluminescent glow', 'shaft of light through clouds', 'rainbow prism light',
+    'eclipse shadow', 'polar twilight', 'tropical noon glare',
+    'autumn leaf-filtered light', 'cherry blossom haze', 'campfire embers',
   ],
 
   mood: [
-    'uplifting adventurous mood',
-    'cozy nostalgic mood',
-    'mysterious tense mood',
-    'playful whimsical mood',
-    'serene meditative mood',
-    'heroic epic mood',
-    'dreamlike surreal mood',
-    'hopeful optimistic mood',
-    'moody noir tone',
-    'bright celebratory tone',
+    'uplifting adventurous mood', 'cozy nostalgic mood', 'mysterious tense mood',
+    'playful whimsical mood', 'serene meditative mood', 'heroic epic mood',
+    'dreamlike surreal mood', 'hopeful optimistic mood', 'moody noir tone',
+    'bright celebratory tone', 'awe-inspiring grandeur', 'intimate and quiet',
+    'wild and untamed', 'romantic and warm', 'solemn and reverent',
+    'joyful and energetic', 'contemplative and still', 'dramatic and powerful',
   ],
 
   style: [
-    'stylized illustration',
-    'high detail concept art',
-    'matte painting finish',
-    'storybook painting style',
-    'watercolor wash texture',
-    'heavy linework accents',
-    'gouache brush strokes',
-    'oil paint texture',
-    'clean vector style',
-    'isometric scene design',
-    'futuristic retro fusion',
-    'ancient technology motif',
-    'solar-punk infrastructure',
-    'fantasy realism blend',
-    'art deco geometry',
-    'brutalist forms',
-    'organic curved structures',
-    'geometric layered abstract style',
-    'maximalist color explosion',
+    'stylized illustration', 'high detail concept art', 'matte painting finish',
+    'storybook painting style', 'watercolor wash texture', 'heavy linework accents',
+    'gouache brush strokes', 'oil paint texture', 'clean vector style',
+    'isometric scene design', 'futuristic retro fusion', 'ancient technology motif',
+    'solar-punk infrastructure', 'fantasy realism blend', 'art deco geometry',
+    'brutalist forms', 'organic curved structures', 'geometric layered abstract style',
+    'maximalist color explosion', 'photorealistic rendering', 'soft focus impressionism',
+    'ukiyo-e woodblock style', 'art nouveau curves', 'pointillist texture',
+    'palette knife impasto', 'charcoal sketch finish', 'ink wash painting',
+    'fresco texture', 'mosaic tile style', 'stained glass rendering',
+    'linocut print style', 'copper engraving style', 'digital collage',
+    'hand-tinted photograph style', 'vintage travel poster style',
   ],
 
   palette: [
@@ -119,21 +145,28 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'sand and ultramarine as dominant tones with natural colour variation throughout',
     'violet and lime as dominant tones with natural colour variation throughout',
     'monochrome with accent red as dominant tones with natural colour variation throughout',
+    'burnt sienna and slate blue as dominant tones with natural colour variation throughout',
+    'ochre and forest green as dominant tones with natural colour variation throughout',
+    'lavender and honey gold as dominant tones with natural colour variation throughout',
+    'terracotta and turquoise as dominant tones with natural colour variation throughout',
+    'peach and navy as dominant tones with natural colour variation throughout',
+    'crimson and ivory as dominant tones with natural colour variation throughout',
+    'olive and burgundy as dominant tones with natural colour variation throughout',
+    'dusty pink and deep teal as dominant tones with natural colour variation throughout',
+    'warm grey and saffron as dominant tones with natural colour variation throughout',
+    'plum and bronze as dominant tones with natural colour variation throughout',
   ],
 
   camera: [
-    'wide-angle establishing shot',
-    "low-angle hero perspective",
-    "overhead bird's-eye view",
-    'close-up macro shot',
-    'medium shot with foreground framing',
-    "worm's-eye upward angle",
-    'Dutch tilt dynamic angle',
-    'symmetrical frontal framing',
-    'over-the-shoulder depth shot',
-    'panoramic wide shot',
-    'intimate eye-level shot',
-    'dramatic low horizon shot',
+    'wide-angle establishing shot', 'low-angle hero perspective',
+    "overhead bird's-eye view", 'close-up macro shot',
+    'medium shot with foreground framing', "worm's-eye upward angle",
+    'Dutch tilt dynamic angle', 'symmetrical frontal framing',
+    'over-the-shoulder depth shot', 'panoramic wide shot',
+    'intimate eye-level shot', 'dramatic low horizon shot',
+    'telephoto compression shot', 'fish-eye distortion',
+    'through-the-archway framing', 'reflection framing',
+    'layered depth with bokeh foreground', 'silhouette framing against sky',
   ],
 }
 
@@ -146,38 +179,19 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 // ---------------------------------------------------------------------------
 
 const MIN_ROLE_POOL_SIZE: Record<DescriptorRole, number> = {
-  concept: 20,
-  location: 20,
-  state: 20,
-  lighting: 10,
-  mood: 6,
-  style: 10,
-  palette: 6,
-  camera: 6,
-}
-
-const MIN_POLYGRAM_POOL_SIZE: Record<DescriptorRole, number> = {
-  setting: 20,
-  lighting: 6,
-  mood: 6,
-  style: 10,
-  palette: 6,
-  camera: 6,
+  concept: 40,
+  location: 40,
+  state: 30,
+  lighting: 20,
+  mood: 10,
+  style: 15,
+  palette: 10,
+  camera: 10,
 }
 
 // ---------------------------------------------------------------------------
 // Prompt template constants
 // ---------------------------------------------------------------------------
-
-// Jigsaw, slider, and swap are all "rich scene" puzzles — the mechanic
-// differences are handled by the game engine, not the image. A single shared
-// intent lets the descriptor combinations carry all the creative variation.
-const SCENE_PUZZLE_INTENT = {
-  composition:
-    'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
-  qualityTarget:
-    'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
-} as const
 
 const CATEGORY_PROMPT_INTENTS: Record<
   PuzzleCategory,
@@ -187,11 +201,34 @@ const CATEGORY_PROMPT_INTENTS: Record<
     qualityTarget: string
   }
 > = {
-  jigsaw: { title: 'Jigsaw', ...SCENE_PUZZLE_INTENT },
-  slider: { title: 'Slider', ...SCENE_PUZZLE_INTENT },
-  swap:   { title: 'Swap',   ...SCENE_PUZZLE_INTENT },
+  jigsaw: {
+    title: 'Jigsaw',
+    composition:
+      'Depict a breathtaking, visually stunning scene worthy of a framed print or wallpaper — dramatic scale, striking depth, and arresting beauty. Favour sweeping vistas, monumental architecture, epic natural wonders, or powerful wildlife portraits. The image should feel like a cinematic hero shot that demands attention.',
+    qualityTarget:
+      'Every region must be packed with rich texture, fine surface detail, and tonal depth. Ensure many distinct recognisable sub-regions with clear visual separation. Maintain natural colour variety — secondary and environmental colours should remain visible beneath the dominant palette. The overall impression should be of a premium, gallery-quality image.',
+  },
+  slider: {
+    title: 'Slider',
+    composition:
+      'Depict a visually striking, high-impact scene with bold composition and dramatic presence — the kind of image that stops you scrolling. Favour powerful landscapes, grand architecture, vivid wildlife encounters, or dramatic atmospheric moments. Prioritise depth, scale, and visual punch.',
+    qualityTarget:
+      'Every region must contain rich texture, fine detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+  },
+  swap: {
+    title: 'Swap',
+    composition:
+      'Depict a visually gorgeous, immersive scene with strong colour impact and beautiful composition — something that would look stunning as a large print. Favour lush environments, dramatic skies, vibrant cityscapes, majestic wildlife, or awe-inspiring natural formations. The image should feel rich, expansive, and deeply satisfying to look at.',
+    qualityTarget:
+      'Every region must be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation. Maintain natural colour variety — secondary and environmental colours should remain visible beneath the dominant palette.',
+  },
   polygram: {
-    title: 'Polygram', ...SCENE_PUZZLE_INTENT },
+    title: 'Polygram',
+    composition:
+      'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
+    qualityTarget:
+      'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+  },
 }
 
 // Step-by-step prompt structure per Google best practices:
@@ -223,9 +260,9 @@ const PROMPT_QUALITY_TEMPLATES = [
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES = [
-  'Output: one landscape 4:3 image , fully edge-to-edge composition with no borders, frames, or vignettes.',
-  'Deliver a single landscape 4:3 image . The composition must fill the full frame with no decorative borders or edges.',
-  'Single 4:3 landscape image  only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting.',
+  'Output: one landscape 4:3 image , fully edge-to-edge composition with no borders, frames, or vignettes. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
+  'Deliver a single landscape 4:3 image . The composition must fill the full frame with no decorative borders or edges. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Single 4:3 landscape image  only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
 ] as const
 
 // Polygram output templates reinforce orientation rather than edge-to-edge fill.
@@ -233,9 +270,9 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 image . The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
-  'Deliver a single landscape 4:3 image . Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
-  'Single 4:3 landscape image  only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes.',
+  'Output: one landscape 4:3 image . The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
+  'Deliver a single landscape 4:3 image . Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Single 4:3 landscape image  only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
 ] as const
 
 // ---------------------------------------------------------------------------

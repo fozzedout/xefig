@@ -897,6 +897,75 @@ document.querySelectorAll('.rewrite-btn').forEach((btn) => {
   })
 })
 
+document.querySelectorAll('.submit-single-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const category = (btn.getAttribute('data-mode') || '').trim()
+    if (!CATEGORIES.includes(category)) {
+      setStatus('Invalid category.', 'error')
+      return
+    }
+    if (!requireAuth()) return
+
+    const field = promptFields[category]
+    const prompt = field?.value?.trim()
+    if (!prompt) {
+      setStatus(`Generate a ${category} prompt first.`, 'error')
+      return
+    }
+
+    const selectedDate = dateInput.value.trim() || undefined
+    const themeInput = document.getElementById(`theme-${category}`)
+    const tagsInput = document.getElementById(`tags-${category}`)
+    const theme = themeInput?.value?.trim() || category
+    const keywords = (tagsInput?.value?.trim() || '').split(',').map((t) => t.trim()).filter(Boolean)
+
+    // Show full prompt for verification before submitting
+    const confirmMsg = `Submit ${category.toUpperCase()} batch for ${selectedDate || 'next empty date'}?\n\n--- FULL PROMPT ---\n${prompt}\n\n--- THEME ---\n${theme}\n\n--- TAGS ---\n${keywords.join(', ') || '(none)'}`
+    if (!confirm(confirmMsg)) {
+      setStatus('Single batch submit cancelled.', 'error')
+      return
+    }
+
+    btn.disabled = true
+    setStatus(`Submitting ${category} batch job...`, 'working')
+    try {
+      const submitSingle = async (force = false) => {
+        return adminFetch('/api/admin/generate-images/single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, prompt, theme, keywords, date: selectedDate, force }),
+        })
+      }
+
+      let { response, payload } = await submitSingle()
+
+      if (response.status === 401) {
+        setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+        return
+      }
+
+      if (!response.ok && payload.existingDate) {
+        if (!confirm(`Puzzle images already exist for ${payload.targetDate}. Overwrite ${category}?`)) {
+          setStatus('Single batch submit cancelled.', 'error')
+          return
+        }
+        ;({ response, payload } = await submitSingle(true))
+      }
+
+      if (!response.ok) {
+        setStatus(payload.error || `${category} batch submit failed.`, 'error')
+        return
+      }
+
+      setStatus(payload.message || `${category} batch job submitted. Use Poll Batch to check progress.`, 'ok')
+    } catch {
+      setStatus(`Network error during ${category} batch submit.`, 'error')
+    } finally {
+      btn.disabled = false
+    }
+  })
+})
+
 generateBtn.addEventListener('click', async () => {
   if (!requireAuth()) {
     return
@@ -958,6 +1027,34 @@ autoGenerateBtn.addEventListener('click', async () => {
 
   const selectedDate = dateInput.value.trim() || undefined
 
+  // Collect prompts from the UI if they exist, to send to server
+  let clientPrompts = null
+  const hasPrompts = CATEGORIES.every((cat) => promptFields[cat]?.value?.trim())
+  if (hasPrompts) {
+    clientPrompts = {}
+    let confirmLines = []
+    for (const cat of CATEGORIES) {
+      const themeInput = document.getElementById(`theme-${cat}`)
+      const tagsInput = document.getElementById(`tags-${cat}`)
+      const prompt = promptFields[cat].value.trim()
+      const theme = themeInput?.value?.trim() || cat
+      const keywords = (tagsInput?.value?.trim() || '').split(',').map((t) => t.trim()).filter(Boolean)
+      clientPrompts[cat] = { prompt, theme, keywords }
+      confirmLines.push(`--- ${cat.toUpperCase()} ---\n${prompt}\n`)
+    }
+
+    const confirmMsg = `Submit ALL categories batch for ${selectedDate || 'next empty date'}?\n\n${confirmLines.join('\n')}`
+    if (!confirm(confirmMsg)) {
+      setStatus('Batch submit cancelled.', 'error')
+      return
+    }
+  } else {
+    if (!confirm(`Submit batch for ${selectedDate || 'next empty date'}? No prompts are loaded — new prompts will be generated server-side. Generate prompts first to review them before submitting.`)) {
+      setStatus('Batch submit cancelled.', 'error')
+      return
+    }
+  }
+
   autoGenerateBtn.disabled = true
   setStatus('Submitting batch image generation job...', 'working')
   try {
@@ -965,6 +1062,7 @@ autoGenerateBtn.addEventListener('click', async () => {
       const body = {}
       if (selectedDate) body.date = selectedDate
       if (force) body.force = true
+      if (clientPrompts) body.prompts = clientPrompts
       return adminFetch('/api/admin/generate-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -774,6 +774,22 @@ button { font-family: var(--font-ui); cursor: pointer; }
   background: var(--accent-dim);
 }
 
+.btn-micro.btn-accent {
+  color: #1ca87e;
+  border-color: rgba(28,168,126,.35);
+}
+.btn-micro.btn-accent:hover {
+  color: #fff;
+  border-color: #1ca87e;
+  background: #1ca87e;
+}
+.btn-micro.btn-accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: #1ca87e;
+  background: transparent;
+}
+
 .btn-save {
   display: inline-flex;
   align-items: center;

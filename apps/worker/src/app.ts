@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 
 import { ensureLeaderboardTable, isLeaderboardDifficulty, isLeaderboardGameMode } from './lib/leaderboard'
 import { ensureContactTable, validateContact as validateContactForm, storeContactMessage } from './lib/contact'
+import { registerProfile, linkProfile, pushProfile, pullProfile, type PushInput } from './lib/sync'
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_TTL_SECONDS,
@@ -29,7 +30,7 @@ import {
   rewriteSinglePromptWithOpenRouter,
 } from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
-import { handleBatchSubmit, handleBatchPoll, getBatchJobStatus, completeBatchCategory } from './lib/scheduled'
+import { handleBatchSubmit, handleSingleBatchSubmit, handleBatchPoll, getBatchJobStatus, completeBatchCategory } from './lib/scheduled'
 import {
   CATEGORIES,
   type Bindings,
@@ -329,7 +330,7 @@ export function createApp() {
 
         nextCategories[category] = {
           imageKey,
-          imageUrl: toCdnUrl(imageKey),
+          imageUrl: toCdnUrl(imageKey) + `?v=${Date.now()}`,
           contentType,
           fileName: file.name || `${category}.${extension}`,
           theme: catTheme,
@@ -398,7 +399,7 @@ export function createApp() {
       })
 
       asset.thumbnailKey = thumbKey
-      asset.thumbnailUrl = toCdnUrl(thumbKey)
+      asset.thumbnailUrl = toCdnUrl(thumbKey) + `?v=${Date.now()}`
       existing.updatedAt = new Date().toISOString()
 
       await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(existing))
@@ -427,20 +428,77 @@ export function createApp() {
     }
 
     try {
-      let body: { date?: string; force?: boolean } | null = null
+      let body: {
+        date?: string
+        force?: boolean
+        prompts?: Record<string, { prompt: string; theme: string; keywords: string[] }>
+      } | null = null
       try {
-        body = (await c.req.json()) as { date?: string; force?: boolean }
+        body = (await c.req.json()) as typeof body
       } catch {
         // No body is fine — falls back to next unscheduled date
       }
       const date = typeof body?.date === 'string' ? body.date.trim() : undefined
       const force = body?.force === true
+      const prompts = body?.prompts
 
-      const result = await handleBatchSubmit(c.env, { date, force })
+      const result = await handleBatchSubmit(c.env, { date, force, prompts })
       return c.json({ ok: result.submitted, ...result })
     } catch (error) {
       console.error('Batch submit failed', error)
       const message = error instanceof Error ? error.message : 'Batch submit failed.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.post('/api/admin/generate-images/single', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    if (!c.env.GOOGLE_AI_API_KEY) {
+      return c.json({ error: 'GOOGLE_AI_API_KEY is not configured.' }, 500)
+    }
+
+    try {
+      const body = (await c.req.json()) as {
+        category?: string
+        prompt?: string
+        theme?: string
+        keywords?: string[]
+        date?: string
+        force?: boolean
+      }
+
+      const category = body?.category?.trim() as PuzzleCategory
+      if (!CATEGORIES.includes(category)) {
+        return c.json({ error: 'Invalid category.' }, 400)
+      }
+
+      const prompt = body?.prompt?.trim()
+      if (!prompt) {
+        return c.json({ error: 'Prompt is required.' }, 400)
+      }
+
+      const theme = body?.theme?.trim() || category
+      const keywords = Array.isArray(body?.keywords) ? body.keywords : []
+      const date = typeof body?.date === 'string' ? body.date.trim() : undefined
+      const force = body?.force === true
+
+      const result = await handleSingleBatchSubmit(c.env, {
+        category,
+        prompt,
+        theme,
+        keywords,
+        date,
+        force,
+      })
+      return c.json({ ok: result.submitted, ...result })
+    } catch (error) {
+      console.error('Single batch submit failed', error)
+      const message = error instanceof Error ? error.message : 'Single batch submit failed.'
       return c.json({ error: message }, 500)
     }
   })
@@ -935,6 +993,128 @@ export function createApp() {
     } catch (error) {
       console.error('Contact form failed', error)
       return c.json({ error: 'Unable to send message. Please try again.' }, 500)
+    }
+  })
+
+  // ─── Sync: Anonymous Profile Sharing ───
+
+  app.post('/api/sync/register', async (c) => {
+    let body: { playerGuid?: string } | null = null
+    try {
+      body = (await c.req.json()) as { playerGuid?: string }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const playerGuid = (body?.playerGuid || '').trim()
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+      return c.json({ error: 'Invalid playerGuid.' }, 400)
+    }
+
+    try {
+      const result = await registerProfile(c.env.DB, playerGuid)
+      return c.json(result)
+    } catch (error) {
+      console.error('Sync register failed', error)
+      return c.json({ error: 'Unable to register profile.' }, 500)
+    }
+  })
+
+  app.post('/api/sync/link', async (c) => {
+    let body: { shareCode?: string } | null = null
+    try {
+      body = (await c.req.json()) as { shareCode?: string }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const shareCode = (body?.shareCode || '').trim().toUpperCase()
+    if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(shareCode)) {
+      return c.json({ error: 'Invalid share code format.' }, 400)
+    }
+
+    try {
+      const result = await linkProfile(c.env.DB, shareCode)
+      if (!result) {
+        return c.json({ error: 'Share code not found.' }, 404)
+      }
+      return c.json(result)
+    } catch (error) {
+      console.error('Sync link failed', error)
+      return c.json({ error: 'Unable to link profile.' }, 500)
+    }
+  })
+
+  app.post('/api/sync/push', async (c) => {
+    let body: Record<string, unknown> | null = null
+    try {
+      body = (await c.req.json()) as Record<string, unknown>
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const playerGuid = String(body?.playerGuid || '').trim()
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+      return c.json({ error: 'Invalid playerGuid.' }, 400)
+    }
+
+    const input: PushInput = {
+      playerGuid,
+      updatedAt: typeof body?.updatedAt === 'string' ? body.updatedAt : null,
+      force: body?.force === true,
+    }
+
+    if (body?.fullProfile && typeof body.fullProfile === 'object') {
+      input.fullProfile = body.fullProfile as PushInput['fullProfile']
+    }
+    if (body?.settings && typeof body.settings === 'object') {
+      input.settings = body.settings as PushInput['settings']
+    }
+    if (body?.completedRun && typeof body.completedRun === 'object') {
+      input.completedRun = body.completedRun as PushInput['completedRun']
+    }
+    if (body?.activeRun && typeof body.activeRun === 'object') {
+      input.activeRun = body.activeRun as PushInput['activeRun']
+    }
+
+    if (!input.fullProfile && !input.settings && !input.completedRun && !input.activeRun) {
+      return c.json({ error: 'No changes provided.' }, 400)
+    }
+
+    try {
+      const result = await pushProfile(c.env.DB, input)
+      if ('notFound' in result) {
+        return c.json({ error: 'Profile not found. Register first.' }, 404)
+      }
+      return c.json(result)
+    } catch (error) {
+      console.error('Sync push failed', error)
+      return c.json({ error: 'Unable to save profile.' }, 500)
+    }
+  })
+
+  app.post('/api/sync/pull', async (c) => {
+    let body: { playerGuid?: string } | null = null
+    try {
+      body = (await c.req.json()) as { playerGuid?: string }
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const playerGuid = (body?.playerGuid || '').trim()
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+      return c.json({ error: 'Invalid playerGuid.' }, 400)
+    }
+
+    try {
+      const result = await pullProfile(c.env.DB, playerGuid)
+      if (!result) {
+        return c.json({ notFound: true })
+      }
+      return c.json(result)
+    } catch (error) {
+      console.error('Sync pull failed', error)
+      return c.json({ error: 'Unable to load profile.' }, 500)
     }
   })
 

@@ -14,6 +14,8 @@ type PendingBatchJob = {
   // Tracks processing progress: 'fetched' means raw PNGs saved to R2 temp
   phase: 'submitted' | 'fetched'
   processedCategories: PuzzleCategory[]
+  // When set, only these categories were requested (single-category batch)
+  requestedCategories?: PuzzleCategory[]
 }
 
 export type BatchSubmitResult = {
@@ -44,7 +46,12 @@ export type BatchPollResult = {
 
 export async function handleBatchSubmit(
   env: Bindings,
-  opts: { date?: string; force?: boolean } = {},
+  opts: {
+    date?: string
+    force?: boolean
+    // When provided, use these prompts instead of generating new ones
+    prompts?: Record<string, { prompt: string; theme: string; keywords: string[] }>
+  } = {},
 ): Promise<BatchSubmitResult> {
   if (!env.GOOGLE_AI_API_KEY) {
     return { submitted: false, message: 'GOOGLE_AI_API_KEY not configured.' }
@@ -87,14 +94,21 @@ export async function handleBatchSubmit(
     }
   }
 
-  const [pack] = await generatePromptPacks(env.metadata, 1)
-  if (!pack) {
-    return { submitted: false, message: 'Failed to generate prompt pack.' }
+  // Use client-provided prompts if available, otherwise generate new ones
+  let categoryPrompts: Record<PuzzleCategory, { prompt: string; theme: string; keywords: string[] }>
+  if (opts.prompts && CATEGORIES.every((c) => opts.prompts![c]?.prompt)) {
+    categoryPrompts = opts.prompts as typeof categoryPrompts
+  } else {
+    const [pack] = await generatePromptPacks(env.metadata, 1)
+    if (!pack) {
+      return { submitted: false, message: 'Failed to generate prompt pack.' }
+    }
+    categoryPrompts = pack.categories
   }
 
   const requests: BatchRequest[] = CATEGORIES.map((category) => ({
     category,
-    prompt: pack.categories[category].prompt,
+    prompt: categoryPrompts[category].prompt,
   }))
 
   const { batchName } = await submitImageBatch(env.GOOGLE_AI_API_KEY, requests)
@@ -111,10 +125,10 @@ export async function handleBatchSubmit(
   const themes: Record<string, string> = {}
   for (const category of CATEGORIES) {
     pendingJob.categories[category] = {
-      theme: pack.categories[category].theme,
-      keywords: pack.categories[category].keywords,
+      theme: categoryPrompts[category].theme,
+      keywords: categoryPrompts[category].keywords,
     }
-    themes[category] = pack.categories[category].theme
+    themes[category] = categoryPrompts[category].theme
   }
 
   await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(pendingJob))
@@ -125,6 +139,94 @@ export async function handleBatchSubmit(
     batchName,
     targetDate,
     themes,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single-category batch submit (manual from admin panel)
+// ---------------------------------------------------------------------------
+
+export async function handleSingleBatchSubmit(
+  env: Bindings,
+  opts: {
+    category: PuzzleCategory
+    prompt: string
+    theme: string
+    keywords: string[]
+    date?: string
+    force?: boolean
+  },
+): Promise<BatchSubmitResult> {
+  if (!env.GOOGLE_AI_API_KEY) {
+    return { submitted: false, message: 'GOOGLE_AI_API_KEY not configured.' }
+  }
+
+  const existingJob = await env.metadata.get(BATCH_JOB_KEY)
+  if (existingJob) {
+    let pendingJob: PendingBatchJob | null = null
+    try { pendingJob = JSON.parse(existingJob) as PendingBatchJob } catch {}
+    return {
+      submitted: false,
+      message: `Batch job already pending for ${pendingJob?.targetDate ?? 'unknown date'}. Wait for it to complete or clear it first.`,
+      batchName: pendingJob?.batchName,
+      targetDate: pendingJob?.targetDate,
+    }
+  }
+
+  let targetDate: string | null
+  if (opts.date) {
+    if (!isValidDateKey(opts.date)) {
+      return { submitted: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
+    }
+    targetDate = opts.date
+  } else {
+    const today = getUtcDateKey()
+    targetDate = await findNextUnscheduledDate(env.metadata, today, 14)
+    if (!targetDate) {
+      return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
+    }
+  }
+
+  const requests: BatchRequest[] = [{
+    category: opts.category,
+    prompt: opts.prompt,
+  }]
+
+  const { batchName } = await submitImageBatch(env.GOOGLE_AI_API_KEY, requests)
+
+  // Build a pending job with only the single category's metadata.
+  // The other categories are left empty so processing skips them.
+  const pendingJob: PendingBatchJob = {
+    batchName,
+    targetDate,
+    categories: {} as PendingBatchJob['categories'],
+    submittedAt: new Date().toISOString(),
+    phase: 'submitted',
+    processedCategories: [],
+    // Track which categories are actually part of this job
+    requestedCategories: [opts.category],
+  }
+
+  pendingJob.categories[opts.category] = {
+    theme: opts.theme,
+    keywords: opts.keywords,
+  }
+
+  // Fill empty metadata for unrequested categories so existing code doesn't break
+  for (const cat of CATEGORIES) {
+    if (!pendingJob.categories[cat]) {
+      pendingJob.categories[cat] = { theme: '', keywords: [] }
+    }
+  }
+
+  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(pendingJob))
+
+  return {
+    submitted: true,
+    message: `Single ${opts.category} batch job submitted for ${targetDate}.`,
+    batchName,
+    targetDate,
+    themes: { [opts.category]: opts.theme },
   }
 }
 
@@ -250,8 +352,9 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
 
 async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise<BatchPollResult> {
   const { batchName, targetDate, submittedAt, categories: categoryMeta } = job
+  const jobCategories = job.requestedCategories ?? CATEGORIES
   const processed = new Set(job.processedCategories)
-  const remaining = CATEGORIES.filter((c) => !processed.has(c))
+  const remaining = jobCategories.filter((c) => !processed.has(c))
 
   if (remaining.length === 0) {
     return await finalizeRecord(env, job)
@@ -294,7 +397,7 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
   job.processedCategories = [...job.processedCategories, category]
   await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(job))
 
-  const newRemaining = CATEGORIES.filter((c) => !job.processedCategories.includes(c))
+  const newRemaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
 
   if (newRemaining.length === 0) {
     return await finalizeRecord(env, job)
@@ -317,45 +420,57 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
 
 async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<BatchPollResult> {
   const { batchName, targetDate, submittedAt, categories: categoryMeta } = job
+  const jobCategories = job.requestedCategories ?? CATEGORIES
 
-  const puzzleCategories = {} as Record<PuzzleCategory, PuzzleAsset>
-  for (const category of CATEGORIES) {
+  // For single-category jobs, merge into existing puzzle record if one exists
+  let existingRecord: PuzzleRecord | null = null
+  if (jobCategories.length < CATEGORIES.length) {
+    const existingRaw = await env.metadata.get(toPuzzleKey(targetDate))
+    if (existingRaw) {
+      try { existingRecord = JSON.parse(existingRaw) as PuzzleRecord } catch {}
+    }
+  }
+
+  const now = new Date().toISOString()
+  const cacheBuster = `?v=${Date.now()}`
+  const puzzleCategories = (existingRecord?.categories ?? {}) as Record<PuzzleCategory, PuzzleAsset>
+  for (const category of jobCategories) {
     const meta = categoryMeta[category]
     const imageKey = `puzzles/${targetDate}/${category}.jpg`
     const thumbKey = `puzzles/${targetDate}/${category}_thumb.jpg`
 
     puzzleCategories[category] = {
       imageKey,
-      imageUrl: toCdnUrl(imageKey),
+      imageUrl: toCdnUrl(imageKey) + cacheBuster,
       contentType: 'image/jpeg',
       fileName: `${category}.jpg`,
       theme: meta.theme,
       tags: meta.keywords,
       thumbnailKey: thumbKey,
-      thumbnailUrl: toCdnUrl(thumbKey),
+      thumbnailUrl: toCdnUrl(thumbKey) + cacheBuster,
     }
   }
-
-  const now = new Date().toISOString()
   const record: PuzzleRecord = {
     date: targetDate,
-    difficulty: 'adaptive',
+    difficulty: existingRecord?.difficulty ?? 'adaptive',
     categories: puzzleCategories,
-    createdAt: now,
+    createdAt: existingRecord?.createdAt ?? now,
     updatedAt: now,
   }
 
   await env.metadata.put(toPuzzleKey(targetDate), JSON.stringify(record))
   await env.metadata.delete(BATCH_JOB_KEY)
 
+  const catLabel = jobCategories.length === 1 ? jobCategories[0] : `${jobCategories.length} categories`
+
   return {
     found: true,
-    message: `Puzzle for ${targetDate} saved with ${CATEGORIES.length} images and thumbnails.`,
+    message: `Puzzle for ${targetDate} saved (${catLabel}).`,
     batchName,
     targetDate,
     state: 'succeeded',
     submittedAt,
-    imagesProcessed: CATEGORIES.length,
+    imagesProcessed: jobCategories.length,
     savedDate: targetDate,
   }
 }
@@ -391,11 +506,12 @@ export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> 
     return { active: false }
   }
 
-  const remaining = CATEGORIES.filter((c) => !job.processedCategories.includes(c))
+  const jobCategories = job.requestedCategories ?? CATEGORIES
+  const remaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
   const themes: Record<string, string> = {}
   const tempUrls: Record<string, string> = {}
 
-  for (const category of CATEGORIES) {
+  for (const category of jobCategories) {
     themes[category] = job.categories[category]?.theme ?? ''
     if (job.phase === 'fetched' && !job.processedCategories.includes(category)) {
       tempUrls[category] = toCdnUrl(`temp/${job.targetDate}/${category}.png`)
@@ -470,7 +586,8 @@ export async function completeBatchCategory(
 
   // Update job state
   job.processedCategories = [...job.processedCategories, category]
-  const remaining = CATEGORIES.filter((c) => !job.processedCategories.includes(c))
+  const jobCategories = job.requestedCategories ?? CATEGORIES
+  const remaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
 
   if (remaining.length === 0) {
     const result = await finalizeRecord(env, job)
