@@ -36,3 +36,35 @@ CREATE TABLE IF NOT EXISTS puzzle_leaderboard (
 
 CREATE INDEX IF NOT EXISTS idx_puzzle_leaderboard_daily
 ON puzzle_leaderboard (puzzle_date, difficulty, game_mode, elapsed_ms, submitted_at);
+
+CREATE TABLE IF NOT EXISTS player_profiles (
+    player_guid TEXT PRIMARY KEY,
+    share_code TEXT NOT NULL UNIQUE,
+    profile_name TEXT NOT NULL DEFAULT '',
+    board_color_index INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS player_completed (
+    player_guid TEXT NOT NULL,
+    puzzle_date TEXT NOT NULL,
+    game_mode TEXT NOT NULL,
+    difficulty TEXT,
+    elapsed_ms INTEGER NOT NULL DEFAULT 0,
+    best_ms INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (player_guid, puzzle_date, game_mode)
+);
+
+CREATE TABLE IF NOT EXISTS player_active_runs (
+    player_guid TEXT NOT NULL,
+    puzzle_date TEXT NOT NULL,
+    game_mode TEXT NOT NULL,
+    run_state TEXT NOT NULL DEFAULT '{}',
+    elapsed_ms INTEGER NOT NULL DEFAULT 0,
+    difficulty TEXT,
+    image_url TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (player_guid, puzzle_date, game_mode)
+);

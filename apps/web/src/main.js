@@ -1,5 +1,20 @@
 import './style.css'
 import sampleImage from './assets/hero.png'
+import {
+  initSync,
+  onGameExit as syncOnGameExit,
+  isSyncEnabled,
+  getShareCode,
+  getProfileName,
+  setProfileName,
+  enableSync,
+  linkSync,
+  disableSync,
+  onConflict,
+  resolveConflict,
+  startSyncTimer,
+  stopSyncTimer,
+} from './sync.js'
 // Puzzle engines are loaded on demand in renderGame() via dynamic import()
 // to keep the homepage bundle free of gameplay code.
 const puzzleLoaders = {
@@ -401,6 +416,7 @@ function bindGameActivity(onAutosave) {
   const handleUnload = () => {
     pauseActiveTimer()
     onAutosave()
+    syncOnGameExit()
   }
 
   window.__xefigHandleActivity = handleActivity
@@ -1546,20 +1562,23 @@ const NAV_HTML = `
       </svg>
       <span>Archive</span>
     </button>
-    <button class="nav-tab" data-page="settings">
+  </div>
+</nav>
+<nav class="bottom-nav" id="bottomNav">
+  <div class="bottom-nav-tabs" id="bottomNavTabs">
+    <button class="bottom-nav-tab" data-page="settings">
       <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="8" cy="8" r="2.5"/>
         <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4"/>
       </svg>
       <span>Settings</span>
     </button>
-    <button class="nav-tab" data-page="about">
+    <button class="bottom-nav-tab" data-page="about">
       <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="8" cy="8" r="6.5"/><path d="M8 7v5M8 4.5v.5"/>
       </svg>
       <span>About</span>
     </button>
-    <div class="nav-indicator" id="navIndicator"></div>
   </div>
 </nav>
 <div class="app-page visible" id="page-play"></div>
@@ -1583,15 +1602,9 @@ function initAppShell() {
   app.innerHTML = NAV_HTML
 
   const topNav = document.querySelector('#topNav')
-  const tabs = [...document.querySelectorAll('.nav-tab')]
-  const indicator = document.querySelector('#navIndicator')
-
-  function updateIndicator(tab) {
-    const r = tab.getBoundingClientRect()
-    const pr = tab.parentElement.getBoundingClientRect()
-    indicator.style.left = (r.left - pr.left) + 'px'
-    indicator.style.width = r.width + 'px'
-  }
+  const bottomNav = document.querySelector('#bottomNav')
+  const topTabs = [...document.querySelectorAll('#navTabs .nav-tab')]
+  const bottomTabs = [...document.querySelectorAll('#bottomNavTabs .bottom-nav-tab')]
 
   function switchPage(pageName, { updateHash = true } = {}) {
     if (pageName === currentPage) return
@@ -1601,14 +1614,17 @@ function initAppShell() {
     if (puzzle) destroyPuzzle()
     document.querySelector('#page-game').innerHTML = ''
 
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
+    const isBottomPage = pageName === 'settings' || pageName === 'about'
+
+    topTabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
+    bottomTabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
     document.querySelectorAll('.app-page').forEach((p) => {
       p.classList.toggle('visible', p.id === `page-${pageName}`)
     })
-    const activeTab = tabs.find((t) => t.dataset.page === pageName)
-    if (activeTab) updateIndicator(activeTab)
+
     topNav.classList.toggle('solid', pageName !== 'play')
     topNav.classList.remove('hidden')
+    bottomNav.classList.toggle('hidden', pageName === 'game')
 
     if (pageName === 'play') {
       renderLauncher()
@@ -1627,12 +1643,8 @@ function initAppShell() {
 
   window.switchToPage = switchPage
 
-  tabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
-  requestAnimationFrame(() => updateIndicator(tabs[0]))
-  window.addEventListener('resize', () => {
-    const active = tabs.find((t) => t.classList.contains('active'))
-    if (active) updateIndicator(active)
-  })
+  topTabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
+  bottomTabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
 
   // Route based on current hash
   const initialRoute = parseHash()
@@ -1730,6 +1742,7 @@ function resumeGameFromHash(mode, date) {
 function showGamePage() {
   currentPage = 'game'
   document.querySelector('#topNav').classList.add('hidden')
+  document.querySelector('#bottomNav').classList.add('hidden')
   document.querySelectorAll('.app-page').forEach((p) => {
     p.classList.toggle('visible', p.id === 'page-game')
   })
@@ -1776,6 +1789,10 @@ function renderSettingsPage() {
               .join('')}
           </div>
         </div>
+        <div class="settings-group">
+          <div class="settings-group-title">Sync Progress</div>
+          <div id="settings-sync-content"></div>
+        </div>
       </div>
     </div>
   `
@@ -1791,7 +1808,126 @@ function renderSettingsPage() {
     })
   })
 
+  renderSyncSettings()
   settingsRendered = true
+}
+
+function renderSyncSettings() {
+  const syncEl = document.querySelector('#settings-sync-content')
+  if (!syncEl) return
+
+  const enabled = isSyncEnabled()
+  const code = getShareCode()
+
+  if (enabled && code) {
+    const currentName = getProfileName()
+    syncEl.innerHTML = `
+      <div class="sync-field">
+        <label class="sync-field-label" for="sync-profile-name">Profile Name</label>
+        <input type="text" id="sync-profile-name" class="sync-name-input" maxlength="30" placeholder="Anonymous" value="${currentName.replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false" />
+      </div>
+      <p class="sync-description">Your sync code:</p>
+      <div class="sync-code-display">
+        <span class="sync-code-value">${code}</span>
+        <button type="button" id="sync-copy-btn" class="sync-copy-btn" title="Copy code">Copy</button>
+      </div>
+      <p class="sync-hint">Enter this code on another device to sync your progress.</p>
+      <div id="sync-status-msg" class="sync-status"></div>
+      <button type="button" id="sync-disable-btn" class="sync-disable-btn">Disable Sync</button>
+    `
+
+    const nameInput = syncEl.querySelector('#sync-profile-name')
+    let nameTimeout = null
+    nameInput.addEventListener('input', () => {
+      clearTimeout(nameTimeout)
+      nameTimeout = setTimeout(() => {
+        setProfileName(nameInput.value)
+      }, 400)
+    })
+
+    syncEl.querySelector('#sync-copy-btn').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code)
+        const btn = syncEl.querySelector('#sync-copy-btn')
+        btn.textContent = 'Copied!'
+        setTimeout(() => { btn.textContent = 'Copy' }, 2000)
+      } catch {
+        // fallback
+      }
+    })
+
+    syncEl.querySelector('#sync-disable-btn').addEventListener('click', () => {
+      disableSync()
+      renderSyncSettings()
+    })
+  } else {
+    syncEl.innerHTML = `
+      <p class="sync-description">Play on multiple devices by syncing your progress.</p>
+      <button type="button" id="sync-enable-btn" class="sync-enable-btn">Enable Sync</button>
+      <div class="sync-divider">or</div>
+      <p class="sync-description">Already have a code from another device?</p>
+      <div class="sync-link-row">
+        <input type="text" id="sync-code-input" class="sync-code-input" maxlength="6" placeholder="Enter code" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <button type="button" id="sync-link-btn" class="sync-link-btn">Link</button>
+      </div>
+      <div id="sync-status-msg" class="sync-status"></div>
+    `
+
+    const statusEl = syncEl.querySelector('#sync-status-msg')
+
+    syncEl.querySelector('#sync-enable-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget
+      btn.disabled = true
+      btn.textContent = 'Enabling...'
+      statusEl.textContent = ''
+      statusEl.className = 'sync-status'
+
+      try {
+        const shareCode = await enableSync(playerGuid)
+        renderSyncSettings()
+      } catch (err) {
+        statusEl.textContent = err.message || 'Failed to enable sync.'
+        statusEl.className = 'sync-status sync-status-error'
+        btn.disabled = false
+        btn.textContent = 'Enable Sync'
+      }
+    })
+
+    syncEl.querySelector('#sync-link-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget
+      const input = syncEl.querySelector('#sync-code-input')
+      const code = (input.value || '').trim().toUpperCase()
+      statusEl.textContent = ''
+      statusEl.className = 'sync-status'
+
+      if (code.length !== 6) {
+        statusEl.textContent = 'Code must be 6 characters.'
+        statusEl.className = 'sync-status sync-status-error'
+        return
+      }
+
+      btn.disabled = true
+      btn.textContent = 'Linking...'
+
+      try {
+        await linkSync(code)
+        renderSyncSettings()
+        statusEl.textContent = 'Linked! Progress synced from the other device.'
+        statusEl.className = 'sync-status sync-status-ok'
+      } catch (err) {
+        statusEl.textContent = err.message || 'Failed to link.'
+        statusEl.className = 'sync-status sync-status-error'
+        btn.disabled = false
+        btn.textContent = 'Link'
+      }
+    })
+
+    // Auto-uppercase input
+    const input = syncEl.querySelector('#sync-code-input')
+    input.addEventListener('input', () => {
+      input.value = input.value.toUpperCase()
+    })
+  }
 }
 
 function renderAboutPage() {
@@ -1888,3 +2024,44 @@ function renderAboutPage() {
 }
 
 initAppShell()
+
+// ─── Sync initialization ───
+
+initSync()
+
+onConflict(() => {
+  showSyncConflictModal()
+})
+
+function showSyncConflictModal() {
+  const existing = document.querySelector('#sync-conflict-modal')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.id = 'sync-conflict-modal'
+  overlay.className = 'sync-conflict-overlay'
+  overlay.innerHTML = `
+    <div class="sync-conflict-dialog">
+      <h3 class="sync-conflict-title">Sync Conflict</h3>
+      <p class="sync-conflict-text">Your progress was updated on another device. Which version would you like to keep?</p>
+      <div class="sync-conflict-actions">
+        <button type="button" class="sync-conflict-btn sync-conflict-btn-local" id="sync-keep-local">Keep This Device</button>
+        <button type="button" class="sync-conflict-btn sync-conflict-btn-remote" id="sync-use-remote">Use Other Device</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  overlay.querySelector('#sync-keep-local').addEventListener('click', async () => {
+    await resolveConflict('local')
+    overlay.remove()
+  })
+
+  overlay.querySelector('#sync-use-remote').addEventListener('click', async () => {
+    await resolveConflict('remote')
+    overlay.remove()
+    if (typeof window.switchToPage === 'function') {
+      window.switchToPage('play')
+    }
+  })
+}

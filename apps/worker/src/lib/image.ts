@@ -19,6 +19,29 @@ function decodePng(pngBytes: Uint8Array): RgbaImage {
   }
 }
 
+function decodeJpeg(jpegBytes: Uint8Array): RgbaImage {
+  const decoded = jpeg.decode(jpegBytes, { useTArray: true, formatAsRGBA: true })
+  return {
+    width: decoded.width,
+    height: decoded.height,
+    data: decoded.data,
+  }
+}
+
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xD8
+}
+
+function isPng(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47
+}
+
+function decodeImage(bytes: Uint8Array): RgbaImage {
+  if (isPng(bytes)) return decodePng(bytes)
+  if (isJpeg(bytes)) return decodeJpeg(bytes)
+  throw new Error(`Unsupported image format (magic: 0x${bytes[0]?.toString(16)}${bytes[1]?.toString(16)})`)
+}
+
 function encodeJpeg(image: RgbaImage): Uint8Array {
   const encoded = jpeg.encode(
     { data: image.data, width: image.width, height: image.height },
@@ -73,7 +96,7 @@ export type ProcessedImage = {
 }
 
 export function processPngImage(pngBytes: Uint8Array): ProcessedImage {
-  const rgba = decodePng(pngBytes)
+  const rgba = decodeImage(pngBytes)
   const jpegBytes = encodeJpeg(rgba)
   const thumb = resize(rgba, THUMBNAIL_WIDTH)
   const thumbnailBytes = encodeJpeg(thumb)

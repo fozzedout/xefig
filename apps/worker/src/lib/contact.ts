@@ -3,16 +3,9 @@ import type { D1Database } from '@cloudflare/workers-types'
 const CONTACT_TABLE = 'contact_messages'
 
 export async function ensureContactTable(db: D1Database): Promise<void> {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS ${CONTACT_TABLE} (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      message TEXT NOT NULL,
-      ip TEXT,
-      submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `)
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS ${CONTACT_TABLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL, message TEXT NOT NULL, ip TEXT, submitted_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  ).run()
 }
 
 // ─── Bot detection ───
