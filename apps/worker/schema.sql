@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS player_profiles (
     share_code TEXT NOT NULL UNIQUE,
     profile_name TEXT NOT NULL DEFAULT '',
     board_color_index INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -68,3 +69,16 @@ CREATE TABLE IF NOT EXISTS player_active_runs (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (player_guid, puzzle_date, game_mode)
 );
+
+CREATE TABLE IF NOT EXISTS player_sync_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_guid TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    entity_type TEXT NOT NULL CHECK (entity_type IN ('settings', 'completed', 'active', 'active_deleted')),
+    entity_key TEXT NOT NULL,
+    payload TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_sync_changes_guid_id
+ON player_sync_changes (player_guid, id);

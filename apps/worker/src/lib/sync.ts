@@ -1,14 +1,192 @@
 const SHARE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const SHARE_CODE_LENGTH = 6
+const DEFAULT_PULL_LIMIT = 100
 
 let tablesReady = false
+
+export type SyncSettings = {
+  profileName: string
+  boardColorIndex: number
+}
+
+export type CompletedRunEntry = {
+  puzzleDate: string
+  gameMode: string
+  difficulty?: string | null
+  elapsedActiveMs: number
+  bestElapsedMs: number
+  completedAt: string
+}
+
+export type ActiveRunEntry = {
+  puzzleDate: string
+  gameMode: string
+  difficulty?: string | null
+  imageUrl?: string | null
+  elapsedActiveMs: number
+  puzzleState: unknown
+  updatedAt: string
+}
+
+export type DeletedActiveRunEntry = {
+  puzzleDate: string
+  gameMode: string
+  deletedAt: string
+}
+
+type ChangeEntityType = 'settings' | 'completed' | 'active' | 'active_deleted'
+
+type ChangeRow = {
+  id: number
+  revision: number
+  entity_type: ChangeEntityType
+  entity_key: string
+  payload: string | null
+}
+
+type ProfileRow = {
+  profile_name: string
+  board_color_index: number
+  revision: number
+  updated_at: string
+}
+
+type ChangeRecord = {
+  entityType: ChangeEntityType
+  entityKey: string
+  payload: string | null
+}
+
+export type AssembledProfile = {
+  settings: SyncSettings
+  completedRuns: Record<string, Record<string, { difficulty: string | null; elapsedActiveMs: number; bestElapsedMs: number; completedAt: string }>>
+  activeRuns: Record<string, { puzzleDate: string; gameMode: string; difficulty: string | null; imageUrl: string | null; elapsedActiveMs: number; puzzleState: unknown; updatedAt: string }>
+  updatedAt: string
+  revision: number
+  cursor: number
+}
+
+export type PushInput = {
+  playerGuid: string
+  baseRevision: number | null
+  settings?: { profileName?: string; boardColorIndex?: number }
+  completedRuns?: CompletedRunEntry[]
+  activeRuns?: ActiveRunEntry[]
+  deletedActiveRuns?: DeletedActiveRunEntry[]
+}
+
+export type PullResult =
+  | ({ fullSync: true } & AssembledProfile)
+  | {
+      fullSync?: false
+      revision: number
+      updatedAt: string
+      cursor: number
+      hasMore: boolean
+      settings?: SyncSettings
+      completedRuns: CompletedRunEntry[]
+      activeRuns: ActiveRunEntry[]
+      deletedActiveRuns: DeletedActiveRunEntry[]
+    }
+
+function makeEntityKey(puzzleDate: string, gameMode: string): string {
+  return `${puzzleDate}:${gameMode}`
+}
+
+export function compareIsoTimestamps(a: string | null | undefined, b: string | null | undefined): number {
+  const left = a ? Date.parse(a) : Number.NaN
+  const right = b ? Date.parse(b) : Number.NaN
+  if (!Number.isFinite(left) && !Number.isFinite(right)) return 0
+  if (!Number.isFinite(left)) return -1
+  if (!Number.isFinite(right)) return 1
+  if (left === right) return 0
+  return left > right ? 1 : -1
+}
+
+export function mergeCompletedEntry(
+  localEntry: { difficulty?: string | null; elapsedActiveMs?: number; bestElapsedMs?: number; completedAt?: string } | null | undefined,
+  remoteEntry: { difficulty?: string | null; elapsedActiveMs?: number; bestElapsedMs?: number; completedAt?: string } | null | undefined,
+): { difficulty: string | null; elapsedActiveMs: number; bestElapsedMs: number; completedAt: string } | null {
+  if (!localEntry && !remoteEntry) return null
+  if (!localEntry) {
+    return {
+      difficulty: remoteEntry?.difficulty ?? null,
+      elapsedActiveMs: Number(remoteEntry?.elapsedActiveMs) || 0,
+      bestElapsedMs: Number(remoteEntry?.bestElapsedMs ?? remoteEntry?.elapsedActiveMs) || 0,
+      completedAt: remoteEntry?.completedAt || '',
+    }
+  }
+  if (!remoteEntry) {
+    return {
+      difficulty: localEntry.difficulty ?? null,
+      elapsedActiveMs: Number(localEntry.elapsedActiveMs) || 0,
+      bestElapsedMs: Number(localEntry.bestElapsedMs ?? localEntry.elapsedActiveMs) || 0,
+      completedAt: localEntry.completedAt || '',
+    }
+  }
+
+  const localElapsed = Number(localEntry.elapsedActiveMs) || 0
+  const remoteElapsed = Number(remoteEntry.elapsedActiveMs) || 0
+  const localBest = Number(localEntry.bestElapsedMs ?? localElapsed) || 0
+  const remoteBest = Number(remoteEntry.bestElapsedMs ?? remoteElapsed) || 0
+  const cmp = compareIsoTimestamps(localEntry.completedAt, remoteEntry.completedAt)
+  const newer = cmp >= 0 ? localEntry : remoteEntry
+
+  return {
+    difficulty: newer.difficulty ?? localEntry.difficulty ?? remoteEntry.difficulty ?? null,
+    elapsedActiveMs: cmp >= 0 ? localElapsed : remoteElapsed,
+    bestElapsedMs: Math.min(localBest || remoteBest, remoteBest || localBest),
+    completedAt: cmp >= 0 ? localEntry.completedAt || remoteEntry.completedAt || '' : remoteEntry.completedAt || localEntry.completedAt || '',
+  }
+}
+
+export function collapseChanges(rows: ChangeRow[]): {
+  settings?: SyncSettings
+  completedRuns: CompletedRunEntry[]
+  activeRuns: ActiveRunEntry[]
+  deletedActiveRuns: DeletedActiveRunEntry[]
+} {
+  const settings = new Map<string, SyncSettings>()
+  const completedRuns = new Map<string, CompletedRunEntry>()
+  const activeRuns = new Map<string, ActiveRunEntry>()
+  const deletedActiveRuns = new Map<string, DeletedActiveRunEntry>()
+
+  for (const row of rows) {
+    if (row.entity_type === 'settings') {
+      if (!row.payload) continue
+      settings.set(row.entity_key, JSON.parse(row.payload) as SyncSettings)
+      continue
+    }
+    if (row.entity_type === 'completed') {
+      if (!row.payload) continue
+      completedRuns.set(row.entity_key, JSON.parse(row.payload) as CompletedRunEntry)
+      continue
+    }
+    if (row.entity_type === 'active') {
+      if (!row.payload) continue
+      activeRuns.set(row.entity_key, JSON.parse(row.payload) as ActiveRunEntry)
+      deletedActiveRuns.delete(row.entity_key)
+      continue
+    }
+    if (!row.payload) continue
+    deletedActiveRuns.set(row.entity_key, JSON.parse(row.payload) as DeletedActiveRunEntry)
+    activeRuns.delete(row.entity_key)
+  }
+
+  return {
+    settings: settings.get('settings'),
+    completedRuns: Array.from(completedRuns.values()),
+    activeRuns: Array.from(activeRuns.values()),
+    deletedActiveRuns: Array.from(deletedActiveRuns.values()),
+  }
+}
 
 export async function ensureSyncTables(db: D1Database): Promise<void> {
   if (tablesReady) return
 
   await db.batch([
     db.prepare(
-      `CREATE TABLE IF NOT EXISTS player_profiles (player_guid TEXT PRIMARY KEY, share_code TEXT NOT NULL UNIQUE, profile_name TEXT NOT NULL DEFAULT '', board_color_index INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS player_profiles (player_guid TEXT PRIMARY KEY, share_code TEXT NOT NULL UNIQUE, profile_name TEXT NOT NULL DEFAULT '', board_color_index INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ),
     db.prepare(
       `CREATE TABLE IF NOT EXISTS player_completed (player_guid TEXT NOT NULL, puzzle_date TEXT NOT NULL, game_mode TEXT NOT NULL, difficulty TEXT, elapsed_ms INTEGER NOT NULL DEFAULT 0, best_ms INTEGER NOT NULL DEFAULT 0, completed_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (player_guid, puzzle_date, game_mode))`,
@@ -16,29 +194,33 @@ export async function ensureSyncTables(db: D1Database): Promise<void> {
     db.prepare(
       `CREATE TABLE IF NOT EXISTS player_active_runs (player_guid TEXT NOT NULL, puzzle_date TEXT NOT NULL, game_mode TEXT NOT NULL, run_state TEXT NOT NULL DEFAULT '{}', elapsed_ms INTEGER NOT NULL DEFAULT 0, difficulty TEXT, image_url TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (player_guid, puzzle_date, game_mode))`,
     ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS player_sync_changes (id INTEGER PRIMARY KEY AUTOINCREMENT, player_guid TEXT NOT NULL, revision INTEGER NOT NULL, entity_type TEXT NOT NULL CHECK (entity_type IN ('settings', 'completed', 'active', 'active_deleted')), entity_key TEXT NOT NULL, payload TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    ),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_player_sync_changes_guid_id ON player_sync_changes (player_guid, id)`),
   ])
 
-  // Migrate old schema: add new columns if missing, migrate JSON blob data
   try {
     const cols = await db
       .prepare(`SELECT name FROM pragma_table_info('player_profiles')`)
       .all<{ name: string }>()
-    const colNames = new Set((cols.results || []).map((r) => r.name))
+    const colNames = new Set((cols.results || []).map((row) => row.name))
 
-    // Add new columns if they don't exist
     if (!colNames.has('profile_name')) {
       try { await db.prepare(`ALTER TABLE player_profiles ADD COLUMN profile_name TEXT NOT NULL DEFAULT ''`).run() } catch {}
     }
     if (!colNames.has('board_color_index')) {
       try { await db.prepare(`ALTER TABLE player_profiles ADD COLUMN board_color_index INTEGER NOT NULL DEFAULT 0`).run() } catch {}
     }
+    if (!colNames.has('revision')) {
+      try { await db.prepare(`ALTER TABLE player_profiles ADD COLUMN revision INTEGER NOT NULL DEFAULT 0`).run() } catch {}
+    }
 
-    // Migrate JSON blob if old column exists
     if (colNames.has('profile_data')) {
       await migrateFromJsonBlob(db)
     }
   } catch {
-    // Old table may not exist at all — that's fine
+    // Best-effort migration only.
   }
 
   tablesReady = true
@@ -60,7 +242,6 @@ async function migrateFromJsonBlob(db: D1Database): Promise<void> {
 
       const stmts: D1PreparedStatement[] = []
 
-      // Migrate settings
       if (data.profileName || data.boardColorIndex) {
         stmts.push(
           db
@@ -69,7 +250,6 @@ async function migrateFromJsonBlob(db: D1Database): Promise<void> {
         )
       }
 
-      // Migrate completed runs
       if (data.completedRuns) {
         for (const [date, modes] of Object.entries(data.completedRuns)) {
           for (const [mode, entry] of Object.entries(modes || {})) {
@@ -93,7 +273,6 @@ async function migrateFromJsonBlob(db: D1Database): Promise<void> {
         }
       }
 
-      // Migrate active runs
       if (data.activeRuns) {
         for (const [key, run] of Object.entries(data.activeRuns || {})) {
           if (!run) continue
@@ -117,20 +296,18 @@ async function migrateFromJsonBlob(db: D1Database): Promise<void> {
         }
       }
 
-      // Batch in chunks of 50
       for (let i = 0; i < stmts.length; i += 50) {
         await db.batch(stmts.slice(i, i + 50))
       }
     } catch {
-      // Skip broken rows
+      // Skip invalid historical blobs.
     }
   }
 
-  // Drop the old column
   try {
     await db.prepare(`ALTER TABLE player_profiles DROP COLUMN profile_data`).run()
   } catch {
-    // Column may already be dropped
+    // Some SQLite variants do not support DROP COLUMN.
   }
 }
 
@@ -151,23 +328,22 @@ function isValidShareCode(code: unknown): code is string {
   )
 }
 
-// ─── Assemble profile from normalized tables ───
-
-type AssembledProfile = {
-  settings: { profileName: string; boardColorIndex: number }
-  completedRuns: Record<string, Record<string, { difficulty: string | null; elapsedActiveMs: number; bestElapsedMs: number; completedAt: string }>>
-  activeRuns: Record<string, { puzzleDate: string; gameMode: string; difficulty: string | null; imageUrl: string | null; elapsedActiveMs: number; puzzleState: unknown; updatedAt: string }>
-  updatedAt: string
+async function getProfileCursor(db: D1Database, playerGuid: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COALESCE(MAX(id), 0) AS cursor FROM player_sync_changes WHERE player_guid = ?')
+    .bind(playerGuid)
+    .first<{ cursor: number | string }>()
+  return Number(row?.cursor) || 0
 }
 
 async function assembleProfile(db: D1Database, playerGuid: string): Promise<AssembledProfile | null> {
   const [profileResult, completedResult, activeResult] = await db.batch([
-    db.prepare('SELECT profile_name, board_color_index, updated_at FROM player_profiles WHERE player_guid = ?').bind(playerGuid),
+    db.prepare('SELECT profile_name, board_color_index, revision, updated_at FROM player_profiles WHERE player_guid = ?').bind(playerGuid),
     db.prepare('SELECT puzzle_date, game_mode, difficulty, elapsed_ms, best_ms, completed_at FROM player_completed WHERE player_guid = ?').bind(playerGuid),
     db.prepare('SELECT puzzle_date, game_mode, run_state, elapsed_ms, difficulty, image_url, updated_at FROM player_active_runs WHERE player_guid = ?').bind(playerGuid),
   ])
 
-  const profile = profileResult.results?.[0] as { profile_name: string; board_color_index: number; updated_at: string } | undefined
+  const profile = profileResult.results?.[0] as ProfileRow | undefined
   if (!profile) return null
 
   const completedRuns: AssembledProfile['completedRuns'] = {}
@@ -200,15 +376,43 @@ async function assembleProfile(db: D1Database, playerGuid: string): Promise<Asse
     completedRuns,
     activeRuns,
     updatedAt: profile.updated_at,
+    revision: Number(profile.revision) || 0,
+    cursor: await getProfileCursor(db, playerGuid),
   }
 }
 
-// ─── Public API ───
+async function recordChanges(
+  db: D1Database,
+  playerGuid: string,
+  revision: number,
+  changes: ChangeRecord[],
+): Promise<number> {
+  if (changes.length === 0) {
+    return getProfileCursor(db, playerGuid)
+  }
+
+  const stmts = changes.map((change) =>
+    db
+      .prepare('INSERT INTO player_sync_changes (player_guid, revision, entity_type, entity_key, payload) VALUES (?, ?, ?, ?, ?)')
+      .bind(playerGuid, revision, change.entityType, change.entityKey, change.payload),
+  )
+
+  for (let i = 0; i < stmts.length; i += 50) {
+    await db.batch(stmts.slice(i, i + 50))
+  }
+
+  const row = await db
+    .prepare('SELECT COALESCE(MAX(id), 0) AS cursor FROM player_sync_changes WHERE player_guid = ? AND revision = ?')
+    .bind(playerGuid, revision)
+    .first<{ cursor: number | string }>()
+
+  return Number(row?.cursor) || 0
+}
 
 export async function registerProfile(
   db: D1Database,
   playerGuid: string,
-): Promise<{ shareCode: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string }> {
+): Promise<{ shareCode: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number; cursor: number }> {
   await ensureSyncTables(db)
 
   if (!isValidPlayerGuid(playerGuid)) {
@@ -228,6 +432,8 @@ export async function registerProfile(
       completedRuns: assembled?.completedRuns || {},
       activeRuns: assembled?.activeRuns || {},
       updatedAt: assembled?.updatedAt || '',
+      revision: assembled?.revision || 0,
+      cursor: assembled?.cursor || 0,
     }
   }
 
@@ -236,10 +442,10 @@ export async function registerProfile(
     try {
       const result = await db
         .prepare(
-          `INSERT INTO player_profiles (player_guid, share_code, updated_at, created_at) VALUES (?, ?, datetime('now'), datetime('now')) RETURNING updated_at`,
+          `INSERT INTO player_profiles (player_guid, share_code, revision, updated_at, created_at) VALUES (?, ?, 0, datetime('now'), datetime('now')) RETURNING updated_at, revision`,
         )
         .bind(playerGuid, code)
-        .first<{ updated_at: string }>()
+        .first<{ updated_at: string; revision: number }>()
 
       return {
         shareCode: code,
@@ -247,11 +453,13 @@ export async function registerProfile(
         completedRuns: {},
         activeRuns: {},
         updatedAt: result?.updated_at ?? '',
+        revision: Number(result?.revision) || 0,
+        cursor: 0,
       }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : ''
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : ''
       if (msg.includes('UNIQUE') && attempt < 4) continue
-      throw e
+      throw error
     }
   }
 
@@ -261,7 +469,7 @@ export async function registerProfile(
 export async function linkProfile(
   db: D1Database,
   shareCode: string,
-): Promise<{ playerGuid: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string } | null> {
+): Promise<{ playerGuid: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number; cursor: number } | null> {
   await ensureSyncTables(db)
 
   if (!isValidShareCode(shareCode)) return null
@@ -282,20 +490,8 @@ export async function linkProfile(
     completedRuns: assembled.completedRuns,
     activeRuns: assembled.activeRuns,
     updatedAt: assembled.updatedAt,
-  }
-}
-
-export type PushInput = {
-  playerGuid: string
-  updatedAt: string | null
-  force: boolean
-  settings?: { profileName?: string; boardColorIndex?: number }
-  completedRun?: { puzzleDate: string; gameMode: string; difficulty?: string; elapsedActiveMs: number; bestElapsedMs: number; completedAt: string }
-  activeRun?: { puzzleDate: string; gameMode: string; difficulty?: string; imageUrl?: string; elapsedActiveMs: number; puzzleState: unknown; updatedAt: string }
-  fullProfile?: {
-    settings: { profileName: string; boardColorIndex: number }
-    completedRuns: Record<string, Record<string, { difficulty?: string; elapsedActiveMs?: number; bestElapsedMs?: number; completedAt?: string }>>
-    activeRuns: Record<string, { puzzleDate?: string; gameMode?: string; difficulty?: string; imageUrl?: string; elapsedActiveMs?: number; puzzleState?: unknown; updatedAt?: string }>
+    revision: assembled.revision,
+    cursor: assembled.cursor,
   }
 }
 
@@ -303,8 +499,8 @@ export async function pushProfile(
   db: D1Database,
   input: PushInput,
 ): Promise<
-  | { ok: true; updatedAt: string }
-  | { conflict: true; serverData: AssembledProfile; serverUpdatedAt: string }
+  | { ok: true; updatedAt: string; revision: number; cursor: number }
+  | { conflict: true; currentRevision: number }
   | { notFound: true }
 > {
   await ensureSyncTables(db)
@@ -314,149 +510,240 @@ export async function pushProfile(
   }
 
   const existing = await db
-    .prepare('SELECT updated_at FROM player_profiles WHERE player_guid = ?')
+    .prepare('SELECT revision, updated_at FROM player_profiles WHERE player_guid = ?')
     .bind(input.playerGuid)
-    .first<{ updated_at: string }>()
+    .first<{ revision: number | string; updated_at: string }>()
 
   if (!existing) return { notFound: true }
 
-  // Conflict detection
-  if (!input.force && input.updatedAt && existing.updated_at !== input.updatedAt) {
-    const assembled = await assembleProfile(db, input.playerGuid)
+  const currentRevision = Number(existing.revision) || 0
+  const baseRevision = Number(input.baseRevision) || 0
+
+  if (baseRevision !== currentRevision) {
+    return { conflict: true, currentRevision }
+  }
+
+  const completedRuns = Array.isArray(input.completedRuns) ? input.completedRuns : []
+  const activeRuns = Array.isArray(input.activeRuns) ? input.activeRuns : []
+  const deletedActiveRuns = Array.isArray(input.deletedActiveRuns) ? input.deletedActiveRuns : []
+  const hasSettings = Boolean(input.settings && (input.settings.profileName !== undefined || input.settings.boardColorIndex !== undefined))
+  const hasChanges = hasSettings || completedRuns.length > 0 || activeRuns.length > 0 || deletedActiveRuns.length > 0
+
+  if (!hasChanges) {
     return {
-      conflict: true,
-      serverData: assembled!,
-      serverUpdatedAt: existing.updated_at,
+      ok: true,
+      updatedAt: existing.updated_at,
+      revision: currentRevision,
+      cursor: await getProfileCursor(db, input.playerGuid),
     }
+  }
+
+  const nextRevision = currentRevision + 1
+  const currentProfile = await db
+    .prepare('SELECT profile_name, board_color_index FROM player_profiles WHERE player_guid = ?')
+    .bind(input.playerGuid)
+    .first<{ profile_name: string; board_color_index: number | string }>()
+
+  const profileName = input.settings?.profileName ?? currentProfile?.profile_name ?? ''
+  const boardColorIndex = input.settings?.boardColorIndex ?? (Number(currentProfile?.board_color_index) || 0)
+
+  const updatedProfile = await db
+    .prepare(
+      `UPDATE player_profiles
+       SET profile_name = ?, board_color_index = ?, revision = ?, updated_at = datetime('now')
+       WHERE player_guid = ? AND revision = ?
+       RETURNING updated_at, revision`,
+    )
+    .bind(profileName, boardColorIndex, nextRevision, input.playerGuid, currentRevision)
+    .first<{ updated_at: string; revision: number | string }>()
+
+  if (!updatedProfile) {
+    return { conflict: true, currentRevision: currentRevision + 1 }
   }
 
   const stmts: D1PreparedStatement[] = []
+  const changes: ChangeRecord[] = []
 
-  // Full profile replacement (initial sync, conflict resolution)
-  if (input.fullProfile) {
-    const fp = input.fullProfile
+  if (hasSettings) {
+    changes.push({
+      entityType: 'settings',
+      entityKey: 'settings',
+      payload: JSON.stringify({ profileName, boardColorIndex }),
+    })
+  }
 
+  const completedKeys = new Set<string>()
+  for (const entry of completedRuns) {
+    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
+    completedKeys.add(key)
     stmts.push(
       db
-        .prepare('UPDATE player_profiles SET profile_name = ?, board_color_index = ?, updated_at = datetime(\'now\') WHERE player_guid = ?')
-        .bind(fp.settings.profileName || '', fp.settings.boardColorIndex || 0, input.playerGuid),
+        .prepare(
+          'INSERT OR REPLACE INTO player_completed (player_guid, puzzle_date, game_mode, difficulty, elapsed_ms, best_ms, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          input.playerGuid,
+          entry.puzzleDate,
+          entry.gameMode,
+          entry.difficulty || null,
+          entry.elapsedActiveMs,
+          entry.bestElapsedMs,
+          entry.completedAt,
+        ),
     )
-
-    // Clear and reinsert completed
-    stmts.push(db.prepare('DELETE FROM player_completed WHERE player_guid = ?').bind(input.playerGuid))
-    if (fp.completedRuns) {
-      for (const [date, modes] of Object.entries(fp.completedRuns)) {
-        for (const [mode, entry] of Object.entries(modes || {})) {
-          if (!entry) continue
-          stmts.push(
-            db
-              .prepare('INSERT INTO player_completed (player_guid, puzzle_date, game_mode, difficulty, elapsed_ms, best_ms, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-              .bind(input.playerGuid, date, mode, entry.difficulty || null, entry.elapsedActiveMs || 0, entry.bestElapsedMs || entry.elapsedActiveMs || 0, entry.completedAt || ''),
-          )
-        }
-      }
-    }
-
-    // Clear and reinsert active runs
-    stmts.push(db.prepare('DELETE FROM player_active_runs WHERE player_guid = ?').bind(input.playerGuid))
-    if (fp.activeRuns) {
-      for (const [key, run] of Object.entries(fp.activeRuns)) {
-        if (!run) continue
-        const parts = key.replace('xefig:run:', '').split(':')
-        stmts.push(
-          db
-            .prepare('INSERT INTO player_active_runs (player_guid, puzzle_date, game_mode, run_state, elapsed_ms, difficulty, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-            .bind(
-              input.playerGuid,
-              parts[0] || run.puzzleDate || '',
-              parts[1] || run.gameMode || '',
-              JSON.stringify(run.puzzleState || {}),
-              run.elapsedActiveMs || 0,
-              run.difficulty || null,
-              run.imageUrl || null,
-              run.updatedAt || '',
-            ),
-        )
-      }
-    }
-  } else {
-    // Granular updates
-
-    if (input.settings) {
-      const sets: string[] = []
-      const binds: unknown[] = []
-      if (input.settings.profileName !== undefined) {
-        sets.push('profile_name = ?')
-        binds.push(input.settings.profileName)
-      }
-      if (input.settings.boardColorIndex !== undefined) {
-        sets.push('board_color_index = ?')
-        binds.push(input.settings.boardColorIndex)
-      }
-      if (sets.length > 0) {
-        sets.push("updated_at = datetime('now')")
-        stmts.push(
-          db.prepare(`UPDATE player_profiles SET ${sets.join(', ')} WHERE player_guid = ?`).bind(...binds, input.playerGuid),
-        )
-      }
-    }
-
-    if (input.completedRun) {
-      const cr = input.completedRun
-      stmts.push(
-        db
-          .prepare(
-            'INSERT OR REPLACE INTO player_completed (player_guid, puzzle_date, game_mode, difficulty, elapsed_ms, best_ms, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          )
-          .bind(input.playerGuid, cr.puzzleDate, cr.gameMode, cr.difficulty || null, cr.elapsedActiveMs, cr.bestElapsedMs, cr.completedAt),
-      )
-    }
-
-    if (input.activeRun) {
-      const ar = input.activeRun
-      stmts.push(
-        db
-          .prepare(
-            'INSERT OR REPLACE INTO player_active_runs (player_guid, puzzle_date, game_mode, run_state, elapsed_ms, difficulty, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          )
-          .bind(input.playerGuid, ar.puzzleDate, ar.gameMode, JSON.stringify(ar.puzzleState || {}), ar.elapsedActiveMs, ar.difficulty || null, ar.imageUrl || null, ar.updatedAt),
-      )
-    }
-
-    // Bump updated_at if we didn't already via settings
-    if (!input.settings && stmts.length > 0) {
-      stmts.push(
-        db.prepare("UPDATE player_profiles SET updated_at = datetime('now') WHERE player_guid = ?").bind(input.playerGuid),
-      )
-    }
+    stmts.push(
+      db
+        .prepare('DELETE FROM player_active_runs WHERE player_guid = ? AND puzzle_date = ? AND game_mode = ?')
+        .bind(input.playerGuid, entry.puzzleDate, entry.gameMode),
+    )
+    changes.push({
+      entityType: 'completed',
+      entityKey: key,
+      payload: JSON.stringify({
+        puzzleDate: entry.puzzleDate,
+        gameMode: entry.gameMode,
+        difficulty: entry.difficulty || null,
+        elapsedActiveMs: entry.elapsedActiveMs,
+        bestElapsedMs: entry.bestElapsedMs,
+        completedAt: entry.completedAt,
+      }),
+    })
+    changes.push({
+      entityType: 'active_deleted',
+      entityKey: key,
+      payload: JSON.stringify({
+        puzzleDate: entry.puzzleDate,
+        gameMode: entry.gameMode,
+        deletedAt: entry.completedAt,
+      }),
+    })
   }
 
-  if (stmts.length === 0) {
-    return { ok: true, updatedAt: existing.updated_at }
+  for (const entry of activeRuns) {
+    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
+    if (completedKeys.has(key)) continue
+    stmts.push(
+      db
+        .prepare(
+          'INSERT OR REPLACE INTO player_active_runs (player_guid, puzzle_date, game_mode, run_state, elapsed_ms, difficulty, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          input.playerGuid,
+          entry.puzzleDate,
+          entry.gameMode,
+          JSON.stringify(entry.puzzleState || {}),
+          entry.elapsedActiveMs,
+          entry.difficulty || null,
+          entry.imageUrl || null,
+          entry.updatedAt,
+        ),
+    )
+    changes.push({
+      entityType: 'active',
+      entityKey: key,
+      payload: JSON.stringify({
+        puzzleDate: entry.puzzleDate,
+        gameMode: entry.gameMode,
+        difficulty: entry.difficulty || null,
+        imageUrl: entry.imageUrl || null,
+        elapsedActiveMs: entry.elapsedActiveMs,
+        puzzleState: entry.puzzleState || null,
+        updatedAt: entry.updatedAt,
+      }),
+    })
   }
 
-  // Batch in chunks
+  for (const entry of deletedActiveRuns) {
+    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
+    if (completedKeys.has(key)) continue
+    stmts.push(
+      db
+        .prepare('DELETE FROM player_active_runs WHERE player_guid = ? AND puzzle_date = ? AND game_mode = ?')
+        .bind(input.playerGuid, entry.puzzleDate, entry.gameMode),
+    )
+    changes.push({
+      entityType: 'active_deleted',
+      entityKey: key,
+      payload: JSON.stringify({
+        puzzleDate: entry.puzzleDate,
+        gameMode: entry.gameMode,
+        deletedAt: entry.deletedAt,
+      }),
+    })
+  }
+
   for (let i = 0; i < stmts.length; i += 50) {
     await db.batch(stmts.slice(i, i + 50))
   }
 
-  const updated = await db
-    .prepare('SELECT updated_at FROM player_profiles WHERE player_guid = ?')
-    .bind(input.playerGuid)
-    .first<{ updated_at: string }>()
+  const cursor = await recordChanges(db, input.playerGuid, nextRevision, changes)
 
-  return { ok: true, updatedAt: updated?.updated_at ?? '' }
+  return {
+    ok: true,
+    updatedAt: updatedProfile.updated_at,
+    revision: Number(updatedProfile.revision) || nextRevision,
+    cursor,
+  }
 }
 
 export async function pullProfile(
   db: D1Database,
   playerGuid: string,
-): Promise<AssembledProfile | null> {
+  sinceCursor = 0,
+  limit = DEFAULT_PULL_LIMIT,
+): Promise<PullResult | null> {
   await ensureSyncTables(db)
 
   if (!isValidPlayerGuid(playerGuid)) {
     throw new Error('Invalid playerGuid.')
   }
 
-  return assembleProfile(db, playerGuid)
+  const profile = await db
+    .prepare('SELECT profile_name, board_color_index, revision, updated_at FROM player_profiles WHERE player_guid = ?')
+    .bind(playerGuid)
+    .first<ProfileRow>()
+
+  if (!profile) return null
+
+  const normalizedCursor = Math.max(0, Number(sinceCursor) || 0)
+  if (normalizedCursor <= 0) {
+    const assembled = await assembleProfile(db, playerGuid)
+    if (!assembled) return null
+    return { ...assembled, fullSync: true }
+  }
+
+  const latestCursor = await getProfileCursor(db, playerGuid)
+  if (latestCursor <= normalizedCursor) {
+    return {
+      revision: Number(profile.revision) || 0,
+      updatedAt: profile.updated_at,
+      cursor: normalizedCursor,
+      hasMore: false,
+      completedRuns: [],
+      activeRuns: [],
+      deletedActiveRuns: [],
+    }
+  }
+
+  const rowsResult = await db
+    .prepare(
+      'SELECT id, revision, entity_type, entity_key, payload FROM player_sync_changes WHERE player_guid = ? AND id > ? ORDER BY id ASC LIMIT ?',
+    )
+    .bind(playerGuid, normalizedCursor, Math.max(1, Math.min(limit, 250)))
+    .all<ChangeRow>()
+
+  const rows = (rowsResult.results || []) as ChangeRow[]
+  const lastCursor = rows.length > 0 ? Number(rows[rows.length - 1].id) || normalizedCursor : normalizedCursor
+  const collapsed = collapseChanges(rows)
+
+  return {
+    revision: Number(profile.revision) || 0,
+    updatedAt: profile.updated_at,
+    cursor: lastCursor,
+    hasMore: latestCursor > lastCursor,
+    settings: collapsed.settings,
+    completedRuns: collapsed.completedRuns,
+    activeRuns: collapsed.activeRuns,
+    deletedActiveRuns: collapsed.deletedActiveRuns,
+  }
 }

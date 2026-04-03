@@ -1619,8 +1619,8 @@ h1 {
 }
 
 .gt-icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1670,6 +1670,66 @@ h1 {
   gap: 0.4rem;
 }
 
+.gt-menu-wrap {
+  position: relative;
+}
+
+.gt-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 180px;
+  background: rgba(22, 22, 30, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: 0.3rem;
+  z-index: 100;
+}
+
+.gt-menu[hidden] {
+  display: none;
+}
+
+.gt-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: none;
+  color: #e8e6e0;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.gt-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gt-menu-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.gt-menu-item[aria-pressed='true'] {
+  color: #f0c040;
+}
+
+.gt-menu-item--danger {
+  color: #f06050;
+}
+
 .gt-stats {
   display: flex;
   align-items: center;
@@ -1696,6 +1756,27 @@ h1 {
   letter-spacing: 0.08em;
   color: #e8e6e0;
   font-variant-numeric: tabular-nums;
+}
+
+.save-indicator {
+  background: none;
+  border: none;
+  padding: 0 0 0 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: color 0.3s, opacity 0.3s;
+  opacity: 0.7;
+}
+.save-indicator:hover { opacity: 1; }
+.save-indicator[data-state="saved"] { color: #4ade80; }
+.save-indicator[data-state="syncing"] { color: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
+.save-indicator[data-state="pending"] { color: #fbbf24; }
+.save-indicator[data-state="error"] { color: #f87171; }
+
+@keyframes pulse-save {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 .sr-only {

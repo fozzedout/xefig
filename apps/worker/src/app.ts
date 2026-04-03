@@ -1060,24 +1060,28 @@ export function createApp() {
 
     const input: PushInput = {
       playerGuid,
-      updatedAt: typeof body?.updatedAt === 'string' ? body.updatedAt : null,
-      force: body?.force === true,
+      baseRevision: Number(body?.baseRevision) || 0,
     }
 
-    if (body?.fullProfile && typeof body.fullProfile === 'object') {
-      input.fullProfile = body.fullProfile as PushInput['fullProfile']
-    }
     if (body?.settings && typeof body.settings === 'object') {
       input.settings = body.settings as PushInput['settings']
     }
-    if (body?.completedRun && typeof body.completedRun === 'object') {
-      input.completedRun = body.completedRun as PushInput['completedRun']
+    if (Array.isArray(body?.completedRuns)) {
+      input.completedRuns = body.completedRuns as PushInput['completedRuns']
     }
-    if (body?.activeRun && typeof body.activeRun === 'object') {
-      input.activeRun = body.activeRun as PushInput['activeRun']
+    if (Array.isArray(body?.activeRuns)) {
+      input.activeRuns = body.activeRuns as PushInput['activeRuns']
+    }
+    if (Array.isArray(body?.deletedActiveRuns)) {
+      input.deletedActiveRuns = body.deletedActiveRuns as PushInput['deletedActiveRuns']
     }
 
-    if (!input.fullProfile && !input.settings && !input.completedRun && !input.activeRun) {
+    if (
+      !input.settings &&
+      (!input.completedRuns || input.completedRuns.length === 0) &&
+      (!input.activeRuns || input.activeRuns.length === 0) &&
+      (!input.deletedActiveRuns || input.deletedActiveRuns.length === 0)
+    ) {
       return c.json({ error: 'No changes provided.' }, 400)
     }
 
@@ -1094,7 +1098,7 @@ export function createApp() {
   })
 
   app.post('/api/sync/pull', async (c) => {
-    let body: { playerGuid?: string } | null = null
+    let body: { playerGuid?: string; sinceCursor?: number; limit?: number } | null = null
     try {
       body = (await c.req.json()) as { playerGuid?: string }
     } catch {
@@ -1107,7 +1111,9 @@ export function createApp() {
     }
 
     try {
-      const result = await pullProfile(c.env.DB, playerGuid)
+      const sinceCursor = Math.max(0, Number(body?.sinceCursor) || 0)
+      const limit = Math.max(1, Math.min(250, Number(body?.limit) || 100))
+      const result = await pullProfile(c.env.DB, playerGuid, sinceCursor, limit)
       if (!result) {
         return c.json({ notFound: true })
       }

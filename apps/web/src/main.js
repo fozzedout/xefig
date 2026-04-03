@@ -14,6 +14,15 @@ import {
   resolveConflict,
   startSyncTimer,
   stopSyncTimer,
+  getSyncStatus,
+  onStatusChange,
+  forcePush,
+  hasPendingChanges,
+  notifyIfPending,
+  markSettingsDirty,
+  markCompletedRunDirty,
+  markActiveRunDirty,
+  markActiveRunDeleted,
 } from './sync.js'
 // Puzzle engines are loaded on demand in renderGame() via dynamic import()
 // to keep the homepage bundle free of gameplay code.
@@ -289,6 +298,10 @@ function recordCompletedRun(run) {
 
   completedRunsByDate[puzzleDate] = dateRuns
   writeJsonStorage(COMPLETED_RUNS_KEY, completedRunsByDate)
+  markCompletedRunDirty({
+    puzzleDate,
+    gameMode: mode,
+  })
 }
 
 function createGuid() {
@@ -355,6 +368,7 @@ function clearRunForMode(run) {
   const key = activeRunKey(run.puzzleDate, run.gameMode)
   removeStorage(key)
   removeStorage(ACTIVE_RUN_KEY)
+  markActiveRunDeleted(run)
 }
 
 function getNowMs() {
@@ -430,6 +444,7 @@ function bindGameActivity(onAutosave) {
 
   autosaveIntervalId = window.setInterval(() => {
     onAutosave()
+    notifyIfPending()
   }, 5000)
 
   gameVisibilityBound = true
@@ -475,6 +490,7 @@ function persistActiveRun(progressState) {
   }
   currentRun = nextRun
   saveRunForMode(nextRun)
+  markActiveRunDirty(nextRun)
 }
 
 async function submitLeaderboard(run) {
@@ -1222,26 +1238,40 @@ function renderGame({ resumeRun = null } = {}) {
         <div class="gt-title">${titleLabel}</div>
 
         <div class="gt-actions">
-          ${gameMode === GAME_MODE_JIGSAW ? `
-          <button id="highlight-btn" class="gt-icon-btn" type="button" aria-label="Highlight loose pieces" title="Highlight">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
-          </button>
-          <button id="edges-btn" class="gt-icon-btn" type="button" aria-label="Show edge pieces only" aria-pressed="false" title="Edges only">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
-          </button>
-          ` : ''}
-          <button id="view-btn" class="gt-icon-btn" type="button" aria-label="Toggle reference image" aria-pressed="false" title="Reference">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
-          </button>
-          <button id="restart-btn" class="gt-icon-btn" type="button" aria-label="Restart puzzle" title="Restart">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
-          </button>
+          <div class="gt-menu-wrap">
+            <button id="menu-btn" class="gt-icon-btn" type="button" aria-label="More actions" aria-expanded="false" title="More">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+            </button>
+            <div id="gt-menu" class="gt-menu" hidden>
+              ${gameMode === GAME_MODE_JIGSAW ? `
+              <button id="highlight-btn" class="gt-menu-item" type="button">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
+                Highlight loose
+              </button>
+              <button id="edges-btn" class="gt-menu-item" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
+                Edges only
+              </button>
+              ` : ''}
+              <button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+                Reference image
+              </button>
+              <button id="restart-btn" class="gt-menu-item gt-menu-item--danger" type="button">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
+                Restart
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="gt-stats">
           <span id="piece-count" class="gt-counter"></span>
           <span class="gt-divider"></span>
           <span id="timer" class="gt-timer">00:00</span>
+          ${isSyncEnabled() ? `<button id="save-indicator" class="save-indicator" type="button" aria-label="Sync status" title="Saved">
+            <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.5 10.3L4.3 8.1l1-1L7.5 9.4l3.2-3.2 1 1L7.5 11.3Z"/></svg>
+          </button>` : ''}
         </div>
 
         <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
@@ -1259,6 +1289,37 @@ function renderGame({ resumeRun = null } = {}) {
   const viewBtn = gameEl.querySelector('#view-btn')
   const pieceCountEl = gameEl.querySelector('#piece-count')
   const timerEl = gameEl.querySelector('#timer')
+  const saveIndicator = gameEl.querySelector('#save-indicator')
+
+  // Save indicator state
+  function updateSaveIndicator(status) {
+    if (!saveIndicator) return
+    const isPending = status === 'idle' || status === 'error' || !status
+    // After initial load, 'idle' means we haven't pushed yet — check for changes
+    const hasChanges = isPending && hasPendingChanges()
+    if (status === 'saved') {
+      saveIndicator.dataset.state = 'saved'
+      saveIndicator.title = 'Saved to cloud'
+    } else if (status === 'syncing') {
+      saveIndicator.dataset.state = 'syncing'
+      saveIndicator.title = 'Syncing...'
+    } else if (status === 'error' || hasChanges) {
+      saveIndicator.dataset.state = 'pending'
+      saveIndicator.title = 'Tap to sync now'
+    } else {
+      saveIndicator.dataset.state = 'saved'
+      saveIndicator.title = 'Saved to cloud'
+    }
+  }
+
+  if (saveIndicator) {
+    updateSaveIndicator(getSyncStatus())
+    onStatusChange(updateSaveIndicator)
+    saveIndicator.addEventListener('click', async () => {
+      persistActiveRun()
+      await forcePush()
+    })
+  }
 
   let timerRaf = null
   const updateTimer = () => {
@@ -1290,6 +1351,7 @@ function renderGame({ resumeRun = null } = {}) {
     document.removeEventListener('gesturestart', preventBrowserZoom)
     document.removeEventListener('gesturechange', preventBrowserZoom)
     document.removeEventListener('gestureend', preventBrowserZoom)
+    document.removeEventListener('click', closeMenu)
     persistActiveRun()
     returnFromGame()
   })
@@ -1302,6 +1364,19 @@ function renderGame({ resumeRun = null } = {}) {
     const active = puzzle.toggleReferenceVisible()
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   })
+
+  // Menu toggle
+  const menuBtn = gameEl.querySelector('#menu-btn')
+  const menuPanel = gameEl.querySelector('#gt-menu')
+  const toggleMenu = (open) => {
+    const show = open ?? menuPanel.hidden
+    menuPanel.hidden = !show
+    menuBtn.setAttribute('aria-expanded', show ? 'true' : 'false')
+  }
+  menuBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu() })
+  const closeMenu = () => toggleMenu(false)
+  document.addEventListener('click', closeMenu)
+  menuPanel.addEventListener('click', closeMenu)
 
   const restartBtn = gameEl.querySelector('#restart-btn')
   restartBtn.addEventListener('click', () => {
@@ -1316,23 +1391,17 @@ function renderGame({ resumeRun = null } = {}) {
   // Double-tap/click on puzzle board to toggle reference image
   // Ignores buttons, trays, and other interactive UI controls
   function isBoardTarget(target) {
-    if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock')) {
+    if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock, .gt-menu')) {
       return false
     }
-    return mount.contains(target)
+    return mount.contains(target) || target.closest('.sliding-tile, .picture-swap-tile')
   }
 
   let lastTapTime = 0
-  mount.addEventListener('touchend', (e) => {
+  mount.addEventListener('pointerup', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
-    // Ignore multi-touch (e.g. two-finger rotate)
-    if (e.touches.length > 0) {
-      lastTapTime = 0
-      return
-    }
     const now = Date.now()
     if (now - lastTapTime < 300) {
-      e.preventDefault()
       const active = puzzle.toggleReferenceVisible()
       viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
       lastTapTime = 0
@@ -1536,6 +1605,7 @@ function renderGame({ resumeRun = null } = {}) {
 function destroyPuzzle() {
   unbindGameActivity()
   pauseActiveTimer()
+  onStatusChange(null)
 
   if (puzzle) {
     puzzle.destroy()
@@ -1803,6 +1873,7 @@ function renderSettingsPage() {
     if (!btn) return
     const index = Number(btn.dataset.index)
     setGlobalBoardColorIndex(index)
+    markSettingsDirty()
     grid.querySelectorAll('.settings-color-swatch').forEach((s, i) => {
       s.classList.toggle('is-active', i === index)
     })
@@ -2023,11 +2094,11 @@ function renderAboutPage() {
   })
 }
 
+// ─── Sync initialization (must complete before rendering so pulled state is visible) ───
+
+await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
+
 initAppShell()
-
-// ─── Sync initialization ───
-
-initSync()
 
 onConflict(() => {
   showSyncConflictModal()

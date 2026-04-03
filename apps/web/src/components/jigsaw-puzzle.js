@@ -546,10 +546,11 @@ export class JigsawPuzzle {
     piece.canvas.style.position = 'absolute'
     piece.canvas.style.left = '0px'
     piece.canvas.style.top = '0px'
-    piece.canvas.style.transform = ''
     piece.canvas.style.zIndex = '1'
-    piece.canvas.style.width = `${this.pieceCanvasWidth * this.carouselScale}px`
-    piece.canvas.style.height = `${this.pieceCanvasHeight * this.carouselScale}px`
+    piece.canvas.style.width = `${this.pieceCanvasWidth}px`
+    piece.canvas.style.height = `${this.pieceCanvasHeight}px`
+    piece.canvas.style.transformOrigin = 'top left'
+    piece.canvas.style.transform = `scale(${this.carouselScale})`
 
     piece.carouselItem.style.width = `${this.pieceCanvasWidth * this.carouselScale}px`
     piece.carouselItem.style.height = `${this.pieceCanvasHeight * this.carouselScale}px`
