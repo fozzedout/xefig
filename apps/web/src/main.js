@@ -1394,27 +1394,36 @@ function renderGame({ resumeRun = null } = {}) {
     if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock, .gt-menu')) {
       return false
     }
-    return mount.contains(target) || target.closest('.sliding-tile, .picture-swap-tile')
+    return mount.contains(target)
+  }
+
+  function toggleReference() {
+    if (!puzzle) return
+    const active = puzzle.toggleReferenceVisible()
+    viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   }
 
   let lastTapTime = 0
+  let dblHandled = false
   mount.addEventListener('pointerup', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
+    if (e.target.closest('.sliding-tile, .picture-swap-tile')) return
     const now = Date.now()
-    if (now - lastTapTime < 300) {
-      const active = puzzle.toggleReferenceVisible()
-      viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+    if (now - lastTapTime > 0 && now - lastTapTime < 500) {
+      dblHandled = true
+      toggleReference()
       lastTapTime = 0
     } else {
+      dblHandled = false
       lastTapTime = now
     }
   })
 
   mount.addEventListener('dblclick', (e) => {
-    if (!puzzle || !isBoardTarget(e.target)) return
+    if (!puzzle || (!isBoardTarget(e.target) && !e.target.closest('.sliding-tile, .picture-swap-tile'))) return
     e.preventDefault()
-    const active = puzzle.toggleReferenceVisible()
-    viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+    if (dblHandled) { dblHandled = false; return }
+    toggleReference()
   })
 
   const highlightBtn = gameEl.querySelector('#highlight-btn')
