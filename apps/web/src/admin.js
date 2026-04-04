@@ -1,7 +1,7 @@
 import './admin.css'
 
 const API_BASE = ''
-const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram']
+const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
 
 const loginForm = document.getElementById('admin-login-form')
 const usernameInput = document.getElementById('admin-username')
@@ -34,6 +34,7 @@ const promptFields = {
   slider: document.getElementById('prompt-slider'),
   swap: document.getElementById('prompt-swap'),
   polygram: document.getElementById('prompt-polygram'),
+  diamond: document.getElementById('prompt-diamond'),
 }
 
 const thumbEls = {
@@ -41,6 +42,7 @@ const thumbEls = {
   slider: document.getElementById('thumb-slider'),
   swap: document.getElementById('thumb-swap'),
   polygram: document.getElementById('thumb-polygram'),
+  diamond: document.getElementById('thumb-diamond'),
 }
 
 const thumbnailEls = {
@@ -48,6 +50,7 @@ const thumbnailEls = {
   slider: document.getElementById('thumbnail-slider'),
   swap: document.getElementById('thumbnail-swap'),
   polygram: document.getElementById('thumbnail-polygram'),
+  diamond: document.getElementById('thumbnail-diamond'),
 }
 
 const fileInputs = {
@@ -55,6 +58,7 @@ const fileInputs = {
   slider: form.querySelector('input[name="slider"]'),
   swap: form.querySelector('input[name="swap"]'),
   polygram: form.querySelector('input[name="polygram"]'),
+  diamond: form.querySelector('input[name="diamond"]'),
 }
 
 const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)

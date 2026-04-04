@@ -229,6 +229,13 @@ const CATEGORY_PROMPT_INTENTS: Record<
     qualityTarget:
       'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
+  diamond: {
+    title: 'Diamond Painting',
+    composition:
+      'Depict a scene with bold, clearly defined colour regions and strong contrast between areas — ideal for colour-by-number. Favour subjects with distinct colour blocks: landscapes with sky/water/land separation, bold florals, stained glass, mosaics, or graphic illustrations. Avoid subtle gradients and monochromatic areas.',
+    qualityTarget:
+      'Prioritise large uniform colour regions with clean edges between them. Each region should be a distinct, nameable colour. Maintain at least 8–12 clearly different colour zones. Avoid fine noise, speckle, or photographic grain. The image should quantize well to a limited palette while remaining recognisable.',
+  },
 }
 
 // Step-by-step prompt structure per Google best practices:
@@ -269,6 +276,12 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // "Edge-to-edge" is correct for scene puzzles but actively harmful for polygram
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
+const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
+  'Output: one landscape 4:3 image with bold, flat colour areas and minimal gradients. Use a poster-like or stained-glass aesthetic with clearly separated colour zones. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
+  'Deliver a single landscape 4:3 image . Use broad, flat colour fills with strong edges between regions — think colour-by-number or mosaic. Avoid smooth gradients and fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Single 4:3 landscape image  only. Emphasise large, distinct colour blocks with crisp boundaries — minimal blending between regions. The scene should be recognisable even when reduced to 16 colours. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+] as const
+
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
   'Output: one landscape 4:3 image . The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
   'Deliver a single landscape 4:3 image . Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
@@ -427,6 +440,8 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
   // Step 5: output format
   const outputLine = category === 'polygram'
     ? pickRandom(PROMPT_OUTPUT_TEMPLATES_POLYGRAM)
+    : category === 'diamond'
+    ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
     : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
   return [contextLine, subjectLine, descriptorLine, qualityLine, outputLine].join(' ')

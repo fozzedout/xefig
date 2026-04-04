@@ -32,8 +32,9 @@ export async function ensureLeaderboardTable(db: D1Database): Promise<void> {
       )
     const hasSwapGameMode = /game_mode\s+IN\s*\([^)]*'swap'/i.test(table.sql || '')
     const hasPolygramGameMode = /game_mode\s+IN\s*\([^)]*'polygram'/i.test(table.sql || '')
+    const hasDiamondGameMode = /game_mode\s+IN\s*\([^)]*'diamond'/i.test(table.sql || '')
 
-    if (!hasGameMode || !hasModeScopedUnique || !hasSwapGameMode || !hasPolygramGameMode) {
+    if (!hasGameMode || !hasModeScopedUnique || !hasSwapGameMode || !hasPolygramGameMode || !hasDiamondGameMode) {
       await db.prepare(`DROP TABLE IF EXISTS puzzle_leaderboard_next`).run()
       await createLeaderboardTable(db, 'puzzle_leaderboard_next')
       const selectGameModeExpr = hasGameMode ? `COALESCE(game_mode, 'jigsaw')` : `'jigsaw'`
@@ -80,7 +81,7 @@ async function createLeaderboardTable(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         puzzle_date TEXT NOT NULL,
         difficulty TEXT NOT NULL,
-        game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram')),
+        game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram', 'diamond')),
         player_guid TEXT NOT NULL,
         elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
         submitted_at TEXT NOT NULL DEFAULT (datetime('now')),

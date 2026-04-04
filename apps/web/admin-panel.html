@@ -225,6 +225,29 @@
                 </div>
                 <textarea id="prompt-polygram" readonly placeholder="Prompt will appear here after generation…"></textarea>
               </div>
+
+              <div class="prompt-card" data-mode="diamond">
+                <div class="prompt-card-head">
+                  <div class="mode-tag">Diamond Painting</div>
+                  <div class="prompt-card-actions">
+                    <button type="button" class="regen-btn btn-micro" data-mode="diamond">Regenerate</button>
+                    <button type="button" class="rewrite-btn btn-micro" data-mode="diamond">Reword</button>
+                    <button type="button" class="copy-btn btn-micro" data-target="prompt-diamond">Copy</button>
+                    <button type="button" class="submit-single-btn btn-micro btn-accent" data-mode="diamond">Submit</button>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-diamond" name="theme-diamond" form="admin-form" type="text" placeholder="Diamond Painting Theme" class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-diamond" name="tags-diamond" form="admin-form" type="text" placeholder="diamond, tags" class="field-input-micro" />
+                  </div>
+                </div>
+                <textarea id="prompt-diamond" readonly placeholder="Prompt will appear here after generation…"></textarea>
+              </div>
             </div>
           </section>
 
@@ -335,6 +358,33 @@
                   <button type="button" class="gen-thumb-btn btn-micro" data-mode="polygram" hidden>Generate Thumbnail</button>
                   <label class="drop-zone" id="drop-polygram">
                     <input name="polygram" type="file" accept="image/*" class="drop-input" />
+                    <div class="drop-inner">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="drop-label">Drop or <u>browse</u></span>
+                      <span class="drop-name"></span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="upload-card" data-mode="diamond">
+                  <div class="upload-card-header">
+                    <div class="mode-tag">Diamond Painting</div>
+                  </div>
+                  <div class="image-previews">
+                    <div id="thumb-diamond" class="existing-thumb" hidden>
+                      <img alt="Current diamond painting image" />
+                      <div class="thumb-overlay">Full image</div>
+                    </div>
+                    <div id="thumbnail-diamond" class="existing-thumb thumbnail-preview" hidden>
+                      <img alt="Diamond Painting thumbnail" />
+                      <div class="thumb-overlay">Thumbnail</div>
+                    </div>
+                  </div>
+                  <button type="button" class="gen-thumb-btn btn-micro" data-mode="diamond" hidden>Generate Thumbnail</button>
+                  <label class="drop-zone" id="drop-diamond">
+                    <input name="diamond" type="file" accept="image/*" class="drop-input" />
                     <div class="drop-inner">
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>

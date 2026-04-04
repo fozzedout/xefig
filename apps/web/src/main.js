@@ -31,6 +31,7 @@ const puzzleLoaders = {
   sliding: () => import('./components/sliding-tile-puzzle.js').then((m) => m.SlidingTilePuzzle),
   swap: () => import('./components/picture-swap-puzzle.js').then((m) => m.PictureSwapPuzzle),
   polygram: () => import('./components/polygram-puzzle.js').then((m) => m.PolygramPuzzle),
+  diamond: () => import('./components/diamond-painting-puzzle.js').then((m) => m.DiamondPaintingPuzzle),
 }
 
 const app = document.querySelector('#app')
@@ -77,6 +78,7 @@ const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
 const GAME_MODE_SWAP = 'swap'
 const GAME_MODE_POLYGRAM = 'polygram'
+const GAME_MODE_DIAMOND = 'diamond'
 const DIFFICULTY_LABELS = {
   [GAME_MODE_JIGSAW]: {
     easy: 'Easy (8x8)',
@@ -102,18 +104,23 @@ const DIFFICULTY_LABELS = {
     hard: 'Hard (36-42 shards)',
     extreme: 'Extreme (52-60 shards)',
   },
+  [GAME_MODE_DIAMOND]: {
+    medium: '16 colors',
+  },
 }
 const MODE_LABELS = {
   [GAME_MODE_JIGSAW]: 'Jigsaw',
   [GAME_MODE_SLIDING]: 'Sliding Tile',
   [GAME_MODE_SWAP]: 'Picture Swap',
   [GAME_MODE_POLYGRAM]: 'Polygram',
+  [GAME_MODE_DIAMOND]: 'Diamond Painting',
 }
 const GAME_MODE_TO_PUZZLE_CATEGORY = {
   [GAME_MODE_JIGSAW]: 'jigsaw',
   [GAME_MODE_SLIDING]: 'slider',
   [GAME_MODE_SWAP]: 'swap',
   [GAME_MODE_POLYGRAM]: 'polygram',
+  [GAME_MODE_DIAMOND]: 'diamond',
 }
 
 const state = {
@@ -161,6 +168,9 @@ function normalizeGameMode(mode) {
   if (mode === GAME_MODE_POLYGRAM) {
     return GAME_MODE_POLYGRAM
   }
+  if (mode === GAME_MODE_DIAMOND) {
+    return GAME_MODE_DIAMOND
+  }
   return GAME_MODE_JIGSAW
 }
 
@@ -174,6 +184,9 @@ function getInteractionHint(gameMode = state.gameMode) {
   if (gameMode === GAME_MODE_POLYGRAM) {
     return 'Tap a shard to rotate. Drag from the tray and drop near the matching spot to snap it in.'
   }
+  if (gameMode === GAME_MODE_DIAMOND) {
+    return 'Pick a color from the palette, then tap or drag to paint cells. Match the numbers to reveal the image.'
+  }
 
   const isLandscapeDesktop = window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
   return isLandscapeDesktop
@@ -183,7 +196,7 @@ function getInteractionHint(gameMode = state.gameMode) {
 
 function getGameModeOfDay(dateKey = getIsoDate(new Date())) {
   const seed = Number(dateKey.replaceAll('-', ''))
-  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
   return modes[Math.abs(seed) % modes.length]
 }
 
@@ -623,6 +636,7 @@ const SLICE_ICONS = {
   [GAME_MODE_SLIDING]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="10" height="10" rx="1"/><rect x="18" y="4" width="10" height="10" rx="1"/><rect x="4" y="18" width="10" height="10" rx="1"/><path d="M22 20v8M18 24h8" stroke-linecap="round"/></svg>',
   [GAME_MODE_SWAP]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M8 10h6M18 10h6M8 22h6M18 22h6" stroke-linecap="round" stroke-width="2"/><path d="M14 10l4 12M18 10l-4 12" stroke-dasharray="2 2"/><circle cx="11" cy="10" r="3"/><circle cx="21" cy="22" r="3"/></svg>',
   [GAME_MODE_POLYGRAM]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><polygon points="16,3 28,11 24,25 8,25 4,11"/><polygon points="16,8 23,13 21,22 11,22 9,13"/><line x1="16" y1="3" x2="16" y2="8"/><line x1="28" y1="11" x2="23" y2="13"/><line x1="24" y1="25" x2="21" y2="22"/><line x1="8" y1="25" x2="11" y2="22"/><line x1="4" y1="11" x2="9" y2="13"/></svg>',
+  [GAME_MODE_DIAMOND]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="22" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/><rect x="22" y="13" width="7" height="7" rx="1"/><rect x="4" y="22" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/><rect x="13" y="22" width="7" height="7" rx="1"/><rect x="22" y="22" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/></svg>',
 }
 
 const SLICE_DESCRIPTIONS = {
@@ -630,6 +644,7 @@ const SLICE_DESCRIPTIONS = {
   [GAME_MODE_SLIDING]: 'Slide tiles into the empty space to reorder the scrambled image. Deceptively simple, maddeningly strategic.',
   [GAME_MODE_SWAP]: 'Select any two tiles and swap their positions. No empty space needed \u2014 challenges spatial memory and pattern recognition.',
   [GAME_MODE_POLYGRAM]: 'The image shatters into irregular polygon shards. Rotate and place geometric fragments to piece reality back together.',
+  [GAME_MODE_DIAMOND]: 'Fill the numbered grid with matching colors from the palette to reveal the hidden image. A relaxing, meditative puzzle.',
 }
 
 const SLICE_TAGS = {
@@ -637,6 +652,7 @@ const SLICE_TAGS = {
   [GAME_MODE_SLIDING]: ['Slide', '3\u00d73 \u2014 7\u00d77', 'Strategy'],
   [GAME_MODE_SWAP]: ['Tap & Swap', '4\u00d74 \u2014 10\u00d710', 'Spatial'],
   [GAME_MODE_POLYGRAM]: ['Rotate & Place', 'Freeform', 'Artistic'],
+  [GAME_MODE_DIAMOND]: ['Tap & Paint', '16 colors', 'Relaxing'],
 }
 
 function renderLauncher() {
@@ -651,7 +667,7 @@ function renderLauncher() {
   const ACTIVE_FLEX = 2.2
   const INACTIVE_FLEX = 0.9
   const pickMode = getGameModeOfDay(todayDate)
-  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+  const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
 
   const renderSlices = (puzzlePayload) => {
     const puzzleDate = puzzlePayload?.date || todayDate
@@ -727,7 +743,7 @@ function renderLauncher() {
     renderGame()
   }
 
-  const ACCENT_MAP = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0' }
+  const ACCENT_MAP = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0', diamond: '#e070a0' }
 
   const buildInfoPanel = (panel, mode, index) => {
     const title = MODE_LABELS[mode]
@@ -839,6 +855,7 @@ const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_SLIDING]: '#40d0f0',
   [GAME_MODE_SWAP]: '#f06050',
   [GAME_MODE_POLYGRAM]: '#a060f0',
+  [GAME_MODE_DIAMOND]: '#e070a0',
 }
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -906,7 +923,7 @@ function renderArchivePage() {
     const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
     const isToday = dateKey === todayDate
     const completedModes = getCompletedModesForDate(dateKey)
-    const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM]
+    const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
 
     const thumbsHtml = modes
       .map((mode) => {
@@ -1222,6 +1239,7 @@ function renderGame({ resumeRun = null } = {}) {
   const accentColor = gameMode === GAME_MODE_JIGSAW ? '#f0c040'
     : gameMode === GAME_MODE_SLIDING ? '#40d0f0'
     : gameMode === GAME_MODE_SWAP ? '#f06050'
+    : gameMode === GAME_MODE_DIAMOND ? '#e070a0'
     : '#a060f0'
   const dateLabel = state.puzzle?.date
     ? new Date(Date.parse(`${state.puzzle.date}T00:00:00Z`)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
@@ -1253,10 +1271,10 @@ function renderGame({ resumeRun = null } = {}) {
                 Edges only
               </button>
               ` : ''}
-              <button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
+              ${gameMode !== GAME_MODE_DIAMOND ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
                 Reference image
-              </button>
+              </button>` : ''}
               <button id="restart-btn" class="gt-menu-item gt-menu-item--danger" type="button">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
                 Restart
@@ -1356,14 +1374,16 @@ function renderGame({ resumeRun = null } = {}) {
     returnFromGame()
   })
 
-  viewBtn.addEventListener('click', () => {
-    if (!puzzle) {
-      return
-    }
+  if (viewBtn) {
+    viewBtn.addEventListener('click', () => {
+      if (!puzzle) {
+        return
+      }
 
-    const active = puzzle.toggleReferenceVisible()
-    viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
-  })
+      const active = puzzle.toggleReferenceVisible()
+      viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+    })
+  }
 
   // Menu toggle
   const menuBtn = gameEl.querySelector('#menu-btn')
@@ -1391,14 +1411,14 @@ function renderGame({ resumeRun = null } = {}) {
   // Double-tap/click on puzzle board to toggle reference image
   // Ignores buttons, trays, and other interactive UI controls
   function isBoardTarget(target) {
-    if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock, .gt-menu')) {
+    if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock, .diamond-palette-bar, .gt-menu')) {
       return false
     }
     return mount.contains(target)
   }
 
   function toggleReference() {
-    if (!puzzle) return
+    if (!puzzle || !viewBtn) return
     const active = puzzle.toggleReferenceVisible()
     viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
   }
@@ -1486,6 +1506,7 @@ function renderGame({ resumeRun = null } = {}) {
       const loaderKey = gameMode === GAME_MODE_SLIDING ? 'sliding'
         : gameMode === GAME_MODE_SWAP ? 'swap'
         : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
+        : gameMode === GAME_MODE_DIAMOND ? 'diamond'
         : 'jigsaw'
       const PuzzleClass = await puzzleLoaders[loaderKey]()
       const puzzleConfig = {
@@ -1506,7 +1527,7 @@ function renderGame({ resumeRun = null } = {}) {
           persistActiveRun(progressState)
           updatePieceCount()
           // Sync view button if puzzle auto-hid the reference
-          if (puzzle && !puzzle.referenceVisible) {
+          if (viewBtn && puzzle && !puzzle.referenceVisible) {
             viewBtn.setAttribute('aria-pressed', 'false')
           }
         },
@@ -2144,4 +2165,10 @@ function showSyncConflictModal() {
       window.switchToPage('play')
     }
   })
+}
+
+// ─── Service Worker Registration ───
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
 }

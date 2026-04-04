@@ -1163,10 +1163,12 @@ export function createApp() {
     }
 
     // Only try static assets for paths that could plausibly be ours:
-    // root-level files and /assets/*. Skip everything else to avoid
-    // wasting resources on bot traffic hitting deep bogus paths.
+    // single-segment root files (manifest, icons, service worker, etc.)
+    // and /assets/*. Skip everything else to avoid wasting resources on
+    // bot traffic hitting deep bogus paths.
     const isAppRoute = pathname === '/' || pathname === '/admin-panel' || pathname === '/admin-panel.html'
-    const isStaticAsset = pathname === '/favicon.svg' || pathname === '/icons.svg' || pathname.startsWith('/assets/')
+    const isRootStaticAsset = /^\/[^/]+\.[a-z0-9]+$/i.test(pathname)
+    const isStaticAsset = isRootStaticAsset || pathname.startsWith('/assets/')
     if (isAppRoute || isStaticAsset) {
       const response = await c.env.STATIC_ASSETS.fetch(c.req.raw)
       if (response.status !== 404) {

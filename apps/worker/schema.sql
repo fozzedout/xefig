@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS leaderboard_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     puzzle_date TEXT NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('jigsaw', 'slider', 'swap', 'polygram')),
+    category TEXT NOT NULL CHECK (category IN ('jigsaw', 'slider', 'swap', 'polygram', 'diamond')),
     account_id INTEGER NOT NULL,
     score INTEGER NOT NULL,
     moves INTEGER,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS puzzle_leaderboard (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     puzzle_date TEXT NOT NULL,
     difficulty TEXT NOT NULL,
-    game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram')),
+    game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram', 'diamond')),
     player_guid TEXT NOT NULL,
     elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
     submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
