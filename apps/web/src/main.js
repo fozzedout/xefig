@@ -1244,11 +1244,13 @@ function renderGame({ resumeRun = null } = {}) {
   const dateLabel = state.puzzle?.date
     ? new Date(Date.parse(`${state.puzzle.date}T00:00:00Z`)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
     : ''
-  const titleLabel = `${MODE_LABELS[gameMode]}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
+  const compactModeLabel = gameMode === GAME_MODE_DIAMOND ? 'Diamond' : MODE_LABELS[gameMode]
+  const titleLabel = `${compactModeLabel}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
+  const showPieceCount = gameMode !== GAME_MODE_DIAMOND
 
   gameEl.innerHTML = `
-    <main class="game-shell">
-      <header class="game-toolbar">
+    <main class="game-shell game-shell--${gameMode}">
+      <header class="game-toolbar game-toolbar--${gameMode}">
         <button id="back-btn" class="gt-icon-btn" type="button" aria-label="Back to launcher" title="Back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
@@ -1283,9 +1285,9 @@ function renderGame({ resumeRun = null } = {}) {
           </div>
         </div>
 
-        <div class="gt-stats">
-          <span id="piece-count" class="gt-counter"></span>
-          <span class="gt-divider"></span>
+        <div class="gt-stats gt-stats--${gameMode}">
+          ${showPieceCount ? `<span id="piece-count" class="gt-counter"></span>
+          <span class="gt-divider"></span>` : ''}
           <span id="timer" class="gt-timer">00:00</span>
           ${isSyncEnabled() ? `<button id="save-indicator" class="save-indicator" type="button" aria-label="Sync status" title="Saved">
             <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.5 10.3L4.3 8.1l1-1L7.5 9.4l3.2-3.2 1 1L7.5 11.3Z"/></svg>
@@ -1348,7 +1350,7 @@ function renderGame({ resumeRun = null } = {}) {
   const stopTimerDisplay = () => { if (timerRaf) { cancelAnimationFrame(timerRaf); timerRaf = null } }
 
   const updatePieceCount = () => {
-    if (!puzzle) return
+    if (!puzzle || !pieceCountEl) return
     const locked = puzzle.pieces?.filter((p) => p.locked).length ?? 0
     const total = puzzle.pieces?.length ?? 0
     pieceCountEl.textContent = `${locked}/${total}`

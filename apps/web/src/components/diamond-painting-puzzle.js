@@ -6,6 +6,8 @@ const CELL_PX = 24
 const CELL_SAMPLE_GRID = 3
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
+const MAX_CANVAS_DIMENSION = 4096
+const MAX_CANVAS_PIXELS = 4096 * 4096
 
 export class DiamondPaintingPuzzle {
   constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress }) {
@@ -103,24 +105,32 @@ export class DiamondPaintingPuzzle {
   // ─── Layout ───
 
   getViewport() {
-    const containerWidth = this.container.clientWidth || window.innerWidth
-    const containerHeight = this.container.clientHeight || window.innerHeight
-    const paletteHeight = 56
-    const padding = 6
+    const w = (this.boardFrame && this.boardFrame.clientWidth) || this.container.clientWidth || window.innerWidth
+    const h = (this.boardFrame && this.boardFrame.clientHeight) || this.container.clientHeight || window.innerHeight
     return {
-      w: Math.max(240, containerWidth - padding * 2),
-      h: Math.max(180, containerHeight - paletteHeight - padding * 2),
+      w: Math.max(240, w),
+      h: Math.max(180, h),
     }
   }
 
   fitZoom() {
     const vp = this.getViewport()
+    this.zoom = this.getFitZoom(vp)
     const fullW = this.cols * CELL_PX
     const fullH = this.rows * CELL_PX
-    this.zoom = Math.min(vp.w / fullW, vp.h / fullH, 1)
     this.panX = (vp.w - fullW * this.zoom) / 2
     this.panY = (vp.h - fullH * this.zoom) / 2
     this.applyTransform()
+  }
+
+  getFitZoom(vp = this.getViewport()) {
+    const fullW = this.cols * CELL_PX
+    const fullH = this.rows * CELL_PX
+    return Math.min(vp.w / fullW, vp.h / fullH, 1)
+  }
+
+  getMinZoom(vp = this.getViewport()) {
+    return Math.min(MIN_ZOOM, this.getFitZoom(vp))
   }
 
   createLayout() {
@@ -129,28 +139,27 @@ export class DiamondPaintingPuzzle {
 
     this.boardFrame = document.createElement('div')
     this.boardFrame.className = 'diamond-board-frame'
+    this.boardContent = document.createElement('div')
+    this.boardContent.className = 'diamond-board-content'
 
     const fullW = this.cols * CELL_PX
     const fullH = this.rows * CELL_PX
+    this.boardContent.style.width = `${fullW}px`
+    this.boardContent.style.height = `${fullH}px`
 
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'diamond-canvas'
 
-    const dpr = window.devicePixelRatio || 1
-    this.canvas.width = Math.round(fullW * dpr)
-    this.canvas.height = Math.round(fullH * dpr)
-    this.canvas.style.width = `${fullW}px`
-    this.canvas.style.height = `${fullH}px`
-    this.canvas.style.transformOrigin = '0 0'
+    configureCanvas(this.canvas, fullW, fullH)
     this.ctx = this.canvas.getContext('2d')
-    this.ctx.scale(dpr, dpr)
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'diamond-reference'
     this.referenceImage.src = this.imageUrl
     this.referenceImage.alt = 'Reference image'
 
-    this.boardFrame.append(this.canvas, this.referenceImage)
+    this.boardContent.append(this.canvas, this.referenceImage)
+    this.boardFrame.append(this.boardContent)
 
     this.paletteBar = this.createPaletteBar()
     this.root.append(this.boardFrame, this.paletteBar)
@@ -160,8 +169,8 @@ export class DiamondPaintingPuzzle {
   }
 
   applyTransform() {
-    if (this.canvas) {
-      this.canvas.style.transform = `translate(${this.panX}px,${this.panY}px) scale(${this.zoom})`
+    if (this.boardContent) {
+      this.boardContent.style.transform = `translate(${this.panX}px,${this.panY}px) scale(${this.zoom})`
     }
   }
 
@@ -272,7 +281,7 @@ export class DiamondPaintingPuzzle {
       const [a, b] = [...this.pointers.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
       if (this.pinchStartDist > 0) {
-        const newZoom = clamp(this.pinchStartZoom * (dist / this.pinchStartDist), MIN_ZOOM, MAX_ZOOM)
+        const newZoom = clamp(this.pinchStartZoom * (dist / this.pinchStartDist), this.getMinZoom(), MAX_ZOOM)
         // Zoom around midpoint
         const mx = (a.x + b.x) / 2
         const my = (a.y + b.y) / 2
@@ -332,7 +341,7 @@ export class DiamondPaintingPuzzle {
     const worldY = (fy - this.panY) / this.zoom
 
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-    this.zoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM)
+    this.zoom = clamp(this.zoom * factor, this.getMinZoom(), MAX_ZOOM)
     this.panX = fx - worldX * this.zoom
     this.panY = fy - worldY * this.zoom
     this.clampPan()
@@ -595,7 +604,7 @@ export class DiamondPaintingPuzzle {
 
     // Restore zoom/pan or fit
     if (Number.isFinite(state.zoom)) {
-      this.zoom = clamp(state.zoom, MIN_ZOOM, MAX_ZOOM)
+      this.zoom = clamp(state.zoom, this.getMinZoom(), MAX_ZOOM)
       this.panX = Number(state.panX) || 0
       this.panY = Number(state.panY) || 0
       this.clampPan()
@@ -607,13 +616,12 @@ export class DiamondPaintingPuzzle {
     const fullW = this.cols * CELL_PX
     const fullH = this.rows * CELL_PX
     if (this.canvas) {
-      const dpr = window.devicePixelRatio || 1
-      this.canvas.width = Math.round(fullW * dpr)
-      this.canvas.height = Math.round(fullH * dpr)
-      this.canvas.style.width = `${fullW}px`
-      this.canvas.style.height = `${fullH}px`
+      configureCanvas(this.canvas, fullW, fullH)
       this.ctx = this.canvas.getContext('2d')
-      this.ctx.scale(dpr, dpr)
+    }
+    if (this.boardContent) {
+      this.boardContent.style.width = `${fullW}px`
+      this.boardContent.style.height = `${fullH}px`
     }
 
     // Rebuild palette bar
@@ -671,6 +679,31 @@ function loadImage(url) {
 
 function rgbString(c) {
   return `rgb(${c[0]},${c[1]},${c[2]})`
+}
+
+function configureCanvas(canvas, width, height) {
+  const scale = getCanvasRenderScale(width, height)
+  canvas.width = Math.max(1, Math.floor(width * scale))
+  canvas.height = Math.max(1, Math.floor(height * scale))
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  canvas.style.transformOrigin = '0 0'
+
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
+  }
+}
+
+function getCanvasRenderScale(width, height) {
+  const dpr = window.devicePixelRatio || 1
+  const maxByDimension = Math.min(MAX_CANVAS_DIMENSION / width, MAX_CANVAS_DIMENSION / height)
+  const maxByArea = Math.sqrt(MAX_CANVAS_PIXELS / (width * height))
+  const targetScale = Math.max(1, Math.min(dpr, maxByDimension, maxByArea))
+
+  const fittedWidthScale = Math.floor(width * targetScale) / width
+  const fittedHeightScale = Math.floor(height * targetScale) / height
+  return Math.max(1, Math.min(targetScale, fittedWidthScale, fittedHeightScale))
 }
 
 // ─── Color Quantization (Median Cut) ────────────────────────

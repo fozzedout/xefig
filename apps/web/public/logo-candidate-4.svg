@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <clipPath id="bg4">
+      <rect width="48" height="48" rx="10"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#bg4)">
+    <rect width="48" height="48" fill="#1a1a2e"/>
+
+    <!-- X made of 5 diamond tiles — each a different "material" -->
+
+    <!-- Top-left: Jigsaw — very rounded, with puzzle tab -->
+    <rect x="11" y="11" width="8" height="8" rx="3" fill="#863bff"
+          transform="rotate(45 15 15)"/>
+    <circle cx="15" cy="8" r="2" fill="#863bff"/>
+
+    <!-- Top-right: Geometric — sharp edges, triangular facet -->
+    <rect x="29" y="11" width="8" height="8" fill="#47bfff"
+          transform="rotate(45 33 15)"/>
+    <polygon points="39,13.5 41.5,15 39,16.5" fill="#47bfff"/>
+
+    <!-- Center: Keystone — bold, slightly larger -->
+    <rect x="19.5" y="19.5" width="9" height="9" rx="1.5" fill="#5de8a0"
+          transform="rotate(45 24 24)"/>
+
+    <!-- Bottom-left: Paint-by-numbers — outline only, number dot -->
+    <rect x="11" y="29" width="8" height="8" rx="1.5" fill="none"
+          stroke="#ffb347" stroke-width="1.3" transform="rotate(45 15 33)"/>
+    <circle cx="15" cy="33" r="1.2" fill="#ffb347" opacity="0.5"/>
+
+    <!-- Bottom-right: Mosaic — filled with score lines -->
+    <rect x="29" y="29" width="8" height="8" rx="1" fill="#ff6b8a"
+          transform="rotate(45 33 33)"/>
+    <line x1="33" y1="27.5" x2="33" y2="38.5"
+          stroke="#1a1a2e" stroke-width="0.8" opacity="0.4"/>
+    <line x1="27.5" y1="33" x2="38.5" y2="33"
+          stroke="#1a1a2e" stroke-width="0.8" opacity="0.4"/>
+  </g>
+</svg>
