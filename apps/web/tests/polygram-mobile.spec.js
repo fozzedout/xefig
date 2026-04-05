@@ -7,11 +7,12 @@ const TODAY_PAYLOAD = {
     slider: { imageUrl: '/src/assets/hero.png' },
     swap: { imageUrl: '/src/assets/hero.png' },
     polygram: { imageUrl: '/src/assets/hero.png' },
+    diamond: { imageUrl: '/src/assets/hero.png' },
   },
 }
 
 async function openPolygramGame(page) {
-  await page.route('**/api/puzzles/today', async (route) => {
+  await page.route('**/api/puzzles/today**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -20,7 +21,14 @@ async function openPolygramGame(page) {
   })
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: /polygram/i }).click()
+  const slice = page.locator('.slice[data-mode="polygram"]')
+  await slice.waitFor()
+
+  // First click expands the slice, second click launches the game
+  if (!(await slice.evaluate((el) => el.classList.contains('active')))) {
+    await slice.click()
+  }
+  await slice.click()
   await page.locator('.polygram-piece').first().waitFor()
 }
 
@@ -59,8 +67,10 @@ async function dragVisiblePieceWithTouch(page, locator, delta, { steps = 8, rele
 
   // Use locator.evaluate to dispatch events directly on the correct element,
   // avoiding clip-path hit-testing issues with elementFromPoint.
+  // Events are dispatched on the polygram root (which has pointer capture).
   return locator.evaluate(
     async (piece, { fromPoint, toPoint, stepCount, shouldRelease }) => {
+      const root = piece.closest('.polygram-root') || piece.getRootNode()
       const init = {
         bubbles: true,
         composed: true,
@@ -78,7 +88,7 @@ async function dragVisiblePieceWithTouch(page, locator, delta, { steps = 8, rele
 
       for (let step = 1; step <= stepCount; step += 1) {
         const progress = step / stepCount
-        window.dispatchEvent(
+        root.dispatchEvent(
           new PointerEvent('pointermove', {
             ...init,
             clientX: fromPoint.x + (toPoint.x - fromPoint.x) * progress,
@@ -94,7 +104,7 @@ async function dragVisiblePieceWithTouch(page, locator, delta, { steps = 8, rele
       }
 
       if (shouldRelease) {
-        piece.dispatchEvent(
+        root.dispatchEvent(
           new PointerEvent('pointerup', {
             ...init,
             clientX: toPoint.x,
@@ -113,57 +123,39 @@ async function dragVisiblePieceWithTouch(page, locator, delta, { steps = 8, rele
   )
 }
 
-test('mobile polygram tray keeps controls visible and lets a shard be selected and rotated', async ({ page }) => {
+test('mobile polygram tray keeps controls visible and lets a shard be picked up', async ({ page }) => {
   await openPolygramGame(page)
 
   await expect(page.locator('.polygram-tray')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Rotate selected shard left' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Rotate selected shard right' })).toBeVisible()
 
   const trayLayout = await page.evaluate(() => {
     const tray = document.querySelector('.polygram-tray')?.getBoundingClientRect()
-    const header = document.querySelector('.polygram-tray-header')?.getBoundingClientRect()
-    const viewport = document.querySelector('.polygram-tray-viewport')?.getBoundingClientRect()
+    const grid = document.querySelector('.polygram-tray-grid')?.getBoundingClientRect()
     const visiblePieces = Array.from(document.querySelectorAll('.polygram-piece'))
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < window.innerWidth)
     return {
       trayWidth: tray?.width ?? 0,
-      headerWidth: header?.width ?? 0,
-      viewportWidth: viewport?.width ?? 0,
-      viewportTop: viewport?.top ?? 0,
-      viewportBottom: viewport?.bottom ?? 0,
+      gridWidth: grid?.width ?? 0,
+      gridTop: grid?.top ?? 0,
+      gridBottom: grid?.bottom ?? 0,
       visiblePieceTop: visiblePieces.length ? Math.min(...visiblePieces.map((rect) => rect.top)) : 0,
       visiblePieceBottom: visiblePieces.length ? Math.max(...visiblePieces.map((rect) => rect.bottom)) : 0,
     }
   })
-  expect(trayLayout.headerWidth).toBeLessThanOrEqual(trayLayout.trayWidth + 1)
-  expect(trayLayout.viewportWidth).toBeLessThanOrEqual(trayLayout.trayWidth + 1)
+  expect(trayLayout.gridWidth).toBeLessThanOrEqual(trayLayout.trayWidth + 1)
   // Rotated pieces can extend slightly beyond slot boundaries due to transform-origin
   const pieceTolerance = 20
-  expect(trayLayout.visiblePieceTop).toBeGreaterThanOrEqual(trayLayout.viewportTop - pieceTolerance)
-  expect(trayLayout.visiblePieceBottom).toBeLessThanOrEqual(trayLayout.viewportBottom + pieceTolerance)
+  expect(trayLayout.visiblePieceTop).toBeGreaterThanOrEqual(trayLayout.gridTop - pieceTolerance)
+  expect(trayLayout.visiblePieceBottom).toBeLessThanOrEqual(trayLayout.gridBottom + pieceTolerance)
 
+  // Dragging a tray piece picks it up (holds it)
   const firstPiece = await getVisiblePieceLocator(page)
-  await firstPiece.click()
-
-  await expect(firstPiece).toHaveClass(/is-selected/)
-  await expect(firstPiece).toHaveClass(/is-select-pulse/)
-  await expect(page.locator('.polygram-rotate-label')).not.toHaveText(/No shard selected/i)
-  await expect(page.locator('.polygram-rotate-dock')).toHaveClass(/has-selection/)
-
-  // Rotate label shows shard name
-  await expect(page.locator('.polygram-rotate-label')).toHaveText(/Shard \d+/)
-
-  const beforeTransform = await firstPiece.evaluate((element) => element.style.transform)
-  await page.getByRole('button', { name: 'Rotate selected shard right' }).click()
-  await page.waitForTimeout(250)
-  const afterTransform = await firstPiece.evaluate((element) => element.style.transform)
-
-  expect(afterTransform).not.toBe(beforeTransform)
+  const dragResult = await dragVisiblePieceWithTouch(page, firstPiece, { x: 0, y: -200 }, { release: false })
+  expect(dragResult.className).toContain('is-held')
 })
 
-test('dragging a shard onto the board places it there for rotation', async ({ page }) => {
+test('dragging a shard onto the board places it and shows rotation ring', async ({ page }) => {
   await openPolygramGame(page)
 
   const piece = await getVisiblePieceLocator(page)
@@ -174,16 +166,8 @@ test('dragging a shard onto the board places it there for rotation', async ({ pa
   // Verify the drag actually worked (class set inside evaluate)
   expect(dragResult.className + ' | ' + dragResult.parentClass).toContain('is-placed')
 
-  // Piece should be selected and rotatable
-  await expect(piece).toHaveClass(/is-selected/)
-  await expect(page.locator('.polygram-rotate-label')).not.toHaveText(/No shard selected/i)
-
-  // Rotate the placed piece — it should stay on the board
-  const beforeTransform = await piece.evaluate((el) => el.style.transform)
-  await page.getByRole('button', { name: 'Rotate selected shard right' }).click()
-  await page.waitForTimeout(250)
-  const afterTransform = await piece.evaluate((el) => el.style.transform)
-  expect(afterTransform).not.toBe(beforeTransform)
+  // Placed piece should have the rotation ring visible
+  await expect(page.locator('.polygram-rotate-ring.is-visible')).toBeVisible()
   await expect(piece).toHaveClass(/is-placed/)
 })
 
@@ -197,45 +181,39 @@ test('dragging a placed shard back to the tray returns it', async ({ page }) => 
   await page.waitForTimeout(50)
   await expect(piece).toHaveClass(/is-placed/)
 
-  // Now drag it back down well into the tray area
+  // Tap the placed piece to pick it back up, then tap the tray area to return it
+  // In the current implementation, tapping a placed piece toggles the ring;
+  // dragging picks it up and dropping over tray returns it
   await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 400 }, { release: true })
   await page.waitForTimeout(50)
 
   // Should be back in the tray
   const parentClass = await piece.evaluate((el) => el.parentElement?.className || '')
-  expect(parentClass).toBe('polygram-tray-track')
+  expect(parentClass).toBe('polygram-tray-grid')
   expect(await piece.evaluate((el) => el.classList.contains('is-placed'))).toBe(false)
 })
 
-test('selection pulse animation class is applied on click', async ({ page }) => {
+test('dragging a tray piece picks it up as held', async ({ page }) => {
   await openPolygramGame(page)
 
   const piece = await getVisiblePieceLocator(page)
-  await piece.click()
 
-  await expect(piece).toHaveClass(/is-select-pulse/)
-  await expect(piece).toHaveClass(/is-selected/)
+  // In the current implementation, dragging a tray piece holds it
+  const dragResult = await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -200 }, { release: false })
+  expect(dragResult.className).toContain('is-held')
 })
 
-test('snap-flash animation plays when a piece locks into place', async ({ page }) => {
+test('dragging a piece onto the board results in placed or locked state', async ({ page }) => {
   await openPolygramGame(page)
 
   const piece = await getVisiblePieceLocator(page)
 
-  // Rotate piece to 0° so it can snap (12 steps × 30° = 360°)
-  await piece.click()
-  const rotateBtn = page.getByRole('button', { name: 'Rotate selected shard right' })
-  for (let i = 0; i < 12; i++) {
-    await rotateBtn.click()
-  }
-  await page.waitForTimeout(50)
-
-  // Place piece on the board first
+  // Drag piece onto the board
   await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -400 }, { release: true })
   await page.waitForTimeout(50)
 
-  // If the piece snapped directly (rotation was already 0 and position happened to be correct),
-  // it should have snap-flash. Otherwise it's placed and we can verify placement feedback works.
+  // The piece should either snap-lock (if rotation and position happen to be correct)
+  // or be placed on the board for further adjustment
   const state = await piece.evaluate((el) => ({
     isLocked: el.classList.contains('is-locked'),
     hasFlash: el.classList.contains('snap-flash'),
@@ -243,10 +221,8 @@ test('snap-flash animation plays when a piece locks into place', async ({ page }
   }))
 
   if (state.isLocked) {
-    // Piece snapped — verify flash animation was triggered
     expect(state.hasFlash).toBe(true)
   } else {
-    // Piece is placed on board — verify it's interactive
     expect(state.isPlaced).toBe(true)
   }
 })

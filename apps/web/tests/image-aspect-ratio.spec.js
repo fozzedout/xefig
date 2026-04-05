@@ -7,11 +7,12 @@ const TODAY_PAYLOAD = {
     slider: { imageUrl: '/src/assets/hero.png' },
     swap: { imageUrl: '/src/assets/hero.png' },
     polygram: { imageUrl: '/src/assets/hero.png' },
+    diamond: { imageUrl: '/src/assets/hero.png' },
   },
 }
 
 async function openGame(page, mode) {
-  await page.route('**/api/puzzles/today', async (route) => {
+  await page.route('**/api/puzzles/today**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -20,7 +21,14 @@ async function openGame(page, mode) {
   })
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
-  await page.locator(`.mode-card:has(.mode-card-title:text-matches("${mode}", "i"))`).click()
+  const slice = page.locator(`.slice[data-mode="${mode.toLowerCase()}"]`)
+  await slice.waitFor()
+
+  // First click expands the slice, second click launches the game
+  if (!(await slice.evaluate((el) => el.classList.contains('active')))) {
+    await slice.click()
+  }
+  await slice.click()
 }
 
 test('slider tile backgrounds use cover sizing to match the preview image aspect ratio', async ({
