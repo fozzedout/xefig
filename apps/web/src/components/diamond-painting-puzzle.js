@@ -1,4 +1,4 @@
-const TARGET_CELLS = 5000
+const TARGET_CELLS = 10000
 const NUM_COLORS = 16
 const MIN_COLS = 20
 const MIN_ROWS = 20
@@ -34,6 +34,7 @@ export class DiamondPaintingPuzzle {
     this.pieces = []
 
     // Zoom / pan state
+    this._showDetail = false
     this.zoom = 1
     this.panX = 0
     this.panY = 0
@@ -172,6 +173,11 @@ export class DiamondPaintingPuzzle {
     if (this.boardContent) {
       this.boardContent.style.transform = `translate(${this.panX}px,${this.panY}px) scale(${this.zoom})`
     }
+    const showDetail = this.zoom > 1
+    if (showDetail !== this._showDetail) {
+      this._showDetail = showDetail
+      if (this.grid) this.drawGrid()
+    }
   }
 
   clampPan() {
@@ -197,16 +203,7 @@ export class DiamondPaintingPuzzle {
     const bar = document.createElement('div')
     bar.className = 'diamond-palette-bar'
 
-    const eraser = document.createElement('button')
-    eraser.type = 'button'
-    eraser.className = 'diamond-swatch diamond-swatch-eraser'
-    if (this.selectedColor === -1) eraser.classList.add('selected')
-    eraser.setAttribute('aria-label', 'Eraser')
-    eraser.textContent = '\u2715'
-    eraser.addEventListener('click', () => this.selectColor(-1))
-    bar.append(eraser)
-
-    this.swatches = [eraser]
+    this.swatches = []
 
     for (let index = 0; index < this.palette.length; index++) {
       const color = this.palette[index]
@@ -232,7 +229,7 @@ export class DiamondPaintingPuzzle {
   selectColor(index) {
     this.selectedColor = index
     for (let i = 0; i < this.swatches.length; i++) {
-      this.swatches[i].classList.toggle('selected', i - 1 === index)
+      this.swatches[i].classList.toggle('selected', i === index)
     }
   }
 
@@ -368,6 +365,29 @@ export class DiamondPaintingPuzzle {
 
     const targetGridColor = this.grid[index]
     const currentFill = this.fills[index]
+
+    // Wrong color — flash temporarily and play buzzer
+    if (this.selectedColor !== targetGridColor) {
+      if (this._wrongFlash) return
+      this._wrongFlash = true
+      const allIdx = this.collectFloodIndices(col, row, targetGridColor, currentFill)
+      for (const idx of allIdx) {
+        this.fills[idx] = this.selectedColor
+        this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
+      }
+      this.redrawGridLines()
+      playBuzzer()
+      setTimeout(() => {
+        for (const idx of allIdx) {
+          this.fills[idx] = currentFill
+          this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
+        }
+        this.redrawGridLines()
+        this._wrongFlash = false
+      }, 1000)
+      return
+    }
+
     const waves = this.collectFloodWaves(col, row, targetGridColor, currentFill)
 
     if (waves.length === 0) return
@@ -384,6 +404,28 @@ export class DiamondPaintingPuzzle {
     }
 
     this.animateFill(waves, this.selectedColor)
+  }
+
+  collectFloodIndices(startCol, startRow, targetGridColor, currentFill) {
+    const result = []
+    const visited = new Uint8Array(this.totalCells)
+    const stack = [[startCol, startRow]]
+
+    while (stack.length > 0) {
+      const [c, r] = stack.pop()
+      if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) continue
+      const idx = r * this.cols + c
+      if (visited[idx]) continue
+      visited[idx] = 1
+      if (this.grid[idx] !== targetGridColor || this.fills[idx] !== currentFill) continue
+      result.push(idx)
+      stack.push(
+        [c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1],
+        [c - 1, r - 1], [c + 1, r - 1], [c - 1, r + 1], [c + 1, r + 1],
+      )
+    }
+
+    return result
   }
 
   collectFloodWaves(startCol, startRow, targetGridColor, currentFill) {
@@ -404,7 +446,10 @@ export class DiamondPaintingPuzzle {
         if (this.grid[idx] !== targetGridColor || this.fills[idx] !== currentFill) continue
 
         wave.push(idx)
-        nextFrontier.push([c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1])
+        nextFrontier.push(
+          [c - 1, r], [c + 1, r], [c, r - 1], [c, r + 1],
+          [c - 1, r - 1], [c + 1, r - 1], [c - 1, r + 1], [c + 1, r + 1],
+        )
       }
 
       if (wave.length > 0) waves.push(wave)
@@ -480,6 +525,7 @@ export class DiamondPaintingPuzzle {
   }
 
   redrawGridLines() {
+    if (!this._showDetail) return
     const ctx = this.ctx
     const cs = CELL_PX
     const fullW = this.cols * cs
@@ -508,16 +554,22 @@ export class DiamondPaintingPuzzle {
     const fill = this.fills[index]
 
     if (fill === -1) {
-      ctx.fillStyle = 'rgba(245,243,238,1)'
-      ctx.fillRect(x, y, cs, cs)
-
       const color = this.palette[correctColor]
-      const label = String(correctColor + 1)
-      ctx.font = `600 10px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillStyle = rgbString(color)
-      ctx.fillText(label, x + cs / 2, y + cs / 2)
+      if (this._showDetail) {
+        ctx.fillStyle = 'rgba(245,243,238,1)'
+        ctx.fillRect(x, y, cs, cs)
+        const label = String(correctColor + 1)
+        ctx.font = `600 10px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = rgbString(color)
+        ctx.fillText(label, x + cs / 2, y + cs / 2)
+      } else {
+        ctx.fillStyle = rgbString(color)
+        ctx.globalAlpha = 0.3
+        ctx.fillRect(x, y, cs, cs)
+        ctx.globalAlpha = 1
+      }
     } else if (fill === correctColor) {
       ctx.fillStyle = rgbString(this.palette[fill])
       ctx.fillRect(x, y, cs, cs)
@@ -665,6 +717,27 @@ export class DiamondPaintingPuzzle {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
+}
+
+function playBuzzer() {
+  const ac = new (window.AudioContext || window.webkitAudioContext)()
+  const E2 = 82.41
+  const C2 = 65.41
+  const duration = 0.25
+  const gap = 0.05
+
+  for (const [freq, start] of [[E2, 0], [C2, duration + gap]]) {
+    const osc = ac.createOscillator()
+    const gain = ac.createGain()
+    osc.type = 'square'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0.15, ac.currentTime + start)
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + start + duration)
+    osc.connect(gain)
+    gain.connect(ac.destination)
+    osc.start(ac.currentTime + start)
+    osc.stop(ac.currentTime + start + duration)
+  }
 }
 
 function loadImage(url) {
