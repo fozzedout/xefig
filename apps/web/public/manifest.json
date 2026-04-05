@@ -4,8 +4,8 @@
   "description": "A daily puzzle game with jigsaw, slider, tile swap, and more.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1622",
-  "theme_color": "#863bff",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
   "icons": [
     {
       "src": "/favicon.svg",

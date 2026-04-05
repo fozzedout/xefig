@@ -1664,29 +1664,18 @@ const NAV_HTML = `
       </svg>
       <span>Archive</span>
     </button>
-  </div>
-</nav>
-<nav class="bottom-nav" id="bottomNav">
-  <div class="bottom-nav-tabs" id="bottomNavTabs">
-    <button class="bottom-nav-tab" data-page="settings">
+    <div class="nav-spacer"></div>
+    <button class="nav-tab nav-gear" data-page="settings" aria-label="Settings">
       <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="8" cy="8" r="2.5"/>
         <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4"/>
       </svg>
-      <span>Settings</span>
-    </button>
-    <button class="bottom-nav-tab" data-page="about">
-      <svg class="tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="8" cy="8" r="6.5"/><path d="M8 7v5M8 4.5v.5"/>
-      </svg>
-      <span>About</span>
     </button>
   </div>
 </nav>
 <div class="app-page visible" id="page-play"></div>
 <div class="app-page" id="page-archive"></div>
 <div class="app-page" id="page-settings"></div>
-<div class="app-page" id="page-about"></div>
 <div class="app-page" id="page-game"></div>
 `
 
@@ -1704,9 +1693,7 @@ function initAppShell() {
   app.innerHTML = NAV_HTML
 
   const topNav = document.querySelector('#topNav')
-  const bottomNav = document.querySelector('#bottomNav')
   const topTabs = [...document.querySelectorAll('#navTabs .nav-tab')]
-  const bottomTabs = [...document.querySelectorAll('#bottomNavTabs .bottom-nav-tab')]
 
   function switchPage(pageName, { updateHash = true } = {}) {
     if (pageName === currentPage) return
@@ -1716,17 +1703,13 @@ function initAppShell() {
     if (puzzle) destroyPuzzle()
     document.querySelector('#page-game').innerHTML = ''
 
-    const isBottomPage = pageName === 'settings' || pageName === 'about'
-
     topTabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
-    bottomTabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
     document.querySelectorAll('.app-page').forEach((p) => {
       p.classList.toggle('visible', p.id === `page-${pageName}`)
     })
 
     topNav.classList.toggle('solid', pageName !== 'play')
     topNav.classList.remove('hidden')
-    bottomNav.classList.toggle('hidden', pageName === 'game')
 
     if (pageName === 'play') {
       renderLauncher()
@@ -1737,16 +1720,12 @@ function initAppShell() {
     } else if (pageName === 'settings') {
       renderSettingsPage()
       if (updateHash) setHash('#settings')
-    } else if (pageName === 'about') {
-      renderAboutPage()
-      if (updateHash) setHash('#about')
     }
   }
 
   window.switchToPage = switchPage
 
   topTabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
-  bottomTabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
 
   // Route based on current hash
   const initialRoute = parseHash()
@@ -1758,8 +1737,6 @@ function initAppShell() {
     switchPage('archive', { updateHash: false })
   } else if (initialRoute.page === 'settings') {
     switchPage('settings', { updateHash: false })
-  } else if (initialRoute.page === 'about') {
-    switchPage('about', { updateHash: false })
   } else {
     renderLauncher()
   }
@@ -1772,7 +1749,7 @@ function initAppShell() {
     const route = parseHash()
     if (route.page === 'game' && route.mode && route.date) {
       resumeGameFromHash(route.mode, route.date)
-    } else if (['play', 'archive', 'settings', 'about'].includes(route.page)) {
+    } else if (['play', 'archive', 'settings'].includes(route.page)) {
       switchPage(route.page, { updateHash: false })
     } else {
       switchPage('play', { updateHash: false })
@@ -1844,7 +1821,6 @@ function resumeGameFromHash(mode, date) {
 function showGamePage() {
   currentPage = 'game'
   document.querySelector('#topNav').classList.add('hidden')
-  document.querySelector('#bottomNav').classList.add('hidden')
   document.querySelectorAll('.app-page').forEach((p) => {
     p.classList.toggle('visible', p.id === 'page-game')
   })
@@ -1867,6 +1843,8 @@ function renderSettingsPage() {
   const container = document.querySelector('#page-settings')
   const colors = getBoardColors()
   const activeIndex = getGlobalBoardColorIndex()
+
+  const formTs = Date.now()
 
   container.innerHTML = `
     <div class="settings-page">
@@ -1895,6 +1873,38 @@ function renderSettingsPage() {
           <div class="settings-group-title">Sync Progress</div>
           <div id="settings-sync-content"></div>
         </div>
+        <div class="settings-group">
+          <div class="settings-group-title">AI-Generated Content</div>
+          <p class="about-text">
+            All puzzle images on Xefig are generated using artificial intelligence
+            (Google Gemini). No real photographs are used. In accordance with EU
+            AI Act transparency requirements, we disclose that this content is
+            AI-generated and should not be mistaken for authentic photographs.
+          </p>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-title">Contact</div>
+          <form id="contact-form" class="contact-form" autocomplete="off">
+            <div class="contact-field">
+              <label class="contact-label" for="contact-name">Name</label>
+              <input class="contact-input" type="text" id="contact-name" name="name" required minlength="2" maxlength="100" placeholder="Your name" />
+            </div>
+            <div class="contact-field">
+              <label class="contact-label" for="contact-email">Email</label>
+              <input class="contact-input" type="email" id="contact-email" name="email" required placeholder="you@example.com" />
+            </div>
+            <div class="contact-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;tab-index:-1">
+              <label for="contact-website">Website</label>
+              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" />
+            </div>
+            <div class="contact-field">
+              <label class="contact-label" for="contact-message">Message</label>
+              <textarea class="contact-input contact-textarea" id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Your message..."></textarea>
+            </div>
+            <div id="contact-status" class="contact-status"></div>
+            <button type="submit" class="contact-submit" id="contact-submit">Send Message</button>
+          </form>
+        </div>
       </div>
     </div>
   `
@@ -1912,6 +1922,52 @@ function renderSettingsPage() {
   })
 
   renderSyncSettings()
+
+  // Contact form handler
+  const form = container.querySelector('#contact-form')
+  const statusEl = container.querySelector('#contact-status')
+  const submitBtn = container.querySelector('#contact-submit')
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    statusEl.textContent = ''
+    statusEl.className = 'contact-status'
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Sending...'
+
+    const name = form.querySelector('#contact-name').value.trim()
+    const email = form.querySelector('#contact-email').value.trim()
+    const message = form.querySelector('#contact-message').value.trim()
+    const website = form.querySelector('#contact-website').value
+
+    try {
+      const response = await fetch(apiUrl('/api/contact'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message, website, _ts: formTs }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        statusEl.textContent = payload.error || 'Failed to send. Please try again.'
+        statusEl.className = 'contact-status contact-status-error'
+        submitBtn.disabled = false
+        submitBtn.textContent = 'Send Message'
+        return
+      }
+
+      statusEl.textContent = payload.message || 'Message sent!'
+      statusEl.className = 'contact-status contact-status-ok'
+      form.reset()
+      submitBtn.textContent = 'Sent'
+    } catch {
+      statusEl.textContent = 'Network error. Please try again.'
+      statusEl.className = 'contact-status contact-status-error'
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Send Message'
+    }
+  })
+
   settingsRendered = true
 }
 
@@ -2031,99 +2087,6 @@ function renderSyncSettings() {
       input.value = input.value.toUpperCase()
     })
   }
-}
-
-function renderAboutPage() {
-  const container = document.querySelector('#page-about')
-  const formTs = Date.now()
-
-  container.innerHTML = `
-    <div class="settings-page">
-      <div class="settings-header">
-        <h2>About Xefig</h2>
-        <p>A daily puzzle game with four modes. New puzzles every day.</p>
-      </div>
-      <div class="settings-sections">
-        <div class="settings-group">
-          <div class="settings-group-title">AI-Generated Content</div>
-          <p class="about-text">
-            All puzzle images on Xefig are generated using artificial intelligence
-            (Google Gemini). No real photographs are used. In accordance with EU
-            AI Act transparency requirements, we disclose that this content is
-            AI-generated and should not be mistaken for authentic photographs.
-          </p>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Contact</div>
-          <form id="contact-form" class="contact-form" autocomplete="off">
-            <div class="contact-field">
-              <label class="contact-label" for="contact-name">Name</label>
-              <input class="contact-input" type="text" id="contact-name" name="name" required minlength="2" maxlength="100" placeholder="Your name" />
-            </div>
-            <div class="contact-field">
-              <label class="contact-label" for="contact-email">Email</label>
-              <input class="contact-input" type="email" id="contact-email" name="email" required placeholder="you@example.com" />
-            </div>
-            <div class="contact-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;tab-index:-1">
-              <label for="contact-website">Website</label>
-              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" />
-            </div>
-            <div class="contact-field">
-              <label class="contact-label" for="contact-message">Message</label>
-              <textarea class="contact-input contact-textarea" id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Your message..."></textarea>
-            </div>
-            <div id="contact-status" class="contact-status"></div>
-            <button type="submit" class="contact-submit" id="contact-submit">Send Message</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  `
-
-  const form = container.querySelector('#contact-form')
-  const statusEl = container.querySelector('#contact-status')
-  const submitBtn = container.querySelector('#contact-submit')
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault()
-    statusEl.textContent = ''
-    statusEl.className = 'contact-status'
-    submitBtn.disabled = true
-    submitBtn.textContent = 'Sending...'
-
-    const name = form.querySelector('#contact-name').value.trim()
-    const email = form.querySelector('#contact-email').value.trim()
-    const message = form.querySelector('#contact-message').value.trim()
-    const website = form.querySelector('#contact-website').value
-
-    try {
-      const response = await fetch(apiUrl('/api/contact'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, message, website, _ts: formTs }),
-      })
-      const payload = await response.json()
-
-      if (!response.ok) {
-        statusEl.textContent = payload.error || 'Failed to send. Please try again.'
-        statusEl.className = 'contact-status contact-status-error'
-        submitBtn.disabled = false
-        submitBtn.textContent = 'Send Message'
-        return
-      }
-
-      statusEl.textContent = payload.message || 'Message sent!'
-      statusEl.className = 'contact-status contact-status-ok'
-      form.reset()
-      submitBtn.textContent = 'Sent'
-    } catch {
-      statusEl.textContent = 'Network error. Please try again.'
-      statusEl.className = 'contact-status contact-status-error'
-      submitBtn.disabled = false
-      submitBtn.textContent = 'Send Message'
-    }
-  })
 }
 
 // ─── Sync initialization (must complete before rendering so pulled state is visible) ───
