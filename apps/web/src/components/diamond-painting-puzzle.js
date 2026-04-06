@@ -555,21 +555,14 @@ export class DiamondPaintingPuzzle {
 
     if (fill === -1) {
       const color = this.palette[correctColor]
-      if (this._showDetail) {
-        ctx.fillStyle = 'rgba(245,243,238,1)'
-        ctx.fillRect(x, y, cs, cs)
-        const label = String(correctColor + 1)
-        ctx.font = `600 10px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillStyle = rgbString(color)
-        ctx.fillText(label, x + cs / 2, y + cs / 2)
-      } else {
-        ctx.fillStyle = rgbString(color)
-        ctx.globalAlpha = 0.3
-        ctx.fillRect(x, y, cs, cs)
-        ctx.globalAlpha = 1
-      }
+      ctx.fillStyle = 'rgba(245,243,238,1)'
+      ctx.fillRect(x, y, cs, cs)
+      const label = String(correctColor + 1)
+      ctx.font = `600 10px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = rgbString(color)
+      ctx.fillText(label, x + cs / 2, y + cs / 2)
     } else if (fill === correctColor) {
       ctx.fillStyle = rgbString(this.palette[fill])
       ctx.fillRect(x, y, cs, cs)

@@ -111,9 +111,9 @@ const DIFFICULTY_LABELS = {
 const MODE_LABELS = {
   [GAME_MODE_JIGSAW]: 'Jigsaw',
   [GAME_MODE_SLIDING]: 'Sliding Tile',
-  [GAME_MODE_SWAP]: 'Picture Swap',
+  [GAME_MODE_SWAP]: 'Tile Swap',
   [GAME_MODE_POLYGRAM]: 'Polygram',
-  [GAME_MODE_DIAMOND]: 'Diamond Painting',
+  [GAME_MODE_DIAMOND]: 'Paint by Numbers',
 }
 const GAME_MODE_TO_PUZZLE_CATEGORY = {
   [GAME_MODE_JIGSAW]: 'jigsaw',
@@ -675,9 +675,9 @@ function renderLauncher() {
     return modes
       .map((mode, index) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
-        const title = MODE_LABELS[mode]
         const isPick = mode === pickMode
         const isActive = isPick
+        const title = (mode === GAME_MODE_DIAMOND && !isActive) ? 'Paint' : MODE_LABELS[mode]
         const isCompleted = completedModes.has(mode)
         const hasSave = hasActiveRun(puzzleDate, mode)
         const entry = isCompleted ? getCompletionEntry(puzzleDate, mode) : null
@@ -1244,7 +1244,7 @@ function renderGame({ resumeRun = null } = {}) {
   const dateLabel = state.puzzle?.date
     ? new Date(Date.parse(`${state.puzzle.date}T00:00:00Z`)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
     : ''
-  const compactModeLabel = gameMode === GAME_MODE_DIAMOND ? 'Diamond' : MODE_LABELS[gameMode]
+  const compactModeLabel = gameMode === GAME_MODE_DIAMOND ? 'Paint' : MODE_LABELS[gameMode]
   const titleLabel = `${compactModeLabel}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
   const showPieceCount = gameMode !== GAME_MODE_DIAMOND
 
