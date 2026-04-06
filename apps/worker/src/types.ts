@@ -1,6 +1,5 @@
 export type Bindings = {
   assets: R2Bucket
-  metadata: KVNamespace
   DB: D1Database
   STATIC_ASSETS: Fetcher
   SEND_EMAIL: { send: (message: unknown) => Promise<void> }

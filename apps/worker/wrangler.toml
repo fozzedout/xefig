@@ -17,10 +17,6 @@ not_found_handling = "404-page"
 binding = "assets"
 bucket_name = "assets"
 
-[[kv_namespaces]]
-binding = "metadata"
-id = "2e5bd934d9304ca69fa36a71e5ea1a25"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "daily_puzzles"

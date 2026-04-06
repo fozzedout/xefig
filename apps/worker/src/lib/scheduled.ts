@@ -2,21 +2,8 @@ import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type 
 import { generatePromptPacks } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
 import { processPngImage } from './image'
-import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, toPuzzleKey } from './puzzles'
-
-const BATCH_JOB_KEY = 'batch-job:pending'
-
-type PendingBatchJob = {
-  batchName: string
-  targetDate: string
-  categories: Record<PuzzleCategory, { theme: string; keywords: string[] }>
-  submittedAt: string
-  // Tracks processing progress: 'fetched' means raw PNGs saved to R2 temp
-  phase: 'submitted' | 'fetched'
-  processedCategories: PuzzleCategory[]
-  // When set, only these categories were requested (single-category batch)
-  requestedCategories?: PuzzleCategory[]
-}
+import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
+import { ensurePuzzleTables, getBatchJob, saveBatchJob, deleteBatchJob, type PendingBatchJob } from './puzzle-db'
 
 export type BatchSubmitResult = {
   submitted: boolean
@@ -57,15 +44,14 @@ export async function handleBatchSubmit(
     return { submitted: false, message: 'GOOGLE_AI_API_KEY not configured.' }
   }
 
-  const existingJob = await env.metadata.get(BATCH_JOB_KEY)
+  await ensurePuzzleTables(env.DB)
+  const existingJob = await getBatchJob(env.DB)
   if (existingJob) {
-    let pendingJob: PendingBatchJob | null = null
-    try { pendingJob = JSON.parse(existingJob) as PendingBatchJob } catch {}
     return {
       submitted: false,
-      message: `Batch job already pending for ${pendingJob?.targetDate ?? 'unknown date'}.`,
-      batchName: pendingJob?.batchName,
-      targetDate: pendingJob?.targetDate,
+      message: `Batch job already pending for ${existingJob.targetDate ?? 'unknown date'}.`,
+      batchName: existingJob.batchName,
+      targetDate: existingJob.targetDate,
     }
   }
 
@@ -77,7 +63,7 @@ export async function handleBatchSubmit(
     targetDate = opts.date
 
     // Check if images already exist for this date
-    const existingPuzzle = await getPuzzleByDate(env.metadata, targetDate)
+    const existingPuzzle = await getPuzzleByDate(env.DB, targetDate)
     if (existingPuzzle && !opts.force) {
       return {
         submitted: false,
@@ -88,7 +74,7 @@ export async function handleBatchSubmit(
     }
   } else {
     const today = getUtcDateKey()
-    targetDate = await findNextUnscheduledDate(env.metadata, today, 14)
+    targetDate = await findNextUnscheduledDate(env.DB, today, 14)
     if (!targetDate) {
       return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
     }
@@ -99,7 +85,7 @@ export async function handleBatchSubmit(
   if (opts.prompts && CATEGORIES.every((c) => opts.prompts![c]?.prompt)) {
     categoryPrompts = opts.prompts as typeof categoryPrompts
   } else {
-    const [pack] = await generatePromptPacks(env.metadata, 1)
+    const [pack] = await generatePromptPacks(env.DB, 1)
     if (!pack) {
       return { submitted: false, message: 'Failed to generate prompt pack.' }
     }
@@ -131,7 +117,7 @@ export async function handleBatchSubmit(
     themes[category] = categoryPrompts[category].theme
   }
 
-  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(pendingJob))
+  await saveBatchJob(env.DB, pendingJob)
 
   return {
     submitted: true,
@@ -161,15 +147,14 @@ export async function handleSingleBatchSubmit(
     return { submitted: false, message: 'GOOGLE_AI_API_KEY not configured.' }
   }
 
-  const existingJob = await env.metadata.get(BATCH_JOB_KEY)
+  await ensurePuzzleTables(env.DB)
+  const existingJob = await getBatchJob(env.DB)
   if (existingJob) {
-    let pendingJob: PendingBatchJob | null = null
-    try { pendingJob = JSON.parse(existingJob) as PendingBatchJob } catch {}
     return {
       submitted: false,
-      message: `Batch job already pending for ${pendingJob?.targetDate ?? 'unknown date'}. Wait for it to complete or clear it first.`,
-      batchName: pendingJob?.batchName,
-      targetDate: pendingJob?.targetDate,
+      message: `Batch job already pending for ${existingJob.targetDate ?? 'unknown date'}. Wait for it to complete or clear it first.`,
+      batchName: existingJob.batchName,
+      targetDate: existingJob.targetDate,
     }
   }
 
@@ -181,7 +166,7 @@ export async function handleSingleBatchSubmit(
     targetDate = opts.date
   } else {
     const today = getUtcDateKey()
-    targetDate = await findNextUnscheduledDate(env.metadata, today, 14)
+    targetDate = await findNextUnscheduledDate(env.DB, today, 14)
     if (!targetDate) {
       return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
     }
@@ -219,7 +204,7 @@ export async function handleSingleBatchSubmit(
     }
   }
 
-  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(pendingJob))
+  await saveBatchJob(env.DB, pendingJob)
 
   return {
     submitted: true,
@@ -239,20 +224,10 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
     return { found: false, message: 'GOOGLE_AI_API_KEY not configured.' }
   }
 
-  const raw = await env.metadata.get(BATCH_JOB_KEY)
-  if (!raw) {
+  await ensurePuzzleTables(env.DB)
+  const job = await getBatchJob(env.DB)
+  if (!job) {
     return { found: false, message: 'No pending batch job.' }
-  }
-
-  let job: PendingBatchJob
-  try {
-    job = JSON.parse(raw) as PendingBatchJob
-    // Migrate older jobs without phase
-    if (!job.phase) job.phase = 'submitted'
-    if (!job.processedCategories) job.processedCategories = []
-  } catch {
-    await env.metadata.delete(BATCH_JOB_KEY)
-    return { found: false, message: 'Invalid pending batch job data, cleared.' }
   }
 
   const { batchName, targetDate, submittedAt } = job
@@ -281,7 +256,7 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   }
 
   if (result.state === 'failed') {
-    await env.metadata.delete(BATCH_JOB_KEY)
+    await deleteBatchJob(env.DB)
     return {
       found: true,
       message: `Batch job for ${targetDate} failed: ${result.error}`,
@@ -333,7 +308,7 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   // Transition to 'fetched' phase
   job.phase = 'fetched'
   job.processedCategories = []
-  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(job))
+  await saveBatchJob(env.DB, job)
 
   return {
     found: true,
@@ -395,7 +370,7 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
 
   // Update job state
   job.processedCategories = [...job.processedCategories, category]
-  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(job))
+  await saveBatchJob(env.DB, job)
 
   const newRemaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
 
@@ -425,10 +400,7 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
   // For single-category jobs, merge into existing puzzle record if one exists
   let existingRecord: PuzzleRecord | null = null
   if (jobCategories.length < CATEGORIES.length) {
-    const existingRaw = await env.metadata.get(toPuzzleKey(targetDate))
-    if (existingRaw) {
-      try { existingRecord = JSON.parse(existingRaw) as PuzzleRecord } catch {}
-    }
+    existingRecord = await getPuzzleByDate(env.DB, targetDate)
   }
 
   const now = new Date().toISOString()
@@ -458,8 +430,8 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
     updatedAt: now,
   }
 
-  await env.metadata.put(toPuzzleKey(targetDate), JSON.stringify(record))
-  await env.metadata.delete(BATCH_JOB_KEY)
+  await savePuzzleRecord(env.DB, record)
+  await deleteBatchJob(env.DB)
 
   const catLabel = jobCategories.length === 1 ? jobCategories[0] : `${jobCategories.length} categories`
 
@@ -492,17 +464,9 @@ export type BatchJobStatus = {
 }
 
 export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> {
-  const raw = await env.metadata.get(BATCH_JOB_KEY)
-  if (!raw) {
-    return { active: false }
-  }
-
-  let job: PendingBatchJob
-  try {
-    job = JSON.parse(raw) as PendingBatchJob
-    if (!job.phase) job.phase = 'submitted'
-    if (!job.processedCategories) job.processedCategories = []
-  } catch {
+  await ensurePuzzleTables(env.DB)
+  const job = await getBatchJob(env.DB)
+  if (!job) {
     return { active: false }
   }
 
@@ -548,18 +512,10 @@ export async function completeBatchCategory(
   imageData: ArrayBuffer,
   thumbnailData: ArrayBuffer,
 ): Promise<CompleteCategoryResult> {
-  const raw = await env.metadata.get(BATCH_JOB_KEY)
-  if (!raw) {
+  await ensurePuzzleTables(env.DB)
+  const job = await getBatchJob(env.DB)
+  if (!job) {
     return { ok: false, message: 'No pending batch job.', allDone: false }
-  }
-
-  let job: PendingBatchJob
-  try {
-    job = JSON.parse(raw) as PendingBatchJob
-    if (!job.phase) job.phase = 'submitted'
-    if (!job.processedCategories) job.processedCategories = []
-  } catch {
-    return { ok: false, message: 'Invalid batch job data.', allDone: false }
   }
 
   if (job.phase !== 'fetched') {
@@ -594,7 +550,7 @@ export async function completeBatchCategory(
     return { ok: true, message: result.message, allDone: true, savedDate: result.savedDate }
   }
 
-  await env.metadata.put(BATCH_JOB_KEY, JSON.stringify(job))
+  await saveBatchJob(env.DB, job)
   return {
     ok: true,
     message: `${category} processed (${job.processedCategories.length}/${CATEGORIES.length}). Remaining: ${remaining.join(', ')}.`,

@@ -1,12 +1,8 @@
 import { CATEGORIES, type PromptHistoryItem, type PromptPack, type PuzzleCategory } from '../types'
+import { ensurePuzzleTables, getPromptHistoryD1, appendPromptHistory } from './puzzle-db'
 
-const PROMPT_HISTORY_KEY = 'prompt-history:v1'
-const PROMPT_HISTORY_LIMIT = 260
-
-// One descriptor is picked per role per prompt, so DESCRIPTORS_PER_PACK === ROLE count.
 const ROLES = ['concept', 'location', 'state', 'lighting', 'mood', 'style', 'palette', 'camera'] as const
 type DescriptorRole = (typeof ROLES)[number]
-const DESCRIPTORS_PER_PACK = ROLES.length
 
 // ---------------------------------------------------------------------------
 // Descriptor pool — organised by role.
@@ -298,63 +294,45 @@ type DescriptorSet = Record<DescriptorRole, string>
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function generatePromptPacks(kv: KVNamespace, count: number): Promise<PromptPack[]> {
+export async function generatePromptPacks(db: D1Database, count: number): Promise<PromptPack[]> {
   validatePoolSizes()
-  const history = await getPromptHistory(kv)
+  await ensurePuzzleTables(db)
+  const history = await getPromptHistoryD1(db)
   const packs: PromptPack[] = []
 
+  const startLen = history.length
   for (let index = 0; index < count; index += 1) {
     const pack = buildPromptPack(history)
     packs.push(pack)
   }
 
-  await kv.put(PROMPT_HISTORY_KEY, JSON.stringify(history.slice(-PROMPT_HISTORY_LIMIT)))
+  // Persist all new history items appended by buildPromptPack
+  for (let i = startLen; i < history.length; i++) {
+    await appendPromptHistory(db, history[i])
+  }
   return packs
 }
 
 export async function generateSingleCategoryPrompt(
-  kv: KVNamespace,
+  db: D1Database,
   category: PuzzleCategory,
 ): Promise<{ prompt: string; theme: string; keywords: string[] }> {
   validatePoolSizes()
-  const history = await getPromptHistory(kv)
-  const recent = history.slice(-PROMPT_HISTORY_LIMIT)
+  await ensurePuzzleTables(db)
+  const history = await getPromptHistoryD1(db)
 
-  const set = pickDescriptorSet(recent, new Set(), category)
+  const set = pickDescriptorSet(history, new Set(), category)
   const details = buildCategoryPromptDetails(category, set)
 
-  history.push({
+  const item: PromptHistoryItem = {
     descriptors: [...new Set(Object.values(set))],
     createdAt: new Date().toISOString(),
-  })
-  await kv.put(PROMPT_HISTORY_KEY, JSON.stringify(history.slice(-PROMPT_HISTORY_LIMIT)))
+  }
+  await appendPromptHistory(db, item)
 
   return details
 }
 
-// ---------------------------------------------------------------------------
-// History
-// ---------------------------------------------------------------------------
-
-async function getPromptHistory(kv: KVNamespace): Promise<PromptHistoryItem[]> {
-  const raw = await kv.get(PROMPT_HISTORY_KEY)
-  if (!raw) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed
-      .map((entry) => normalizePromptHistoryItem(entry))
-      .filter((entry): entry is PromptHistoryItem => entry !== null)
-  } catch {
-    return []
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Pack builder
@@ -507,62 +485,6 @@ function pickOneDescriptor(
   const pick = window[Math.floor(Math.random() * window.length)]
 
   return pick?.descriptor ?? workingPool[0]!
-}
-
-// ---------------------------------------------------------------------------
-// Normalisation (supports both new role-keyed and legacy flat descriptor formats)
-// ---------------------------------------------------------------------------
-
-function normalizePromptHistoryItem(raw: unknown): PromptHistoryItem | null {
-  if (!raw || typeof raw !== 'object') {
-    return null
-  }
-
-  const candidate = raw as {
-    descriptors?: unknown
-    createdAt?: unknown
-    subject?: unknown
-    setting?: unknown
-    mood?: unknown
-    style?: unknown
-    palette?: unknown
-  }
-
-  if (Array.isArray(candidate.descriptors)) {
-    const nextDescriptors = candidate.descriptors
-      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-      .map((value) => value.trim())
-      .slice(0, DESCRIPTORS_PER_PACK * CATEGORIES.length)
-
-    if (nextDescriptors.length > 0) {
-      return {
-        descriptors: [...new Set(nextDescriptors)],
-        createdAt:
-          typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
-      }
-    }
-  }
-
-  // Legacy format: individual named fields
-  const legacyDescriptors = [
-    candidate.subject,
-    candidate.setting,
-    candidate.mood,
-    candidate.style,
-    candidate.palette,
-  ]
-    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    .map((value) => value.trim())
-
-  if (legacyDescriptors.length === 0) {
-    return null
-  }
-
-  return {
-    descriptors: [...new Set(legacyDescriptors)],
-    createdAt:
-      typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
-  }
 }
 
 // ---------------------------------------------------------------------------

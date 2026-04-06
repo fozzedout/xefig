@@ -21,8 +21,8 @@ import {
   getUtcDateKey,
   isValidDateKey,
   parseTagList,
+  savePuzzleRecord,
   toCdnUrl,
-  toPuzzleKey,
 } from './lib/puzzles'
 import {
   listOpenRouterFreeModels,
@@ -87,7 +87,7 @@ export function createApp() {
 
   app.get('/api/puzzles/today', async (c) => {
     const date = getUtcDateKey()
-    const puzzle = await getPuzzleByDate(c.env.metadata, date)
+    const puzzle = await getPuzzleByDate(c.env.DB, date)
     if (!puzzle) {
       return c.json(
         {
@@ -108,7 +108,7 @@ export function createApp() {
       return c.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, 400)
     }
 
-    const puzzle = await getPuzzleByDate(c.env.metadata, date)
+    const puzzle = await getPuzzleByDate(c.env.DB, date)
     if (!puzzle) {
       return c.json(
         {
@@ -143,7 +143,7 @@ export function createApp() {
     }
 
     const scanFrom = fromDate < today ? today : fromDate
-    const nextEmptyDate = await findNextUnscheduledDate(c.env.metadata, scanFrom, 3650)
+    const nextEmptyDate = await findNextUnscheduledDate(c.env.DB, scanFrom, 3650)
     if (!nextEmptyDate) {
       return c.json({ error: 'Unable to find an unscheduled date within the next 3650 days.' }, 404)
     }
@@ -282,7 +282,7 @@ export function createApp() {
         return c.json({ error: 'Cannot schedule puzzles for past dates.' }, 400)
       }
 
-      const existing = await getPuzzleByDate(c.env.metadata, date)
+      const existing = await getPuzzleByDate(c.env.DB, date)
       const difficulty = 'adaptive'
       const nextCategories = {} as Record<PuzzleCategory, PuzzleAsset>
 
@@ -347,7 +347,7 @@ export function createApp() {
         updatedAt: now,
       }
 
-      await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(record))
+      await savePuzzleRecord(c.env.DB, record)
       return c.json({
         ok: true,
         message: `Puzzle details for ${date} saved.`,
@@ -383,7 +383,7 @@ export function createApp() {
         return c.json({ error: 'Thumbnail file is required.' }, 400)
       }
 
-      const existing = await getPuzzleByDate(c.env.metadata, date)
+      const existing = await getPuzzleByDate(c.env.DB, date)
       if (!existing) {
         return c.json({ error: `No puzzle found for ${date}.` }, 404)
       }
@@ -402,7 +402,7 @@ export function createApp() {
       asset.thumbnailUrl = toCdnUrl(thumbKey) + `?v=${Date.now()}`
       existing.updatedAt = new Date().toISOString()
 
-      await c.env.metadata.put(toPuzzleKey(date), JSON.stringify(existing))
+      await savePuzzleRecord(c.env.DB, existing)
 
       return c.json({
         ok: true,
@@ -596,7 +596,7 @@ export function createApp() {
 
     const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
 
-    const prompts = await generatePromptPacks(c.env.metadata, 1)
+    const prompts = await generatePromptPacks(c.env.DB, 1)
     let rewrite = {
       attempted: false,
       applied: false,
@@ -654,7 +654,7 @@ export function createApp() {
     }
 
     try {
-      const details = await generateSingleCategoryPrompt(c.env.metadata, category)
+      const details = await generateSingleCategoryPrompt(c.env.DB, category)
       return c.json({
         ok: true,
         category,

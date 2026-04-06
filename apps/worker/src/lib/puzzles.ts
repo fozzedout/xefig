@@ -1,90 +1,13 @@
-import { CATEGORIES, type FormValue, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
+import { type FormValue, type PuzzleRecord } from '../types'
+import { ensurePuzzleTables, getPuzzleByDateD1, savePuzzleRecord, findNextUnscheduledDateD1 } from './puzzle-db'
 
-const PUZZLE_KEY_PREFIX = 'puzzle:'
+export { savePuzzleRecord }
 
-export function toPuzzleKey(date: string): string {
-  return `${PUZZLE_KEY_PREFIX}${date}`
+export async function getPuzzleByDate(db: D1Database, date: string): Promise<PuzzleRecord | null> {
+  await ensurePuzzleTables(db)
+  return getPuzzleByDateD1(db, date)
 }
 
-export async function getPuzzleByDate(kv: KVNamespace, date: string): Promise<PuzzleRecord | null> {
-  const raw = await kv.get(toPuzzleKey(date))
-  if (!raw) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    return toPuzzleRecord(parsed)
-  } catch {
-    return null
-  }
-}
-
-function toPuzzleRecord(value: unknown): PuzzleRecord | null {
-  if (!value || typeof value !== 'object') {
-    return null
-  }
-
-  // Define a structural interface for the incoming data to avoid "any".
-  // This supports both current PuzzleRecord and legacy formats during migration.
-  type PuzzleCandidate = {
-    date?: unknown
-    theme?: unknown
-    tags?: unknown
-    difficulty?: unknown
-    categories?: Record<string, Record<string, unknown>>
-    createdAt?: unknown
-    updatedAt?: unknown
-  }
-
-  const candidate = value as PuzzleCandidate
-  if (
-    typeof candidate.date !== 'string' ||
-    typeof candidate.difficulty !== 'string' ||
-    !candidate.categories ||
-    typeof candidate.createdAt !== 'string' ||
-    typeof candidate.updatedAt !== 'string'
-  ) {
-    return null
-  }
-
-  // Support legacy migration: global theme/tags used as fallback
-  const globalTheme = typeof candidate.theme === 'string' ? candidate.theme : ''
-  const globalTags = normalizeTags(candidate.tags)
-
-  const normalizedCategories = {} as Record<PuzzleCategory, PuzzleAsset>
-  for (const category of CATEGORIES) {
-    const asset = candidate.categories[category] as Record<string, unknown> | undefined
-    if (
-      !asset ||
-      typeof asset.imageKey !== 'string' ||
-      typeof asset.imageUrl !== 'string' ||
-      typeof asset.contentType !== 'string' ||
-      typeof asset.fileName !== 'string'
-    ) {
-      return null
-    }
-
-    normalizedCategories[category] = {
-      imageKey: asset.imageKey,
-      imageUrl: asset.imageUrl,
-      contentType: asset.contentType,
-      fileName: asset.fileName,
-      theme: typeof asset.theme === 'string' ? asset.theme : globalTheme,
-      tags: Array.isArray(asset.tags) ? normalizeTags(asset.tags) : globalTags,
-      thumbnailKey: typeof asset.thumbnailKey === 'string' ? asset.thumbnailKey : undefined,
-      thumbnailUrl: typeof asset.thumbnailUrl === 'string' ? asset.thumbnailUrl : undefined,
-    }
-  }
-
-  return {
-    date: candidate.date,
-    difficulty: candidate.difficulty,
-    categories: normalizedCategories,
-    createdAt: candidate.createdAt,
-    updatedAt: candidate.updatedAt,
-  }
-}
 
 export function getUtcDateKey(): string {
   return new Date().toISOString().slice(0, 10)
@@ -96,19 +19,12 @@ export function addDaysToDateKey(date: string, days: number): string {
 }
 
 export async function findNextUnscheduledDate(
-  kv: KVNamespace,
+  db: D1Database,
   fromDate: string,
   maxDaysToScan: number,
 ): Promise<string | null> {
-  let candidate = fromDate
-  for (let index = 0; index < maxDaysToScan; index += 1) {
-    const exists = await kv.get(toPuzzleKey(candidate))
-    if (!exists) {
-      return candidate
-    }
-    candidate = addDaysToDateKey(candidate, 1)
-  }
-  return null
+  await ensurePuzzleTables(db)
+  return findNextUnscheduledDateD1(db, fromDate, maxDaysToScan)
 }
 
 export function isValidDateKey(value: string): boolean {

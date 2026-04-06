@@ -22,6 +22,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
+  // Only handle http(s) requests from our origin
+  if (url.origin !== self.location.origin || !url.protocol.startsWith('http')) {
+    return
+  }
+
   // Let API/CDN requests go straight to network
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/cdn')) {
     return
