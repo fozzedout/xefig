@@ -30,6 +30,7 @@ import {
   rewriteSinglePromptWithOpenRouter,
 } from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
+import { ensurePuzzleTables, getScheduledDatesInRange } from './lib/puzzle-db'
 import { handleBatchSubmit, handleSingleBatchSubmit, handleBatchPoll, getBatchJobStatus, completeBatchCategory } from './lib/scheduled'
 import {
   CATEGORIES,
@@ -153,6 +154,29 @@ export function createApp() {
       from: scanFrom,
       nextEmptyDate,
     })
+  })
+
+  app.get('/api/admin/puzzles/overview', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const from = (c.req.query('from') || '').trim()
+    const days = Math.min(parseInt(c.req.query('days') || '30', 10) || 30, 365)
+
+    if (!from || !isValidDateKey(from)) {
+      return c.json({ error: 'Invalid from date. Use YYYY-MM-DD.' }, 400)
+    }
+
+    const toBase = Date.parse(`${from}T00:00:00.000Z`)
+    const to = new Date(toBase + (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    await ensurePuzzleTables(c.env.DB)
+    const scheduled = await getScheduledDatesInRange(c.env.DB, from, to)
+
+    return c.json({ ok: true, from, to, days, scheduled })
   })
 
   app.get('/api/admin/session', async (c) => {

@@ -1646,19 +1646,26 @@ overviewBtn.addEventListener('click', async () => {
   overviewOverlay.hidden = false
 
   const from = dateInput.value.trim() || tomorrow
+  const days = 30
   const rows = []
 
-  for (let i = 0; i < 30; i++) {
-    const date = addDays(from, i)
-    try {
-      const response = await fetch(apiUrl(`/api/puzzles/${encodeURIComponent(date)}`))
-      const payload = await readJsonResponse(response)
+  try {
+    const response = await fetch(apiUrl(`/api/admin/puzzles/overview?from=${encodeURIComponent(from)}&days=${days}`))
+    const payload = await readJsonResponse(response)
+    const scheduled = payload.scheduled || {}
+
+    for (let i = 0; i < days; i++) {
+      const date = addDays(from, i)
+      const filledCats = scheduled[date] || []
       const cats = {}
       for (const cat of CATEGORIES) {
-        cats[cat] = response.ok && !!payload.categories?.[cat]?.imageUrl
+        cats[cat] = filledCats.includes(cat)
       }
       rows.push({ date, cats })
-    } catch {
+    }
+  } catch {
+    for (let i = 0; i < days; i++) {
+      const date = addDays(from, i)
       const cats = {}
       for (const cat of CATEGORIES) cats[cat] = false
       rows.push({ date, cats })

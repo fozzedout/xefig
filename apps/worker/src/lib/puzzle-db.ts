@@ -78,33 +78,50 @@ export async function savePuzzleRecord(db: D1Database, record: PuzzleRecord): Pr
     .run()
 }
 
+export async function getScheduledDatesInRange(
+  db: D1Database,
+  from: string,
+  to: string,
+): Promise<Record<string, string[]>> {
+  const rows = await db
+    .prepare('SELECT date, categories FROM puzzles WHERE date >= ? AND date <= ? ORDER BY date ASC')
+    .bind(from, to)
+    .all<{ date: string; categories: string }>()
+
+  const result: Record<string, string[]> = {}
+  for (const row of rows.results || []) {
+    try {
+      const cats = JSON.parse(row.categories) as Record<string, unknown>
+      result[row.date] = Object.keys(cats).filter((k) => {
+        const asset = cats[k] as Record<string, unknown> | undefined
+        return asset && typeof asset.imageUrl === 'string'
+      })
+    } catch {
+      result[row.date] = []
+    }
+  }
+  return result
+}
+
 export async function findNextUnscheduledDateD1(
   db: D1Database,
   fromDate: string,
   maxDaysToScan: number,
 ): Promise<string | null> {
-  // Generate all candidate dates
-  const candidates: string[] = []
-  let current = fromDate
-  for (let i = 0; i < maxDaysToScan; i++) {
-    candidates.push(current)
-    const base = Date.parse(`${current}T00:00:00.000Z`)
-    current = new Date(base + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  }
-
-  if (candidates.length === 0) return null
-
-  // Fetch all existing dates in range with a single query
-  const placeholders = candidates.map(() => '?').join(',')
+  // Fetch all scheduled dates from fromDate onwards (ordered)
   const rows = await db
-    .prepare(`SELECT date FROM puzzles WHERE date IN (${placeholders})`)
-    .bind(...candidates)
+    .prepare('SELECT date FROM puzzles WHERE date >= ? ORDER BY date ASC')
+    .bind(fromDate)
     .all<{ date: string }>()
 
-  const existing = new Set((rows.results || []).map((r) => r.date))
+  const dateSet = new Set((rows.results || []).map((r) => r.date))
 
-  for (const candidate of candidates) {
-    if (!existing.has(candidate)) return candidate
+  // Walk from fromDate looking for first missing day
+  let current = fromDate
+  for (let i = 0; i < maxDaysToScan; i++) {
+    if (!dateSet.has(current)) return current
+    const base = Date.parse(`${current}T00:00:00.000Z`)
+    current = new Date(base + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   }
   return null
 }
@@ -158,8 +175,9 @@ export async function appendPromptHistory(db: D1Database, item: PromptHistoryIte
 export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | null> {
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories FROM batch_jobs WHERE id = 1',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories FROM batch_jobs WHERE id = ?',
     )
+    .bind(1)
     .first<{
       batch_name: string
       target_date: string
@@ -190,9 +208,10 @@ export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | nul
 export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promise<void> {
   await db
     .prepare(
-      'INSERT OR REPLACE INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories) VALUES (1, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
+      1,
       job.batchName,
       job.targetDate,
       JSON.stringify(job.categories),
@@ -205,5 +224,5 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
 }
 
 export async function deleteBatchJob(db: D1Database): Promise<void> {
-  await db.prepare('DELETE FROM batch_jobs WHERE id = 1').run()
+  await db.prepare('DELETE FROM batch_jobs WHERE id = ?').bind(1).run()
 }

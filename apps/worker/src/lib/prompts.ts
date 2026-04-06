@@ -1,6 +1,8 @@
 import { CATEGORIES, type PromptHistoryItem, type PromptPack, type PuzzleCategory } from '../types'
 import { ensurePuzzleTables, getPromptHistoryD1, appendPromptHistory } from './puzzle-db'
 
+const PROMPT_HISTORY_LIMIT = 260
+
 const ROLES = ['concept', 'location', 'state', 'lighting', 'mood', 'style', 'palette', 'camera'] as const
 type DescriptorRole = (typeof ROLES)[number]
 
