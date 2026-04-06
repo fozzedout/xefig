@@ -24,6 +24,8 @@ const refreshModelsBtn = document.getElementById('refresh-models-btn')
 const rewriteModelSelect = document.getElementById('rewrite-model-select')
 const autoGenerateBtn = document.getElementById('auto-generate-btn')
 const batchPollBtn = document.getElementById('batch-poll-btn')
+const cronSubmitBtn = document.getElementById('cron-submit-btn')
+const cronPollBtn = document.getElementById('cron-poll-btn')
 const submitBtn = document.getElementById('submit-btn')
 const submitLabel = document.getElementById('submit-label')
 const statusBar = document.getElementById('status')
@@ -1138,6 +1140,71 @@ batchPollBtn.addEventListener('click', async () => {
     setStatus('Network error during batch poll.', 'error')
   } finally {
     batchPollBtn.disabled = false
+  }
+})
+
+// Cron: Submit — mimics the daily cron (auto-generates prompts, no UI input needed)
+cronSubmitBtn.addEventListener('click', async () => {
+  if (!requireAuth()) return
+
+  if (!confirm('Trigger daily cron job? This will auto-generate prompts and submit a batch for the next empty date.')) {
+    return
+  }
+
+  cronSubmitBtn.disabled = true
+  setStatus('Running daily cron: submitting batch...', 'working')
+  try {
+    const { response, payload } = await adminFetch('/api/admin/generate-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    if (response.status === 401) {
+      setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+      return
+    }
+    if (!response.ok) {
+      setStatus(payload.error || 'Cron submit failed.', 'error')
+      return
+    }
+    setStatus(payload.message || 'Cron submit completed.', 'ok')
+    await loadDateDetails()
+  } catch {
+    setStatus('Network error during cron submit.', 'error')
+  } finally {
+    cronSubmitBtn.disabled = false
+  }
+})
+
+// Cron: Poll — mimics the hourly cron (polls batch + processes images server-side)
+cronPollBtn.addEventListener('click', async () => {
+  if (!requireAuth()) return
+
+  cronPollBtn.disabled = true
+  setStatus('Running hourly cron: polling batch...', 'working')
+  try {
+    const { response, payload } = await adminFetch('/api/admin/generate-images/poll', {
+      method: 'POST',
+    })
+    if (response.status === 401) {
+      setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+      return
+    }
+    if (!response.ok) {
+      setStatus(payload.error || 'Cron poll failed.', 'error')
+      return
+    }
+
+    // Also run client-side processing if images are ready
+    const processed = await checkAndProcessBatch()
+    if (!processed) {
+      setStatus(payload.message || 'Cron poll completed.', 'ok')
+      await loadDateDetails()
+    }
+  } catch {
+    setStatus('Network error during cron poll.', 'error')
+  } finally {
+    cronPollBtn.disabled = false
   }
 })
 

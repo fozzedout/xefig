@@ -124,6 +124,21 @@
                 </svg>
                 Poll Batch
               </button>
+              <button type="button" id="cron-submit-btn" class="btn-outline" title="Trigger the daily cron: auto-generate prompts and submit batch">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.3"/>
+                  <path d="M7 4v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Cron: Submit
+              </button>
+              <button type="button" id="cron-poll-btn" class="btn-outline" title="Trigger the hourly cron: poll batch status and process images">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.3"/>
+                  <path d="M7 4v3.5l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M11.5 2l1 -1M2.5 2l-1 -1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                </svg>
+                Cron: Poll
+              </button>
               <div class="rewrite-tools">
                 <label for="rewrite-model-select" class="rewrite-tools-label">Reword Model</label>
                 <select id="rewrite-model-select" class="rewrite-model-select">

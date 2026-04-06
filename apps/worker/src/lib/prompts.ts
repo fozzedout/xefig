@@ -383,6 +383,7 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
       slider:   buildCategoryPromptDetails('slider',   descriptorSetsByCategory.slider),
       swap:     buildCategoryPromptDetails('swap',     descriptorSetsByCategory.swap),
       polygram: buildCategoryPromptDetails('polygram', descriptorSetsByCategory.polygram),
+      diamond:  buildCategoryPromptDetails('diamond',  descriptorSetsByCategory.diamond),
     },
   }
 
