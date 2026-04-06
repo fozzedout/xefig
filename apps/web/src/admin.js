@@ -10,7 +10,6 @@ const gateError = document.getElementById('gate-error')
 const appContent = document.getElementById('app-content')
 
 const logoutBtn = document.getElementById('logout-btn')
-const authBadge = document.getElementById('auth-badge')
 
 const form = document.getElementById('admin-form')
 const dateInput = document.getElementById('date')
@@ -102,8 +101,6 @@ function setStatus(text, type = 'idle') {
 
 function setAuthState(authenticated) {
   isAuthenticated = authenticated
-  authBadge.textContent = authenticated ? 'Signed In' : 'Signed Out'
-  authBadge.dataset.state = authenticated ? 'signed-in' : 'signed-out'
 
   // Auth gate
   authGate.hidden = authenticated
