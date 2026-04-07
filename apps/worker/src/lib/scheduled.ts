@@ -1,9 +1,12 @@
 import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
-import { generatePromptPacks } from './prompts'
+import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
 import { processPngImage } from './image'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
 import { ensurePuzzleTables, getBatchJob, saveBatchJob, deleteBatchJob, type PendingBatchJob } from './puzzle-db'
+import { validateGeneratedImage } from './image-validator'
+
+const MAX_VALIDATION_RETRIES = 2
 
 export type BatchSubmitResult = {
   submitted: boolean
@@ -353,6 +356,48 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
   }
 
   const pngBytes = new Uint8Array(await tempObject.arrayBuffer())
+
+  // Validate image before processing (skip if retries exhausted)
+  const failures = job.validationFailures ?? {}
+  const retryCount = failures[category] ?? 0
+
+  if (retryCount < MAX_VALIDATION_RETRIES && env.AI) {
+    const validation = await validateGeneratedImage(env.AI, pngBytes, category)
+    if (!validation.pass) {
+      // Delete bad temp image
+      await env.assets.delete(tempKey)
+
+      // Track the failure
+      failures[category] = retryCount + 1
+      job.validationFailures = failures
+
+      // Resubmit just this category with a fresh prompt
+      if (env.GOOGLE_AI_API_KEY) {
+        const details = await generateSingleCategoryPrompt(env.DB, category)
+        const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
+          { category, prompt: details.prompt },
+        ])
+        // Update job metadata for the regenerated category
+        job.categories[category] = { theme: details.theme, keywords: details.keywords }
+        // Transition back to 'submitted' phase so the poll loop picks up the new batch
+        job.phase = 'submitted'
+        job.batchName = newBatch
+        // Keep processedCategories as-is — already processed categories stay done
+      }
+
+      await saveBatchJob(env.DB, job)
+      return {
+        found: true,
+        message: `${category} failed validation (attempt ${retryCount + 1}/${MAX_VALIDATION_RETRIES}): ${validation.reason ?? 'unknown'}. Regenerating.`,
+        batchName,
+        targetDate,
+        state: 'validating',
+        submittedAt,
+        imagesProcessed: processed.size,
+      }
+    }
+  }
+
   const { jpeg, thumbnail } = processPngImage(pngBytes)
 
   const imageKey = `puzzles/${targetDate}/${category}.jpg`

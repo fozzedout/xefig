@@ -169,8 +169,76 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 }
 
 // ---------------------------------------------------------------------------
-// Polygram descriptor pool — removed as it is now unified with the main pool.
+// Diamond descriptor pool — curated for low colour count, wide flat regions.
+// Paint-by-numbers needs bold, simple subjects with strong colour separation.
 // ---------------------------------------------------------------------------
+
+const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
+  concept: [
+    'lighthouse', 'sailboat', 'hot air balloon', 'sunflower field', 'cottage',
+    'windmill', 'barn', 'bridge', 'castle', 'pagoda', 'mosque', 'church',
+    'tulip garden', 'cherry blossom tree', 'palm tree', 'cactus garden',
+    'flamingo', 'parrot', 'butterfly', 'koi pond', 'peacock', 'owl',
+    'cat portrait', 'dog portrait', 'horse', 'deer', 'fox',
+    'mountain lake', 'sunset beach', 'rolling hills', 'autumn tree',
+    'fruit bowl', 'vase of flowers', 'teapot', 'lantern',
+    'stained glass window', 'mosaic mural', 'quilt pattern', 'tile design',
+    'tropical fish', 'sea turtle', 'whale', 'jellyfish',
+    'hot spring', 'waterfall', 'volcano', 'glacier',
+    'carnival tent', 'ferris wheel', 'carousel', 'vintage car',
+  ],
+
+  location: [
+    'garden', 'meadow', 'hillside', 'lakeside', 'seaside', 'riverside',
+    'village', 'rooftop', 'balcony', 'courtyard', 'field', 'orchard',
+    'desert', 'tropical island', 'snowy peak', 'forest clearing',
+    'harbour', 'pier', 'market square', 'cobblestone street',
+  ],
+
+  state: [
+    'bold', 'vivid', 'vibrant', 'bright', 'saturated', 'flat-shaded',
+    'poster-like', 'graphic', 'simplified', 'blocky', 'clean-edged',
+    'high-contrast', 'colour-blocked', 'cel-shaded', 'posterised',
+  ],
+
+  lighting: [
+    'bright even lighting', 'warm golden light', 'clear daylight',
+    'soft diffused light', 'bold sunset glow', 'flat studio lighting',
+    'overhead noon light', 'warm afternoon light',
+  ],
+
+  mood: [
+    'cheerful and bright', 'calm and peaceful', 'warm and inviting',
+    'playful and colourful', 'bold and graphic', 'nostalgic and cozy',
+  ],
+
+  style: [
+    'poster art style', 'stained glass rendering', 'mosaic tile style',
+    'gouache flat colour', 'screen print style', 'paper cut-out style',
+    'folk art illustration', 'retro travel poster', 'simplified illustration',
+    'bold graphic style', 'decorative art style', 'naive art style',
+    'woodblock print style',
+  ],
+
+  palette: [
+    '8–12 distinct flat colours with no gradients',
+    'bold primary colours with strong contrast between regions',
+    'warm earth tones in large flat areas',
+    'cool ocean tones with clear colour boundaries',
+    'autumn colours with distinct red, orange, gold, and green zones',
+    'tropical palette with flat turquoise, coral, green, and sand regions',
+    'pastel palette with clearly separated soft colour blocks',
+    'jewel tones with rich saturated flat fills',
+    'sunset palette with flat bands of orange, pink, purple, and blue',
+    'forest palette with distinct green, brown, gold, and sky blue areas',
+  ],
+
+  camera: [
+    'straight-on frontal view', 'slightly elevated angle',
+    'centered symmetrical framing', 'simple medium shot',
+    'wide view with clear subject', 'close-up with bold shapes',
+  ],
+}
 
 // ---------------------------------------------------------------------------
 // Minimum pool size validation — checked per role at startup.
@@ -230,7 +298,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'Depict a scene with bold, clearly defined colour regions and strong contrast between areas — ideal for colour-by-number. Favour subjects with distinct colour blocks: landscapes with sky/water/land separation, bold florals, stained glass, mosaics, or graphic illustrations. Avoid subtle gradients and monochromatic areas.',
+      'Depict a scene with bold, clearly defined colour regions and strong contrast between areas. Favour subjects with distinct colour blocks: landscapes with sky/water/land separation, bold florals, stained glass, mosaics, or graphic illustrations. Avoid subtle gradients and monochromatic areas.',
     qualityTarget:
       'Prioritise large uniform colour regions with clean edges between them. Each region should be a distinct, nameable colour. Maintain at least 8–12 clearly different colour zones. Avoid fine noise, speckle, or photographic grain. The image should quantize well to a limited palette while remaining recognisable.',
   },
@@ -276,7 +344,7 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
   'Output: one landscape 4:3 image with bold, flat colour areas and minimal gradients. Use a poster-like or stained-glass aesthetic with clearly separated colour zones. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image . Use broad, flat colour fills with strong edges between regions — think colour-by-number or mosaic. Avoid smooth gradients and fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Deliver a single landscape 4:3 image . Use broad, flat colour fills with strong edges between regions — think mosaic or poster art. Avoid smooth gradients and fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
   'Single 4:3 landscape image  only. Emphasise large, distinct colour blocks with crisp boundaries — minimal blending between regions. The scene should be recognisable even when reduced to 16 colours. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
 ] as const
 
@@ -432,20 +500,37 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
 // Role-slot descriptor picker
 // ---------------------------------------------------------------------------
 
+// Descriptors that produce flat/graphic imagery — these are great for
+// polygram and diamond but should appear less often for jigsaw, slider, swap.
+const GRAPHIC_STYLE_DESCRIPTORS = new Set([
+  'mosaic', 'stained glass', 'mandala', 'origami', 'abstract ink', 'fluid marbling',
+  'kinetic sculpture', 'light installation',
+  'mosaic tile style', 'stained glass rendering', 'clean vector style',
+  'isometric scene design', 'geometric layered abstract style', 'linocut print style',
+  'copper engraving style',
+])
+
+const PHOTOGRAPHIC_CATEGORIES: ReadonlySet<PuzzleCategory> = new Set(['jigsaw', 'slider', 'swap'])
+
 // Pick one descriptor per role, preferring least-recently-used entries and
 // avoiding anything already used elsewhere in this pack.
 function pickDescriptorSet(
   recent: PromptHistoryItem[],
   excluded: Set<string>,
-  _category: PuzzleCategory,
+  category: PuzzleCategory,
 ): DescriptorSet {
   const counts = buildUsageCounts(recent)
-  const pool = DESCRIPTOR_POOL
+  const pool = category === 'diamond' ? DIAMOND_DESCRIPTOR_POOL : DESCRIPTOR_POOL
   const set = {} as DescriptorSet
 
+  // For photographic categories, penalise graphic/flat-art descriptors so
+  // they appear less often (but aren't completely excluded).
+  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category) ? GRAPHIC_STYLE_DESCRIPTORS : null
+
+  let working = new Set(excluded)
   for (const role of ROLES) {
-    set[role] = pickOneDescriptor(pool[role], counts, excluded)
-    excluded = new Set([...excluded, set[role]])
+    set[role] = pickOneDescriptor(pool[role], counts, working, penalised)
+    working = new Set([...working, set[role]])
   }
 
   return set
@@ -465,6 +550,7 @@ function pickOneDescriptor(
   pool: readonly string[],
   counts: Map<string, number>,
   excluded: Set<string>,
+  penalised?: Set<string> | null,
 ): string {
   // Filter out anything already used in this pack. If that empties the pool,
   // fall back to the full pool so we never hard-fail.
@@ -472,10 +558,12 @@ function pickOneDescriptor(
   const workingPool = available.length > 0 ? available : [...pool]
 
   // Score by usage frequency, shuffle within ties via a random tiebreaker.
+  // Penalised descriptors get an extra usage count so they sort lower.
+  const penaltyWeight = 3
   const scored = workingPool
     .map((descriptor) => ({
       descriptor,
-      seen: counts.get(descriptor) ?? 0,
+      seen: (counts.get(descriptor) ?? 0) + (penalised?.has(descriptor) ? penaltyWeight : 0),
       tieBreak: Math.random(),
     }))
     .sort((a, b) => (a.seen !== b.seen ? a.seen - b.seen : a.tieBreak - b.tieBreak))

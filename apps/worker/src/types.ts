@@ -1,6 +1,7 @@
 export type Bindings = {
   assets: R2Bucket
   DB: D1Database
+  AI: Ai
   STATIC_ASSETS: Fetcher
   SEND_EMAIL: { send: (message: unknown) => Promise<void> }
   ADMIN_PASSWORD?: string

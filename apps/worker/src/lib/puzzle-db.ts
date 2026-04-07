@@ -12,6 +12,8 @@ type PendingBatchJob = {
   phase: 'submitted' | 'fetched'
   processedCategories: PuzzleCategory[]
   requestedCategories?: PuzzleCategory[]
+  // Track validation failures per category for retry logic
+  validationFailures?: Record<string, number>
 }
 
 export type { PendingBatchJob }
@@ -31,9 +33,16 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
       `CREATE TABLE IF NOT EXISTS prompt_history (id INTEGER PRIMARY KEY AUTOINCREMENT, descriptors TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ),
     db.prepare(
-      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY CHECK (id = 1), batch_name TEXT NOT NULL, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT)`,
+      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY CHECK (id = 1), batch_name TEXT NOT NULL, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
     ),
   ])
+
+  // Add validation_failures column if missing (migration for existing tables)
+  try {
+    await db.prepare(`ALTER TABLE batch_jobs ADD COLUMN validation_failures TEXT`).run()
+  } catch {
+    // Column already exists — ignore
+  }
 
   tablesReady = true
 }
@@ -175,7 +184,7 @@ export async function appendPromptHistory(db: D1Database, item: PromptHistoryIte
 export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | null> {
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories FROM batch_jobs WHERE id = ?',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE id = ?',
     )
     .bind(1)
     .first<{
@@ -186,6 +195,7 @@ export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | nul
       phase: string
       processed_categories: string
       requested_categories: string | null
+      validation_failures: string | null
     }>()
 
   if (!row) return null
@@ -199,6 +209,7 @@ export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | nul
       phase: (row.phase as 'submitted' | 'fetched') || 'submitted',
       processedCategories: JSON.parse(row.processed_categories) || [],
       requestedCategories: row.requested_categories ? JSON.parse(row.requested_categories) : undefined,
+      validationFailures: row.validation_failures ? JSON.parse(row.validation_failures) : undefined,
     }
   } catch {
     return null
@@ -208,7 +219,7 @@ export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | nul
 export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promise<void> {
   await db
     .prepare(
-      'INSERT OR REPLACE INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
       1,
@@ -219,6 +230,7 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
       job.phase,
       JSON.stringify(job.processedCategories),
       job.requestedCategories ? JSON.stringify(job.requestedCategories) : null,
+      job.validationFailures ? JSON.stringify(job.validationFailures) : null,
     )
     .run()
 }
