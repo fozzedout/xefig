@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v1'
+const CACHE_NAME = 'xefig-v2'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -27,8 +27,38 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Let API/CDN requests go straight to network
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/cdn')) {
+  // API requests: network-first, fall back to cache
+  if (url.pathname.startsWith('/api')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match(request).then((cached) => cached || new Response('{"error":"offline"}', {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })))
+    )
+    return
+  }
+
+  // CDN images: stale-while-revalidate (serve cached immediately, refresh in background)
+  if (url.pathname.startsWith('/cdn')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(request).then((cached) => {
+          const fetched = fetch(request).then((response) => {
+            if (response.ok) cache.put(request, response.clone())
+            return response
+          }).catch(() => cached)
+          return cached || fetched
+        })
+      )
+    )
     return
   }
 
