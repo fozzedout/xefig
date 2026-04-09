@@ -29,6 +29,13 @@
   box-sizing: border-box;
 }
 
+:root {
+  --sai-top: 0px;
+  --sai-bottom: 0px;
+  --sai-left: 0px;
+  --sai-right: 0px;
+}
+
 html {
   background: #0a0a0f;
 }
@@ -36,7 +43,7 @@ html {
 html,
 body,
 #app {
-  height: 100%;
+  height: 100vh;
   touch-action: manipulation;
 }
 
