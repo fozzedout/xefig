@@ -30,10 +30,10 @@
 }
 
 :root {
-  --sai-top: 0px;
-  --sai-bottom: 0px;
-  --sai-left: 0px;
-  --sai-right: 0px;
+  --sai-top: env(safe-area-inset-top, 0px);
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
+  --sai-left: env(safe-area-inset-left, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
 }
 
 html {
@@ -79,10 +79,13 @@ h1 {
   --nav-height: 52px;
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--nav-height);
+  height: calc(var(--nav-height) + var(--sai-top));
   z-index: 200;
   display: flex;
   align-items: center;
+  padding-top: var(--sai-top);
+  padding-left: var(--sai-left);
+  padding-right: var(--sai-right);
   padding-bottom: 20px;
   background: linear-gradient(to bottom, rgba(10,10,15,0.92) 60%, rgba(10,10,15,0));
   pointer-events: none;
@@ -183,7 +186,7 @@ h1 {
 .settings-page {
   background: #0a0a0f;
   color: #e8e6e0;
-  padding: calc(52px + 2rem) 2rem 2rem;
+  padding: calc(52px + var(--sai-top) + 2rem) calc(2rem + var(--sai-right)) calc(2rem + var(--sai-bottom)) calc(2rem + var(--sai-left));
   overflow-y: auto;
   height: 100%;
 }
@@ -615,7 +618,7 @@ h1 {
 .archive-page {
   background: #0a0a0f;
   color: #e8e6e0;
-  padding: calc(52px + 1.5rem) 0 2rem;
+  padding: calc(52px + var(--sai-top) + 1.5rem) var(--sai-right) calc(2rem + var(--sai-bottom)) var(--sai-left);
   overflow-y: auto;
   height: 100%;
 }
@@ -849,7 +852,7 @@ h1 {
 }
 
 @media (orientation: portrait), (max-width: 768px) {
-  .archive-page { padding-top: calc(52px + 1rem); }
+  .archive-page { padding-top: calc(52px + var(--sai-top) + 1rem); }
   .archive-top-bar { padding: 0 1rem; }
   .timeline { padding: 0 1rem; }
   .timeline::before { left: 1rem; }
@@ -922,7 +925,7 @@ h1 {
 
 .slice-icon {
   position: absolute;
-  top: calc(52px + 1rem);
+  top: calc(52px + var(--sai-top) + 1rem);
   left: 50%; transform: translateX(-50%);
   opacity: 0.6;
   transition: opacity 0.4s, transform 0.4s var(--ease-expo), left 0.4s var(--ease-expo);
@@ -942,7 +945,7 @@ h1 {
   z-index: 4;
   display: flex;
   align-items: center;
-  padding: 1rem 1.4rem;
+  padding: 1rem calc(1.4rem + var(--sai-right)) calc(1rem + var(--sai-bottom)) calc(1.4rem + var(--sai-left));
   gap: 0.6rem;
   background: linear-gradient(to top, rgba(10,10,15,0.7) 0%, rgba(10,10,15,0.3) 60%, transparent 100%);
   transition: opacity 0.4s;
@@ -1037,7 +1040,7 @@ h1 {
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
   border-top: 1px solid rgba(255,255,255,0.08);
-  padding: 0 1.4rem;
+  padding: 0 calc(1.4rem + var(--sai-right)) var(--sai-bottom) calc(1.4rem + var(--sai-left));
   max-height: 0;
   overflow: hidden;
   opacity: 0;
@@ -1192,7 +1195,7 @@ h1 {
   .nav-brand { font-size: 0.85rem; margin-left: 1rem; margin-right: 1.5rem; }
   .nav-brand::after { right: -0.75rem; }
   .nav-tab { font-size: 0.65rem; padding: 0 0.7rem; letter-spacing: 0.12em; }
-  .settings-page { padding: calc(52px + 1.5rem) 1rem 1.5rem; }
+  .settings-page { padding: calc(52px + var(--sai-top) + 1.5rem) calc(1rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(1rem + var(--sai-left)); }
 }
 
 /* ─── Launcher shell (archive view) ─── */
@@ -1595,7 +1598,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.8rem;
+  padding: calc(0.5rem + var(--sai-top)) calc(0.8rem + var(--sai-right)) 0.5rem calc(0.8rem + var(--sai-left));
   background: rgba(10, 10, 15, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
