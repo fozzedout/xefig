@@ -561,7 +561,10 @@ export class DiamondPaintingPuzzle {
       ctx.font = `600 10px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillStyle = rgbString(color)
+      const lum = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+      ctx.fillStyle = lum > 180
+        ? `rgb(${color[0] >> 1},${color[1] >> 1},${color[2] >> 1})`
+        : rgbString(color)
       ctx.fillText(label, x + cs / 2, y + cs / 2)
     } else if (fill === correctColor) {
       ctx.fillStyle = rgbString(this.palette[fill])
