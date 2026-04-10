@@ -1221,20 +1221,13 @@ h1 {
     border-radius: 6px;
   }
 
-  /* Tighter collapsed slices */
-  .ls-default .slice:not(.active) {
-    flex: 0.45 !important;
+  /* Overlay — matches layout test */
+  .ls-default .slice-overlay {
+    background: rgba(10,10,15,0.35);
   }
 
-  /* Dark gradients — left + bottom for text legibility */
   .ls-default .slice.active .slice-overlay {
-    background:
-      linear-gradient(to right, rgba(10,10,15,0.75) 0%, rgba(10,10,15,0.4) 40%, transparent 70%),
-      linear-gradient(to top, rgba(10,10,15,0.7) 0%, rgba(10,10,15,0.3) 25%, transparent 50%);
-  }
-
-  .ls-default .slice:not(.active) .slice-overlay {
-    background: rgba(10,10,15,0.4);
+    background: rgba(10,10,15,0.15);
   }
 
   /* Hide top nav and bottom bar — spine elements replace them */
@@ -1254,32 +1247,34 @@ h1 {
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(232, 230, 224, 0.7);
+    color: rgba(232,230,224,0.7);
     z-index: 3;
     transition: color 0.4s;
   }
 
   .ls-default .slice.active .slice-title {
-    color: var(--text-light);
+    color: #e8e6e0;
   }
 
-  /* Icon — fixed center offset, no position transition */
+  /* Icon — bottom center, fixed offset */
   .ls-default .slice-icon {
     top: auto;
     bottom: 0.8rem;
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
-    opacity: 0.5;
-    transition: color 0.4s, opacity 0.4s;
+    color: rgba(232,230,224,0.5);
+    opacity: 1;
+    transition: color 0.4s;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.5));
   }
 
   .ls-default .slice.active .slice-icon {
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
-    opacity: 0.85;
+    color: #e8e6e0;
   }
 
-  /* Info text — fade only, fixed width to prevent reflow */
+  /* Info text — fades in above icon when active */
   .ls-default .slice-info {
     display: block;
     position: absolute;
@@ -1297,13 +1292,12 @@ h1 {
   }
 
   .ls-default .slice-info p {
-    font-size: 0.7rem;
     line-height: 1.4;
-    color: rgba(232, 230, 224, 0.7);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+    color: rgba(232,230,224,0.7);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
   }
 
-  /* Action label — right of icon, fade only */
+  /* Action label — right of icon, fades in */
   .ls-default .slice-action {
     display: flex;
     position: absolute;
@@ -1324,10 +1318,9 @@ h1 {
 
   .ls-default .slice-action span {
     font-weight: 700;
-    font-size: 0.75rem;
     letter-spacing: 0.06em;
-    color: var(--text-light);
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    color: #e8e6e0;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
     white-space: nowrap;
   }
 
@@ -1350,61 +1343,90 @@ h1 {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* More slice — nav access in landscape */
+  /* ─── More/Nav slice ─── */
   .ls-default .slice-more {
-    background: rgba(10,10,15,0.85);
-    cursor: default;
+    background: linear-gradient(180deg, rgba(20,20,30,0.98), rgba(10,10,15,0.98));
+    cursor: pointer;
   }
 
   .ls-default .slice-more .slice-overlay { display: none; }
 
-  .ls-default .more-nav {
+  /* Collapsed — vertical "More" label */
+  .ls-default .slice-more-label {
     position: absolute;
-    bottom: 0.8rem;
-    left: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.6rem;
-    z-index: 3;
-  }
-
-  .ls-default .more-nav-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    background: none;
-    border: none;
-    color: rgba(232,230,224,0.6);
-    cursor: pointer;
-    padding: 0.4rem;
-    transition: color 0.2s;
-    font-family: inherit;
-  }
-
-  .ls-default .more-nav-btn:hover {
-    color: var(--text-light);
-  }
-
-  .ls-default .more-nav-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .ls-default .more-nav-btn span {
-    font-size: 0.55rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(90deg);
+    white-space: nowrap;
+    font-weight: 800;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
+    color: rgba(232,230,224,0.5);
+    z-index: 3;
+    transition: opacity 0.3s;
+  }
+
+  .ls-default .slice-more.active .slice-more-label {
+    opacity: 0;
+  }
+
+  /* Expanded — nav content */
+  .ls-default .slice-more-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.6rem;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.4s 0.1s;
+  }
+
+  .ls-default .slice-more.active .slice-more-content {
+    opacity: 1;
+  }
+
+  .ls-default .slice-more-brand {
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(232,230,224,0.6);
+    margin-bottom: 0.4rem;
+  }
+
+  .ls-default .slice-more-btn {
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(232,230,224,0.5);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+    width: 100%;
+    text-align: center;
+  }
+
+  .ls-default .slice-more-btn:hover {
+    color: #e8e6e0;
+    background: rgba(255,255,255,0.1);
   }
 }
 
 /* More slice hidden outside landscape default */
 .slice-more { display: none; }
+.slice-more-label,
+.slice-more-content { display: none; }
 @media (orientation: landscape) {
   .ls-default .slice-more { display: block; }
+  .ls-default .slice-more-label { display: block; }
+  .ls-default .slice-more-content { display: flex; }
 }
 
 /* ─── Portrait slice layout ─── */
