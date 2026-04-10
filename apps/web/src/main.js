@@ -985,6 +985,13 @@ function renderLauncher() {
       bindLandscapeNavEvents(pageEl, container)
       computeSliceCenter(container)
 
+      // Recompute on orientation change (portrait widths differ from landscape)
+      const orientationMQ = window.matchMedia('(orientation: landscape)')
+      orientationMQ.addEventListener('change', () => {
+        // Wait for layout to settle after rotation
+        setTimeout(() => computeSliceCenter(container), 300)
+      })
+
       // Progressive image upgrade: swap thumbnails for full-size images once loaded
       const sliceImages = container.querySelectorAll('.slice-image')
       sliceImages.forEach((img, index) => {
