@@ -1221,7 +1221,8 @@ h1 {
     border-radius: 6px;
   }
 
-  /* Hide bottom bar in landscape — spine elements replace it */
+  /* Hide top nav and bottom bar — spine elements replace them */
+  .ls-default .top-nav { display: none; }
   .ls-default .slice-bar { display: none; }
   .ls-default .info-panel { display: none; }
 
