@@ -943,6 +943,7 @@ function renderLauncher() {
         slice.querySelectorAll('.slice-more-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
+            if (!slice.classList.contains('active')) return
             window.switchToPage(btn.dataset.page)
           })
         })
