@@ -807,11 +807,21 @@ function renderLauncher() {
       })
       .join('') + `
           <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
-            <div class="slice-more-label">More</div>
-            <div class="slice-more-content">
-              <div class="slice-more-brand">Xefig</div>
-              <button class="slice-more-btn" data-page="archive">Archive</button>
-              <button class="slice-more-btn" data-page="settings">Settings</button>
+            <div class="slice-overlay"></div>
+            <div class="slice-title">More</div>
+            <div class="slice-more-cards">
+              <button class="more-card" data-page="archive">
+                <div class="more-card-icon">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h24M6 8v16a2 2 0 002 2h16a2 2 0 002-2V8"/><path d="M12 14h8"/><rect x="10" y="11" width="12" height="6" rx="1"/></svg>
+                </div>
+                <span class="more-card-label">Archive</span>
+              </button>
+              <button class="more-card" data-page="settings">
+                <div class="more-card-icon">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="5"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.3 6.3l2.8 2.8M22.9 22.9l2.8 2.8M6.3 25.7l2.8-2.8M22.9 9.1l2.8-2.8"/></svg>
+                </div>
+                <span class="more-card-label">Settings</span>
+              </button>
             </div>
           </div>`
   }
@@ -940,7 +950,7 @@ function renderLauncher() {
 
       // More slice — expands on click, nav buttons switch page
       if (slice.classList.contains('slice-more')) {
-        slice.querySelectorAll('.slice-more-btn').forEach(btn => {
+        slice.querySelectorAll('.more-card').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
             if (!slice.classList.contains('active')) return
