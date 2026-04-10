@@ -1218,7 +1218,7 @@ h1 {
 /* ─── Landscape spine layout (default) ─── */
 @media (orientation: landscape) {
   .ls-default .slice-container {
-    inset: var(--sai-top) var(--sai-right) var(--sai-bottom) var(--sai-left);
+    inset: 0;
     gap: 3px;
     padding: 3px;
   }
