@@ -809,17 +809,24 @@ function renderLauncher() {
           <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
             <div class="slice-title">More</div>
-            <div class="slice-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><circle cx="8" cy="16" r="2.5" fill="currentColor"/><circle cx="16" cy="16" r="2.5" fill="currentColor"/><circle cx="24" cy="16" r="2.5" fill="currentColor"/></svg></div>
             <div class="slice-more-cards">
               <button class="more-card" data-page="archive">
-                <div class="more-card-icon">
-                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h24M6 8v16a2 2 0 002 2h16a2 2 0 002-2V8"/><path d="M12 14h8"/><rect x="10" y="11" width="12" height="6" rx="1"/></svg>
+                <div class="more-card-img">
+                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <rect x="8" y="6" width="48" height="10" rx="2"/>
+                    <path d="M12 16v36a4 4 0 004 4h32a4 4 0 004-4V16"/>
+                    <path d="M24 28h16" stroke-width="2" stroke-linecap="round"/>
+                    <rect x="20" y="22" width="24" height="12" rx="2" stroke-dasharray="3 2"/>
+                    <path d="M20 42h24M20 48h16" stroke-width="1" opacity="0.4"/>
+                  </svg>
                 </div>
                 <span class="more-card-label">Archive</span>
               </button>
               <button class="more-card" data-page="settings">
-                <div class="more-card-icon">
-                  <svg viewBox="0 0 100 100" fill="currentColor"><path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/></svg>
+                <div class="more-card-img">
+                  <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.7">
+                    <path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/>
+                  </svg>
                 </div>
                 <span class="more-card-label">Settings</span>
               </button>
@@ -954,7 +961,6 @@ function renderLauncher() {
         slice.querySelectorAll('.more-card').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
-            if (!slice.classList.contains('active')) return
             window.switchToPage(btn.dataset.page)
           })
         })
