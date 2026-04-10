@@ -1212,7 +1212,11 @@ h1 {
 /* ─── Landscape spine layout (default) ─── */
 @media (orientation: landscape) {
   .ls-default .slice-container {
-    inset: var(--sai-top) var(--sai-right) var(--sai-bottom) var(--sai-left);
+    inset:
+      max(20px, var(--sai-top))
+      var(--sai-right)
+      var(--sai-bottom)
+      var(--sai-left);
     gap: 3px;
     padding: 3px;
   }
@@ -1221,13 +1225,15 @@ h1 {
     border-radius: 6px;
   }
 
-  /* Overlay — matches layout test */
+  /* Overlay — dark gradients for text legibility */
   .ls-default .slice-overlay {
     background: rgba(10,10,15,0.35);
   }
 
   .ls-default .slice.active .slice-overlay {
-    background: rgba(10,10,15,0.15);
+    background:
+      linear-gradient(to right, rgba(10,10,15,0.6) 0%, rgba(10,10,15,0.25) 40%, transparent 65%),
+      linear-gradient(to top, rgba(10,10,15,0.8) 0%, rgba(10,10,15,0.4) 20%, transparent 45%);
   }
 
   /* Hide top nav and bottom bar — spine elements replace them */
