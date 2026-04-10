@@ -738,9 +738,10 @@ function bindLandscapeNavEvents(pageEl, container) {
 }
 
 function computeSliceCenter(container) {
-  requestAnimationFrame(() => {
-    const collapsed = container.querySelector('.slice:not(.active)')
-    const active = container.querySelector('.slice.active')
+  // Double-rAF ensures layout is fully resolved before measuring
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
+    const active = container.querySelector('.slice.active:not(.slice-more)')
     if (collapsed) {
       const center = collapsed.offsetWidth / 2
       container.style.setProperty('--slice-center', center + 'px')
@@ -749,7 +750,7 @@ function computeSliceCenter(container) {
       const infoWidth = active.offsetWidth - collapsed.offsetWidth / 2 - 19
       container.style.setProperty('--info-width', infoWidth + 'px')
     }
-  })
+  }))
 }
 
 function renderLauncher() {
@@ -922,6 +923,8 @@ function renderLauncher() {
           s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
         }
       })
+      // Recompute after flex transition completes (0.8s in CSS, use 0.85s for safety)
+      setTimeout(() => computeSliceCenter(container), 850)
     }
 
     slices.forEach((slice, i) => {
