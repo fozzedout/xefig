@@ -1349,6 +1349,62 @@ h1 {
 
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
+
+  /* More slice — nav access in landscape */
+  .ls-default .slice-more {
+    background: rgba(10,10,15,0.85);
+    cursor: default;
+  }
+
+  .ls-default .slice-more .slice-overlay { display: none; }
+
+  .ls-default .more-nav {
+    position: absolute;
+    bottom: 0.8rem;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    z-index: 3;
+  }
+
+  .ls-default .more-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    background: none;
+    border: none;
+    color: rgba(232,230,224,0.6);
+    cursor: pointer;
+    padding: 0.4rem;
+    transition: color 0.2s;
+    font-family: inherit;
+  }
+
+  .ls-default .more-nav-btn:hover {
+    color: var(--text-light);
+  }
+
+  .ls-default .more-nav-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ls-default .more-nav-btn span {
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* More slice hidden outside landscape default */
+.slice-more { display: none; }
+@media (orientation: landscape) {
+  .ls-default .slice-more { display: block; }
 }
 
 /* ─── Portrait slice layout ─── */

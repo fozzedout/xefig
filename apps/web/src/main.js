@@ -803,7 +803,16 @@ function renderLauncher() {
           </div>
         `
       })
-      .join('')
+      .join('') + `
+          <div class="slice slice-more" style="--flex: ${INACTIVE_FLEX};">
+            <div class="slice-overlay"></div>
+            <div class="slice-title">More</div>
+            <div class="slice-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="16" r="2" fill="currentColor"/><circle cx="16" cy="16" r="2" fill="currentColor"/><circle cx="24" cy="16" r="2" fill="currentColor"/></svg></div>
+            <div class="more-nav">
+              <button class="more-nav-btn" data-page="archive"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M3 4v8a1 1 0 001 1h8a1 1 0 001-1V4"/><path d="M6 7h4"/></svg><span>Archive</span></button>
+              <button class="more-nav-btn" data-page="settings"><svg viewBox="0 0 100 100" fill="currentColor"><path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/></svg><span>Settings</span></button>
+            </div>
+          </div>`
   }
 
   const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0', diamond: '#e070a0' }
@@ -919,6 +928,17 @@ function renderLauncher() {
           }
           panel.classList.toggle('open')
         })
+      }
+
+      // More slice — wire nav buttons, skip game logic
+      if (slice.classList.contains('slice-more')) {
+        slice.querySelectorAll('.more-nav-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            window.switchToPage(btn.dataset.page)
+          })
+        })
+        return
       }
 
       slice.addEventListener('click', (e) => {
