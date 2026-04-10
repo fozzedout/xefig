@@ -1415,7 +1415,7 @@ h1 {
     position: relative;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     height: 40px;
     background: rgba(255,255,255,0.03);
     border: none;
@@ -1445,26 +1445,19 @@ h1 {
     height: 32px;
   }
 
-  /* When expanded, shift icon left and show label */
-  .ls-default .slice-more.active .more-card-img {
-    transform: translateX(-1.2rem);
-  }
-
   .ls-default .more-card-label {
-    position: absolute;
     font-weight: 700;
     font-size: 0.7rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     opacity: 0;
-    transform: translateX(0.8rem);
-    transition: opacity 0.3s 0.1s, transform 0.4s var(--ease-expo);
+    margin-left: 0.6rem;
+    transition: opacity 0.3s 0.1s;
     white-space: nowrap;
   }
 
   .ls-default .slice-more.active .more-card-label {
     opacity: 1;
-    transform: translateX(1rem);
   }
 }
 
