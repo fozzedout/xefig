@@ -809,6 +809,7 @@ function renderLauncher() {
           <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
             <div class="slice-title">More</div>
+            <div class="slice-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><circle cx="8" cy="16" r="2.5" fill="currentColor"/><circle cx="16" cy="16" r="2.5" fill="currentColor"/><circle cx="24" cy="16" r="2.5" fill="currentColor"/></svg></div>
             <div class="slice-more-cards">
               <button class="more-card" data-page="archive">
                 <div class="more-card-icon">
@@ -818,7 +819,7 @@ function renderLauncher() {
               </button>
               <button class="more-card" data-page="settings">
                 <div class="more-card-icon">
-                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="5"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.3 6.3l2.8 2.8M22.9 22.9l2.8 2.8M6.3 25.7l2.8-2.8M22.9 9.1l2.8-2.8"/></svg>
+                  <svg viewBox="0 0 100 100" fill="currentColor"><path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/></svg>
                 </div>
                 <span class="more-card-label">Settings</span>
               </button>
