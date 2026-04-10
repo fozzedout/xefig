@@ -1209,6 +1209,12 @@ h1 {
 .slice-action,
 .slice-accent { display: none; }
 
+/* Hide spine text during orientation recompute, fade back in */
+.slice-recompute .slice-title,
+.slice-recompute .slice-info,
+.slice-recompute .slice-action,
+.slice-recompute .slice-icon { opacity: 0 !important; transition: none !important; }
+
 /* ─── Landscape spine layout (default) ─── */
 @media (orientation: landscape) {
   .ls-default .slice-container {
@@ -1251,7 +1257,7 @@ h1 {
     text-transform: uppercase;
     color: rgba(232,230,224,0.7);
     z-index: 3;
-    transition: color 0.4s;
+    transition: color 0.4s, opacity 0.3s;
   }
 
   .ls-default .slice.active .slice-title {
@@ -1266,7 +1272,7 @@ h1 {
     transform: translateX(-50%);
     color: rgba(232,230,224,0.5);
     opacity: 1;
-    transition: color 0.4s;
+    transition: color 0.4s, opacity 0.3s;
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.5));
   }
 

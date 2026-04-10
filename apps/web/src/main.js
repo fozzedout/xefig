@@ -987,7 +987,14 @@ function renderLauncher() {
 
       // Recompute on orientation change (portrait widths differ from landscape)
       const orientationMQ = window.matchMedia('(orientation: landscape)')
-      orientationMQ.addEventListener('change', () => computeSliceCenter(container))
+      orientationMQ.addEventListener('change', () => {
+        container.classList.add('slice-recompute')
+        computeSliceCenter(container)
+        // Fade text back in after position is resolved
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          container.classList.remove('slice-recompute')
+        }))
+      })
 
       // Progressive image upgrade: swap thumbnails for full-size images once loaded
       const sliceImages = container.querySelectorAll('.slice-image')
