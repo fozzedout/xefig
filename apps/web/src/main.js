@@ -738,19 +738,17 @@ function bindLandscapeNavEvents(pageEl, container) {
 }
 
 function computeSliceCenter(container) {
-  // Double-rAF ensures layout is fully resolved before measuring
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
-    const active = container.querySelector('.slice.active:not(.slice-more)')
-    if (collapsed) {
-      const center = collapsed.offsetWidth / 2
-      container.style.setProperty('--slice-center', center + 'px')
-    }
-    if (active && collapsed) {
-      const infoWidth = active.offsetWidth - collapsed.offsetWidth / 2 - 19
-      container.style.setProperty('--info-width', infoWidth + 'px')
-    }
-  }))
+  const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
+  const active = container.querySelector('.slice.active:not(.slice-more)')
+  if (!collapsed) return
+  // Force synchronous layout to get accurate measurements
+  const center = collapsed.offsetWidth / 2
+  const infoWidth = active ? active.offsetWidth - center - 19 : 200
+  // Set on every slice so inheritance isn't needed
+  container.querySelectorAll('.slice').forEach(s => {
+    s.style.setProperty('--slice-center', center + 'px')
+    s.style.setProperty('--info-width', infoWidth + 'px')
+  })
 }
 
 function renderLauncher() {
@@ -923,8 +921,10 @@ function renderLauncher() {
           s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
         }
       })
-      // Recompute after flex transition completes (0.8s in CSS, use 0.85s for safety)
-      setTimeout(() => computeSliceCenter(container), 850)
+      // Recompute immediately (mid-transition values are close enough),
+      // then again after flex transition completes for exact positioning
+      computeSliceCenter(container)
+      setTimeout(() => computeSliceCenter(container), 650)
     }
 
     slices.forEach((slice, i) => {
