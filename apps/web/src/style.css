@@ -1212,7 +1212,7 @@ h1 {
 /* ─── Landscape spine layout (default) ─── */
 @media (orientation: landscape) {
   .ls-default .slice-container {
-    inset: 0;
+    inset: var(--sai-top) var(--sai-right) var(--sai-bottom) var(--sai-left);
     gap: 3px;
     padding: 3px;
   }
@@ -1237,12 +1237,12 @@ h1 {
   .ls-default .slice-bar { display: none; }
   .ls-default .info-panel { display: none; }
 
-  /* Vertical spine title — inset from top for phantom dead zone */
+  /* Vertical spine title */
   .ls-default .slice-title {
     display: block;
     position: absolute;
     writing-mode: vertical-rl;
-    top: max(1.5rem, calc(var(--sai-top) + 0.5rem));
+    top: 1.5rem;
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
     white-space: nowrap;
@@ -1258,10 +1258,10 @@ h1 {
     color: #e8e6e0;
   }
 
-  /* Icon — bottom center, offset from bottom safe area */
+  /* Icon — bottom center, fixed offset */
   .ls-default .slice-icon {
     top: auto;
-    bottom: calc(var(--sai-bottom) + 0.8rem);
+    bottom: 0.8rem;
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
     color: rgba(232,230,224,0.5);
@@ -1276,11 +1276,11 @@ h1 {
     color: #e8e6e0;
   }
 
-  /* Info text — fades in above icon, offset from bottom safe area */
+  /* Info text — fades in above icon when active */
   .ls-default .slice-info {
     display: block;
     position: absolute;
-    bottom: calc(var(--sai-bottom) + 3rem);
+    bottom: 3rem;
     left: var(--slice-center, 50%);
     width: var(--info-width, 200px);
     z-index: 3;
@@ -1299,11 +1299,11 @@ h1 {
     text-shadow: 0 1px 6px rgba(0,0,0,0.8);
   }
 
-  /* Action label — right of icon, offset from bottom safe area */
+  /* Action label — right of icon, fades in */
   .ls-default .slice-action {
     display: flex;
     position: absolute;
-    bottom: calc(var(--sai-bottom) + 0.85rem);
+    bottom: 0.85rem;
     left: calc(var(--slice-center, 50%) + 22px);
     z-index: 3;
     align-items: center;
