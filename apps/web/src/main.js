@@ -1041,6 +1041,9 @@ function renderArchivePage() {
   pageEl.innerHTML = `
     <div class="archive-page">
       <div class="archive-top-bar">
+        <button class="page-back-btn" data-page="play" aria-label="Back to menu">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
+        </button>
         <h2>Archive</h2>
         <div class="archive-filters">
           <button class="filter-chip active" data-filter="all">All</button>
@@ -1051,6 +1054,8 @@ function renderArchivePage() {
       <div class="timeline" id="archive-timeline"></div>
     </div>
   `
+
+  pageEl.querySelector('.page-back-btn').addEventListener('click', () => window.switchToPage('play'))
 
   const timeline = pageEl.querySelector('#archive-timeline')
   const allDays = []
@@ -2022,6 +2027,9 @@ function renderSettingsPage() {
   container.innerHTML = `
     <div class="settings-page">
       <div class="settings-header">
+        <button class="page-back-btn" data-page="play" aria-label="Back to menu">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
+        </button>
         <h2>Settings</h2>
         <p>Customize your puzzle experience.</p>
       </div>
@@ -2093,6 +2101,8 @@ function renderSettingsPage() {
       </div>
     </div>
   `
+
+  container.querySelector('.page-back-btn').addEventListener('click', () => window.switchToPage('play'))
 
   const grid = container.querySelector('#settings-board-colors')
   grid.addEventListener('click', (e) => {
