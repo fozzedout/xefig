@@ -74,6 +74,33 @@ function getGlobalBoardColorIndex() {
 function setGlobalBoardColorIndex(index) {
   localStorage.setItem(BOARD_COLOR_KEY, String(index))
 }
+
+const LANDSCAPE_LAYOUT_KEY = 'xefig:landscape-layout'
+const LANDSCAPE_LAYOUTS = [
+  { id: 'default', name: 'Default', desc: 'Standard horizontal slices with top nav' },
+  { id: 'bottom-dock', name: 'Bottom Dock', desc: 'Nav moves to a compact dock at the bottom' },
+  { id: 'side-rail', name: 'Side Rail', desc: 'Vertical nav rail on the left edge' },
+  { id: 'immersive', name: 'Immersive', desc: 'No nav \u2014 full-screen slices with floating pill menu' },
+  { id: 'split-panel', name: 'Split Panel', desc: 'Dark sidebar with puzzle list, full-bleed active image' },
+  { id: 'carousel', name: 'Carousel', desc: 'Full-screen single puzzle with swipe navigation' },
+]
+
+function getLandscapeLayout() {
+  const saved = localStorage.getItem(LANDSCAPE_LAYOUT_KEY)
+  return LANDSCAPE_LAYOUTS.find(l => l.id === saved) ? saved : 'default'
+}
+
+function setLandscapeLayout(id) {
+  localStorage.setItem(LANDSCAPE_LAYOUT_KEY, id)
+  applyLandscapeLayout()
+}
+
+function applyLandscapeLayout() {
+  const id = getLandscapeLayout()
+  const root = document.documentElement
+  LANDSCAPE_LAYOUTS.forEach(l => root.classList.remove('ls-' + l.id))
+  root.classList.add('ls-' + id)
+}
 const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
 const GAME_MODE_SWAP = 'swap'
@@ -655,6 +682,45 @@ const SLICE_TAGS = {
   [GAME_MODE_DIAMOND]: ['Tap & Paint', '16 colors', 'Relaxing'],
 }
 
+function bindLandscapeNavEvents(pageEl, container) {
+  // Immersive pill, split sidebar nav links, carousel corners — all use data-page
+  pageEl.querySelectorAll('[data-page]').forEach(btn => {
+    if (btn.closest('.slice') || btn.closest('#navTabs')) return // skip slice/nav buttons
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const page = btn.dataset.page
+      if (page && window.switchToPage) window.switchToPage(page)
+    })
+  })
+
+  // Split sidebar mode buttons
+  pageEl.querySelectorAll('.split-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.dataset.index)
+      const slices = container.querySelectorAll('.slice')
+      if (slices[index]) {
+        slices.forEach((s, i) => {
+          const isActive = i === index
+          s.classList.toggle('active', isActive)
+          s.style.setProperty('--flex', isActive ? 2.2 : 0.9)
+        })
+        pageEl.querySelectorAll('.split-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.index === btn.dataset.index))
+      }
+    })
+  })
+
+  // Carousel scroll → update dots
+  const updateCarouselDots = () => {
+    const dots = pageEl.querySelectorAll('.carousel-dot')
+    if (!dots.length) return
+    const scrollLeft = container.scrollLeft
+    const width = container.clientWidth
+    const activeIndex = Math.round(scrollLeft / width)
+    dots.forEach((d, i) => d.classList.toggle('active', i === activeIndex))
+  }
+  container.addEventListener('scroll', updateCarouselDots, { passive: true })
+}
+
 function renderLauncher() {
   destroyPuzzle()
 
@@ -705,11 +771,35 @@ function renderLauncher() {
       .join('')
   }
 
+  const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0', diamond: '#e070a0' }
+
   const pageEl = document.querySelector('#page-play')
   pageEl.innerHTML = `
     <main class="slice-launcher">
+      <div class="split-sidebar">
+        <div class="split-brand">Xefig</div>
+        <div class="split-mode-list">
+          ${modes.map((m, i) => `<button class="split-mode-btn${m === pickMode ? ' active' : ''}" data-mode="${m}" data-index="${i}"><span class="split-mode-dot" style="background:${ACCENT_MAP_FULL[m]}"></span>${MODE_LABELS[m]}</button>`).join('')}
+        </div>
+        <div class="split-nav-links">
+          <button class="split-nav-btn" data-page="archive">Archive</button>
+          <button class="split-nav-btn" data-page="settings">Settings</button>
+        </div>
+      </div>
       <div id="slice-container" class="slice-container">
         <div class="slice" style="--flex:1;opacity:0"></div>
+      </div>
+      <div class="immersive-pill">
+        <button data-page="play" class="active">Play</button>
+        <button data-page="archive">Archive</button>
+        <button data-page="settings">Settings</button>
+      </div>
+      <div class="carousel-dots">
+        ${modes.map((m, i) => `<div class="carousel-dot${m === pickMode ? ' active' : ''}" data-index="${i}"></div>`).join('')}
+      </div>
+      <div class="carousel-corners">
+        <button class="carousel-corner-btn cc-archive" data-page="archive">Archive</button>
+        <button class="carousel-corner-btn cc-settings" data-page="settings">Settings</button>
       </div>
     </main>
   `
@@ -824,6 +914,7 @@ function renderLauncher() {
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
+      bindLandscapeNavEvents(pageEl, container)
 
       // Progressive image upgrade: swap thumbnails for full-size images once loaded
       const sliceImages = container.querySelectorAll('.slice-image')
@@ -1669,6 +1760,7 @@ const NAV_HTML = `
       <svg class="tab-icon" viewBox="0 0 100 100" fill="currentColor">
         <path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/>
       </svg>
+      <span class="gear-label">Settings</span>
     </button>
   </div>
 </nav>
@@ -1689,6 +1781,7 @@ function setHash(hash) {
 }
 
 function initAppShell() {
+  applyLandscapeLayout()
   app.innerHTML = NAV_HTML
 
   const topNav = document.querySelector('#topNav')
@@ -1873,6 +1966,18 @@ function renderSettingsPage() {
           <div id="settings-sync-content"></div>
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Landscape Layout</div>
+          <p class="about-text" style="margin-bottom:0.8rem">Choose how the puzzle menu appears in landscape orientation.</p>
+          <div id="settings-landscape-layouts" class="settings-landscape-grid">
+            ${LANDSCAPE_LAYOUTS.map(l => `
+              <button class="settings-landscape-btn${l.id === getLandscapeLayout() ? ' is-active' : ''}" data-layout="${l.id}">
+                <span class="sl-name">${l.name}</span>
+                <span class="sl-desc">${l.desc}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">AI-Generated Content</div>
           <p class="about-text">
             All puzzle images on Xefig are generated using artificial intelligence
@@ -1917,6 +2022,16 @@ function renderSettingsPage() {
     markSettingsDirty()
     grid.querySelectorAll('.settings-color-swatch').forEach((s, i) => {
       s.classList.toggle('is-active', i === index)
+    })
+  })
+
+  const lsGrid = container.querySelector('#settings-landscape-layouts')
+  lsGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-layout]')
+    if (!btn) return
+    setLandscapeLayout(btn.dataset.layout)
+    lsGrid.querySelectorAll('.settings-landscape-btn').forEach(b => {
+      b.classList.toggle('is-active', b.dataset.layout === btn.dataset.layout)
     })
   })
 

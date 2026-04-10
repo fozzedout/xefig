@@ -1191,6 +1191,13 @@ export function createApp() {
     // and /assets/*. Skip everything else to avoid wasting resources on
     // bot traffic hitting deep bogus paths.
     const isAppRoute = pathname === '/' || pathname === '/admin-panel' || pathname === '/admin-panel.html'
+
+    // With html_handling=none, rewrite extensionless app routes to .html
+    if (pathname === '/' || pathname === '/admin-panel') {
+      const url = new URL(c.req.url)
+      url.pathname = pathname === '/' ? '/index.html' : '/admin-panel.html'
+      return c.env.STATIC_ASSETS.fetch(new Request(url, c.req.raw))
+    }
     const isRootStaticAsset = /^\/[^/]+\.[a-z0-9]+$/i.test(pathname)
     const isStaticAsset = isRootStaticAsset || pathname.startsWith('/assets/')
     if (isAppRoute || isStaticAsset) {

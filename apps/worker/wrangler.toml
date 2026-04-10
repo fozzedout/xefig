@@ -12,6 +12,7 @@ directory = "../web/dist"
 binding = "STATIC_ASSETS"
 run_worker_first = true
 not_found_handling = "404-page"
+html_handling = "none"
 
 [[r2_buckets]]
 binding = "assets"

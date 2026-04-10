@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>SAI Test</title>
+  <style>
+    :root {
+      --sai-top: env(safe-area-inset-top, 0px);
+      --sai-bottom: env(safe-area-inset-bottom, 0px);
+      --sai-left: env(safe-area-inset-left, 0px);
+      --sai-right: env(safe-area-inset-right, 0px);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100vh;
+      overflow: hidden;
+      background: #0a0a0f;
+      color: #e8e6e0;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+    }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Safe area boundary — uses env() directly so it tracks live values */
+    .safe-area {
+      position: absolute;
+      top: env(safe-area-inset-top, 0px);
+      right: env(safe-area-inset-right, 0px);
+      bottom: env(safe-area-inset-bottom, 0px);
+      left: env(safe-area-inset-left, 0px);
+      border: 2px dashed rgba(80, 232, 160, 0.6);
+      pointer-events: none;
+      z-index: 100;
+    }
+    .safe-area::after {
+      content: 'safe area (env() direct)';
+      position: absolute;
+      top: 4px; left: 8px;
+      font-size: 11px;
+      color: #50e8a0;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    /* Second boundary using CSS vars — shows if vars are stale */
+    .safe-area-vars {
+      position: absolute;
+      top: var(--sai-top);
+      right: var(--sai-right);
+      bottom: var(--sai-bottom);
+      left: var(--sai-left);
+      border: 2px dashed rgba(160, 96, 240, 0.6);
+      pointer-events: none;
+      z-index: 99;
+    }
+    .safe-area-vars::after {
+      content: 'safe area (css vars)';
+      position: absolute;
+      bottom: 4px; left: 8px;
+      font-size: 11px;
+      color: #a060f0;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    /* Nav simulation */
+    .nav-sim {
+      --nav-height: 52px;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: calc(var(--nav-height) + var(--sai-top));
+      padding-top: var(--sai-top);
+      padding-bottom: 20px;
+      background: linear-gradient(to bottom, rgba(10,10,15,0.92) calc(var(--sai-top) + 31px), rgba(10,10,15,0));
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      padding-left: calc(1.5rem + var(--sai-left));
+    }
+    .nav-sim span {
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .nav-bottom-line {
+      position: fixed;
+      top: calc(52px + var(--sai-top));
+      left: 0; right: 0;
+      border-top: 1px solid rgba(240, 192, 64, 0.5);
+      z-index: 201;
+    }
+    .nav-bottom-line::after {
+      content: 'nav bottom (52 + sai)';
+      position: absolute;
+      right: 8px; top: 2px;
+      font-size: 10px;
+      color: #f0c040;
+    }
+
+    .nav-gradient-line {
+      position: fixed;
+      top: calc(52px + var(--sai-top) + 20px);
+      left: 0; right: 0;
+      border-top: 1px dashed rgba(240, 96, 80, 0.5);
+      z-index: 201;
+    }
+    .nav-gradient-line::after {
+      content: 'gradient end (+20 pad)';
+      position: absolute;
+      right: 8px; top: 2px;
+      font-size: 10px;
+      color: #f06050;
+    }
+
+    /* Slice container simulation */
+    .slices-sim {
+      position: absolute;
+      inset: var(--sai-top) 0 0 0;
+      display: flex;
+      border: 2px solid rgba(64, 208, 240, 0.4);
+    }
+    .slices-sim::before {
+      content: 'slice-container (top: var sai-top)';
+      position: absolute;
+      top: 4px; right: 8px;
+      font-size: 10px;
+      color: #40d0f0;
+      z-index: 10;
+    }
+
+    .slice-sim {
+      flex: 1;
+      background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+      border-right: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+    }
+    .slice-sim:last-child { border-right: none; }
+
+    /* Values panel */
+    .values {
+      position: fixed;
+      bottom: calc(20px + var(--sai-bottom));
+      left: calc(20px + var(--sai-left));
+      right: calc(20px + var(--sai-right));
+      background: rgba(10, 10, 15, 0.95);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding: 16px;
+      z-index: 300;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .values h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #50e8a0;
+      margin-bottom: 8px;
+    }
+    .val-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .val-label { color: rgba(232,230,224,0.6); }
+    .val-num { color: #f0c040; font-weight: 700; }
+    .val-num.mismatch { color: #f06050; }
+    .status-msg {
+      margin-top: 12px;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .status-msg.bug { background: rgba(240, 96, 80, 0.15); color: #f06050; }
+    .status-msg.ok { background: rgba(80, 232, 160, 0.15); color: #50e8a0; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="safe-area"></div>
+    <div class="safe-area-vars"></div>
+
+    <div class="nav-sim"><span>Xefig</span></div>
+    <div class="nav-bottom-line"></div>
+    <div class="nav-gradient-line"></div>
+
+    <div class="slices-sim">
+      <div class="slice-sim">Jigsaw</div>
+      <div class="slice-sim">Slider</div>
+      <div class="slice-sim">Swap</div>
+      <div class="slice-sim">Polygram</div>
+      <div class="slice-sim">Diamond</div>
+    </div>
+
+    <div class="values">
+      <h3>Safe Area Insets (CSS env)</h3>
+      <div class="val-row"><span class="val-label">top</span><span class="val-num" id="v-top">—</span></div>
+      <div class="val-row"><span class="val-label">bottom</span><span class="val-num" id="v-bottom">—</span></div>
+      <div class="val-row"><span class="val-label">left</span><span class="val-num" id="v-left">—</span></div>
+      <div class="val-row"><span class="val-label">right</span><span class="val-num" id="v-right">—</span></div>
+      <h3 style="margin-top:12px">Layout</h3>
+      <div class="val-row"><span class="val-label">viewport (100vh)</span><span class="val-num" id="v-vh">—</span></div>
+      <div class="val-row"><span class="val-label">viewport (dvh)</span><span class="val-num" id="v-dvh">—</span></div>
+      <div class="val-row"><span class="val-label">window.innerHeight</span><span class="val-num" id="v-ih">—</span></div>
+      <div class="val-row"><span class="val-label">screen.height</span><span class="val-num" id="v-sh">—</span></div>
+      <div class="val-row"><span class="val-label">nav rendered height</span><span class="val-num" id="v-nav">—</span></div>
+      <div class="val-row"><span class="val-label">slice-container top</span><span class="val-num" id="v-slice">—</span></div>
+      <div class="val-row"><span class="val-label">mode</span><span class="val-num" id="v-mode">—</span></div>
+      <div class="val-row"><span class="val-label">update count</span><span class="val-num" id="v-count">0</span></div>
+      <div id="status"></div>
+    </div>
+  </div>
+
+  <script>
+    let updateCount = 0;
+
+    // Measure a CSS env() value by creating a probe element
+    function measureEnv(prop) {
+      const el = document.createElement('div');
+      el.style.cssText = `position:fixed;top:0;left:0;width:0;height:env(${prop}, 0px);visibility:hidden;pointer-events:none`;
+      document.body.appendChild(el);
+      const val = el.offsetHeight;
+      el.remove();
+      return val;
+    }
+
+    function update(source) {
+      updateCount++;
+      const cs = getComputedStyle(document.documentElement);
+
+      // Read CSS var values (these use the :root vars)
+      const varTop = cs.getPropertyValue('--sai-top').trim() || '0px';
+      const varBottom = cs.getPropertyValue('--sai-bottom').trim() || '0px';
+      const varLeft = cs.getPropertyValue('--sai-left').trim() || '0px';
+      const varRight = cs.getPropertyValue('--sai-right').trim() || '0px';
+
+      // Also probe env() directly via JS
+      const envTop = measureEnv('safe-area-inset-top');
+      const envBottom = measureEnv('safe-area-inset-bottom');
+      const envLeft = measureEnv('safe-area-inset-left');
+      const envRight = measureEnv('safe-area-inset-right');
+
+      document.getElementById('v-top').textContent = `${varTop} (probe: ${envTop}px)`;
+      document.getElementById('v-bottom').textContent = `${varBottom} (probe: ${envBottom}px)`;
+      document.getElementById('v-left').textContent = `${varLeft} (probe: ${envLeft}px)`;
+      document.getElementById('v-right').textContent = `${varRight} (probe: ${envRight}px)`;
+
+      // Viewport measurements
+      const vhEl = document.createElement('div');
+      vhEl.style.cssText = 'position:fixed;top:0;height:100vh;pointer-events:none;visibility:hidden';
+      document.body.appendChild(vhEl);
+      document.getElementById('v-vh').textContent = vhEl.offsetHeight + 'px';
+      vhEl.remove();
+
+      const dvhEl = document.createElement('div');
+      dvhEl.style.cssText = 'position:fixed;top:0;height:100dvh;pointer-events:none;visibility:hidden';
+      document.body.appendChild(dvhEl);
+      document.getElementById('v-dvh').textContent = dvhEl.offsetHeight + 'px';
+      dvhEl.remove();
+
+      document.getElementById('v-ih').textContent = window.innerHeight + 'px';
+      document.getElementById('v-sh').textContent = window.screen.height + 'px';
+
+      const nav = document.querySelector('.nav-sim');
+      document.getElementById('v-nav').textContent = nav.offsetHeight + 'px';
+
+      const slices = document.querySelector('.slices-sim');
+      document.getElementById('v-slice').textContent = slices.offsetTop + 'px';
+
+      const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+      document.getElementById('v-mode').textContent = standalone ? 'PWA / standalone' : 'browser';
+      document.getElementById('v-count').textContent = `${updateCount} (${source})`;
+
+      // Status
+      const statusEl = document.getElementById('status');
+      if (standalone && envTop === 0) {
+        statusEl.innerHTML = '<div class="status-msg bug">iOS PWA bug: env() safe-area-inset-top is 0 in standalone mode. Rotate device to force recalc, or a JS workaround is needed.</div>';
+      } else if (envTop > 0) {
+        statusEl.innerHTML = `<div class="status-msg ok">Safe area insets active. Green (env direct) and purple (css vars) borders should overlap.</div>`;
+      } else {
+        statusEl.innerHTML = '<div class="status-msg ok">No safe area insets (non-notched device or browser).</div>';
+      }
+    }
+
+    // Initial update
+    update('init');
+
+    // Re-check after a delay (in case env() populates late)
+    setTimeout(() => update('timeout-100ms'), 100);
+    setTimeout(() => update('timeout-500ms'), 500);
+    setTimeout(() => update('timeout-1s'), 1000);
+
+    // Workaround attempt: toggle viewport-fit to force env() recalculation
+    if (window.navigator.standalone) {
+      const meta = document.querySelector('meta[name="viewport"]');
+      const original = meta.getAttribute('content');
+      // Briefly switch to viewport-fit=auto then back to cover
+      meta.setAttribute('content', original.replace('viewport-fit=cover', 'viewport-fit=auto'));
+      requestAnimationFrame(() => {
+        meta.setAttribute('content', original);
+        requestAnimationFrame(() => update('viewport-toggle'));
+      });
+    }
+
+    window.addEventListener('resize', () => update('resize'));
+    window.addEventListener('orientationchange', () => setTimeout(() => update('orientationchange'), 300));
+  </script>
+</body>
+</html>
