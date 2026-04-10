@@ -1203,6 +1203,137 @@ h1 {
   to { opacity: 1; transform: scaleX(1); }
 }
 
+/* ─── Spine elements (hidden by default, shown in landscape) ─── */
+.slice-title,
+.slice-info,
+.slice-action,
+.slice-accent { display: none; }
+
+/* ─── Landscape spine layout (default) ─── */
+@media (orientation: landscape) {
+  .ls-default .slice-container {
+    inset: var(--sai-top) var(--sai-right) var(--sai-bottom) var(--sai-left);
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .ls-default .slice {
+    border-radius: 6px;
+  }
+
+  /* Hide bottom bar in landscape — spine elements replace it */
+  .ls-default .slice-bar { display: none; }
+  .ls-default .info-panel { display: none; }
+
+  /* Vertical spine title */
+  .ls-default .slice-title {
+    display: block;
+    position: absolute;
+    writing-mode: vertical-rl;
+    top: 1.5rem;
+    left: var(--slice-center, 50%);
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(232, 230, 224, 0.7);
+    z-index: 3;
+    transition: color 0.4s;
+  }
+
+  .ls-default .slice.active .slice-title {
+    color: var(--text-light);
+  }
+
+  /* Icon — fixed center offset, no position transition */
+  .ls-default .slice-icon {
+    top: auto;
+    bottom: 0.8rem;
+    left: var(--slice-center, 50%);
+    transform: translateX(-50%);
+    opacity: 0.5;
+    transition: color 0.4s, opacity 0.4s;
+  }
+
+  .ls-default .slice.active .slice-icon {
+    left: var(--slice-center, 50%);
+    transform: translateX(-50%);
+    opacity: 0.85;
+  }
+
+  /* Info text — fade only, fixed width to prevent reflow */
+  .ls-default .slice-info {
+    display: block;
+    position: absolute;
+    bottom: 3rem;
+    left: var(--slice-center, 50%);
+    width: var(--info-width, 200px);
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .ls-default .slice.active .slice-info {
+    opacity: 1;
+  }
+
+  .ls-default .slice-info p {
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: rgba(232, 230, 224, 0.7);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  }
+
+  /* Action label — right of icon, fade only */
+  .ls-default .slice-action {
+    display: flex;
+    position: absolute;
+    bottom: 0.85rem;
+    left: calc(var(--slice-center, 50%) + 22px);
+    z-index: 3;
+    align-items: center;
+    gap: 0.4rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .ls-default .slice.active .slice-action {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ls-default .slice-action span {
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    color: var(--text-light);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+  }
+
+  /* Accent bar on active spine */
+  .ls-default .slice-accent {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: 4;
+  }
+
+  .ls-default .slice.active .slice-accent {
+    opacity: 1;
+  }
+
+  /* Remove divider lines — gap handles separation */
+  .ls-default .slice::after { display: none; }
+}
+
 /* ─── Portrait slice layout ─── */
 @media (orientation: portrait) {
   .slice-container {

@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Layout Test — Xefig</title>
+  <style>
+    :root {
+      --sai-top: var(--sim-sai-top, 0px);
+      --sai-bottom: var(--sim-sai-bottom, 0px);
+      --sai-left: var(--sim-sai-left, 0px);
+      --sai-right: var(--sim-sai-right, 0px);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      color: #e8e6e0;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      gap: 1rem;
+      min-height: 100vh;
+    }
+
+    /* ─── Device frame ─── */
+    .device-frame {
+      position: relative;
+      background: #000;
+      border-radius: 20px;
+      border: 3px solid #333;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .device-frame.landscape .notch {
+      position: absolute;
+      left: 0; top: 50%;
+      transform: translateY(-50%);
+      width: var(--notch-depth, 47px);
+      height: 126px;
+      background: #000;
+      border-radius: 0 16px 16px 0;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .device-frame.portrait .notch {
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 126px;
+      height: var(--notch-depth, 47px);
+      background: #000;
+      border-radius: 0 0 16px 16px;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .device-frame.landscape .home-indicator {
+      position: absolute;
+      right: 8px; top: 50%;
+      transform: translateY(-50%);
+      width: 5px; height: 100px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 3px;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .device-frame.portrait .home-indicator {
+      position: absolute;
+      bottom: 8px; left: 50%;
+      transform: translateX(-50%);
+      width: 134px; height: 5px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 3px;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .device-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    /* ─── Controls ─── */
+    .controls {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .control-group label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(232,230,224,0.5);
+    }
+    .control-group select, .control-group button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.8rem;
+      background: rgba(255,255,255,0.08);
+      color: #e8e6e0;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 0.4rem;
+      cursor: pointer;
+    }
+    .control-group button.active {
+      border-color: #6c8aff;
+      background: rgba(108,138,255,0.15);
+    }
+    .btn-row { display: flex; gap: 0.3rem; }
+
+    /* ─── Safe area outline ─── */
+    .sai-outline {
+      position: absolute;
+      top: var(--sai-top);
+      right: var(--sai-right);
+      bottom: var(--sai-bottom);
+      left: var(--sai-left);
+      border: 1px dashed rgba(80,232,160,0.4);
+      z-index: 500;
+      pointer-events: none;
+    }
+
+    /* ═══════════════════════════════════════
+       Bookshelf Layout
+       ═══════════════════════════════════════ */
+
+    .shelf {
+      position: absolute;
+      inset: 0;
+      background: #0a0a0f;
+      overflow: hidden;
+    }
+
+    .shelf-container {
+      position: absolute;
+      inset: var(--sai-top) var(--sai-right) var(--sai-bottom) var(--sai-left);
+      display: flex;
+      gap: 3px;
+      padding: 3px;
+    }
+
+    .spine {
+      position: relative;
+      flex: var(--flex, 0.8);
+      overflow: hidden;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: flex 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      background: var(--bg, #16213e);
+    }
+
+    .spine-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .spine.active .spine-image {
+      opacity: 1;
+    }
+
+    .spine-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10,10,15,0.35);
+      transition: background 0.4s;
+    }
+
+    .spine.active .spine-overlay {
+      background: rgba(10,10,15,0.15);
+    }
+
+    /* Vertical title — writing-mode for natural centering */
+    .spine-title {
+      position: absolute;
+      writing-mode: vertical-rl;
+      top: 1.5rem;
+      left: var(--spine-center, 50%);
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(232,230,224,0.7);
+      z-index: 3;
+      transition: color 0.4s;
+    }
+
+    .spine.active .spine-title {
+      color: #e8e6e0;
+    }
+
+    /* Icon — bottom center, fixed offset so it doesn't move during flex transition */
+    .spine-icon {
+      position: absolute;
+      bottom: 0.8rem;
+      left: var(--spine-center, 50%);
+      transform: translateX(-50%);
+      width: 28px; height: 28px;
+      color: rgba(232,230,224,0.5);
+      z-index: 3;
+      transition: color 0.4s;
+      filter: drop-shadow(0 1px 4px rgba(0,0,0,0.5));
+    }
+
+    .spine-icon svg { width: 28px; height: 28px; stroke-width: 1.5; }
+
+    .spine.active .spine-icon {
+      color: #e8e6e0;
+    }
+
+    /* Info text — fades in above icon when active */
+    .spine-info {
+      position: absolute;
+      bottom: 3rem;
+      left: var(--spine-center, 50%);
+      width: var(--info-width, 200px);
+      z-index: 3;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .spine.active .spine-info {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .spine-info p {
+      line-height: 1.4;
+      color: rgba(232,230,224,0.7);
+      text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+    }
+
+    /* Action label — right of icon, fades in */
+    .spine-action {
+      position: absolute;
+      bottom: 0.85rem;
+      left: calc(var(--spine-center, 50%) + 22px);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    .spine.active .spine-action {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .spine-action span {
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #e8e6e0;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+      white-space: nowrap;
+    }
+
+    /* Accent bar on active spine */
+    .spine-accent {
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent-color, #6c8aff);
+      opacity: 0;
+      transition: opacity 0.4s;
+      z-index: 4;
+    }
+
+    .spine.active .spine-accent {
+      opacity: 1;
+    }
+
+    /* ─── More/Nav spine (6th slice) ─── */
+    .spine.spine-nav {
+      background: linear-gradient(180deg, rgba(20,20,30,0.98), rgba(10,10,15,0.98));
+      justify-content: center;
+    }
+
+    .spine-nav-content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 0.6rem;
+      z-index: 3;
+    }
+
+    .spine-nav-btn {
+      font-family: inherit;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(232,230,224,0.5);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.4rem;
+      padding: 0.5rem 0.6rem;
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      width: 100%;
+      text-align: center;
+    }
+
+    .spine-nav-btn:hover {
+      color: #e8e6e0;
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* Collapsed nav spine — show vertical labels */
+    .spine-nav-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(90deg);
+      white-space: nowrap;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(232,230,224,0.5);
+      z-index: 3;
+      transition: opacity 0.3s;
+    }
+
+    .spine-nav.active .spine-nav-label {
+      opacity: 0;
+    }
+
+    .spine-nav .spine-nav-content {
+      opacity: 0;
+      transition: opacity 0.4s 0.1s;
+    }
+
+    .spine-nav.active .spine-nav-content {
+      opacity: 1;
+    }
+
+    /* Xefig brand in nav spine */
+    .spine-nav-brand {
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(232,230,224,0.6);
+      margin-bottom: 0.4rem;
+    }
+  </style>
+</head>
+<body>
+  <h3 style="font-size:0.9rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(232,230,224,0.5)">Bookshelf Layout Tester</h3>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Orientation</label>
+      <div class="btn-row">
+        <button id="btn-landscape" class="active" onclick="setOrientation('landscape')">Landscape</button>
+        <button id="btn-portrait" onclick="setOrientation('portrait')">Portrait</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Device</label>
+      <select id="device-select">
+        <option value="iphone12" selected="">iPhone 12 (844x390)</option>
+        <option value="iphone15">iPhone 15 (852x393)</option>
+        <option value="iphone15max">iPhone 15 Pro Max (932x430)</option>
+        <option value="iphoneSE">iPhone SE (667x375, no notch)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Safe area</label>
+      <div class="btn-row">
+        <button id="btn-sai-on" class="active" onclick="toggleSAI(true)">On</button>
+        <button id="btn-sai-off" onclick="toggleSAI(false)">Off</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="device-frame landscape" id="device" style="width: 667px; height: 375px; --notch-depth: 0px; --sim-sai-top: 0px; --sim-sai-bottom: 0px; --sim-sai-left: 0px; --sim-sai-right: 0px;">
+    <div class="notch" style="display: none;"></div>
+    <div class="home-indicator"></div>
+    <div class="sai-outline" id="sai-outline"></div>
+    <div class="device-viewport" id="viewport">
+        <div class="shelf">
+          <div class="shelf-container" id="shelfContainer">
+
+              <div class="spine active" data-index="0" style="--flex: 3; --bg: linear-gradient(135deg, #2d1b69, #1a1a2e, #16213e); --accent-color: #f0c040;">
+                <div class="spine-image" style="background:linear-gradient(135deg, #2d1b69, #1a1a2e, #16213e)"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">Jigsaw</div>
+                <div class="spine-info"><p>Drag and place interlocking pieces to reconstruct the full image.</p></div>
+                <div class="spine-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M14 4h-8a2 2 0 00-2 2v8m0 0c1.5 0 3 1 3 3s-1.5 3-3 3v6a2 2 0 002 2h6c0-1.5 1-3 3-3s3 1.5 3 3h6a2 2 0 002-2v-6c1.5 0 3-1 3-3s-1.5-3-3-3V6a2 2 0 00-2-2h-6c0 1.5-1 3-3 3s-3-1.5-3-3z"></path></svg></div>
+                <div class="spine-action"><span>Solve now</span></div>
+              </div>
+
+              <div class="spine" data-index="1" style="--flex: 0.8; --bg: linear-gradient(135deg, #1a3a2a, #0f2027, #203a43); --accent-color: #40d0f0;">
+                <div class="spine-image" style="background:linear-gradient(135deg, #1a3a2a, #0f2027, #203a43)"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">Slider</div>
+                <div class="spine-info"><p>Slide tiles into the empty space to reorder the scrambled image.</p></div>
+                <div class="spine-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="10" height="10" rx="1"></rect><rect x="18" y="4" width="10" height="10" rx="1"></rect><rect x="4" y="18" width="10" height="10" rx="1"></rect><path d="M22 20v8M18 24h8" stroke-linecap="round"></path></svg></div>
+                <div class="spine-action"><span>Slide now</span></div>
+              </div>
+
+              <div class="spine" data-index="2" style="--flex: 0.8; --bg: linear-gradient(135deg, #4a1942, #2d1b4e, #1a1a2e); --accent-color: #f06050;">
+                <div class="spine-image" style="background:linear-gradient(135deg, #4a1942, #2d1b4e, #1a1a2e)"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">Swap</div>
+                <div class="spine-info"><p>Select any two tiles and swap their positions to rebuild the image.</p></div>
+                <div class="spine-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M8 10h6M18 10h6M8 22h6M18 22h6" stroke-linecap="round" stroke-width="2"></path><path d="M14 10l4 12M18 10l-4 12" stroke-dasharray="2 2"></path><circle cx="11" cy="10" r="3"></circle><circle cx="21" cy="22" r="3"></circle></svg></div>
+                <div class="spine-action"><span>Swap now</span></div>
+              </div>
+
+              <div class="spine" data-index="3" style="--flex: 0.8; --bg: linear-gradient(135deg, #1b2838, #16213e, #0f3460); --accent-color: #a060f0;">
+                <div class="spine-image" style="background:linear-gradient(135deg, #1b2838, #16213e, #0f3460)"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">Polygram</div>
+                <div class="spine-info"><p>Rotate and place geometric polygon shards to piece the image together.</p></div>
+                <div class="spine-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><polygon points="16,3 28,11 24,25 8,25 4,11"></polygon><polygon points="16,8 23,13 21,22 11,22 9,13"></polygon></svg></div>
+                <div class="spine-action"><span>Build now</span></div>
+              </div>
+
+              <div class="spine" data-index="4" style="--flex: 0.8; --bg: linear-gradient(135deg, #3d1f1f, #1a1a2e, #2d1b4e); --accent-color: #e070a0;">
+                <div class="spine-image" style="background:linear-gradient(135deg, #3d1f1f, #1a1a2e, #2d1b4e)"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">Paint</div>
+                <div class="spine-info"><p>Fill the numbered grid with matching colors to reveal the hidden image.</p></div>
+                <div class="spine-icon"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="7" height="7" rx="1"></rect><rect x="13" y="4" width="7" height="7" rx="1"></rect><rect x="22" y="4" width="7" height="7" rx="1"></rect><rect x="4" y="13" width="7" height="7" rx="1"></rect><rect x="13" y="13" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"></rect><rect x="22" y="13" width="7" height="7" rx="1"></rect></svg></div>
+                <div class="spine-action"><span>Paint now</span></div>
+              </div>
+
+            <div class="spine spine-nav" data-index="nav" style="--flex: 0.6;">
+              <div class="spine-nav-label">More</div>
+              <div class="spine-nav-content">
+                <div class="spine-nav-brand">Xefig</div>
+                <button class="spine-nav-btn">Archive</button>
+                <button class="spine-nav-btn">Settings</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+
+  <script>
+    const DEVICES = {
+      iphone12:    { w: 844, h: 390, sai: { top: 0, bottom: 21, left: 47, right: 47 }, saiP: { top: 47, bottom: 34, left: 0, right: 0 }, notch: 47 },
+      iphone15:    { w: 852, h: 393, sai: { top: 0, bottom: 21, left: 59, right: 59 }, saiP: { top: 59, bottom: 34, left: 0, right: 0 }, notch: 59 },
+      iphone15max: { w: 932, h: 430, sai: { top: 0, bottom: 21, left: 59, right: 59 }, saiP: { top: 59, bottom: 34, left: 0, right: 0 }, notch: 59 },
+      iphoneSE:    { w: 667, h: 375, sai: { top: 0, bottom: 0, left: 0, right: 0 },     saiP: { top: 20, bottom: 0, left: 0, right: 0 }, notch: 0 },
+    }
+
+    const MODES = [
+      { id: 'jigsaw',  name: 'Jigsaw',    action: 'Solve now',  accent: '#f0c040', desc: 'Drag and place interlocking pieces to reconstruct the full image.', bg: 'linear-gradient(135deg, #2d1b69, #1a1a2e, #16213e)',
+        icon: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M14 4h-8a2 2 0 00-2 2v8m0 0c1.5 0 3 1 3 3s-1.5 3-3 3v6a2 2 0 002 2h6c0-1.5 1-3 3-3s3 1.5 3 3h6a2 2 0 002-2v-6c1.5 0 3-1 3-3s-1.5-3-3-3V6a2 2 0 00-2-2h-6c0 1.5-1 3-3 3s-3-1.5-3-3z"/></svg>' },
+      { id: 'sliding', name: 'Slider',    action: 'Slide now',  accent: '#40d0f0', desc: 'Slide tiles into the empty space to reorder the scrambled image.', bg: 'linear-gradient(135deg, #1a3a2a, #0f2027, #203a43)',
+        icon: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="10" height="10" rx="1"/><rect x="18" y="4" width="10" height="10" rx="1"/><rect x="4" y="18" width="10" height="10" rx="1"/><path d="M22 20v8M18 24h8" stroke-linecap="round"/></svg>' },
+      { id: 'swap',    name: 'Swap',      action: 'Swap now',   accent: '#f06050', desc: 'Select any two tiles and swap their positions to rebuild the image.', bg: 'linear-gradient(135deg, #4a1942, #2d1b4e, #1a1a2e)',
+        icon: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M8 10h6M18 10h6M8 22h6M18 22h6" stroke-linecap="round" stroke-width="2"/><path d="M14 10l4 12M18 10l-4 12" stroke-dasharray="2 2"/><circle cx="11" cy="10" r="3"/><circle cx="21" cy="22" r="3"/></svg>' },
+      { id: 'polygram', name: 'Polygram', action: 'Build now',  accent: '#a060f0', desc: 'Rotate and place geometric polygon shards to piece the image together.', bg: 'linear-gradient(135deg, #1b2838, #16213e, #0f3460)',
+        icon: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><polygon points="16,3 28,11 24,25 8,25 4,11"/><polygon points="16,8 23,13 21,22 11,22 9,13"/></svg>' },
+      { id: 'diamond', name: 'Paint',     action: 'Paint now',  accent: '#e070a0', desc: 'Fill the numbered grid with matching colors to reveal the hidden image.', bg: 'linear-gradient(135deg, #3d1f1f, #1a1a2e, #2d1b4e)',
+        icon: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="22" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/><rect x="22" y="13" width="7" height="7" rx="1"/></svg>' },
+    ]
+
+    let currentOrientation = 'landscape'
+    let currentDevice = 'iphone12'
+    let activeSpine = 0
+
+    function buildMenu() {
+      const vp = document.getElementById('viewport')
+
+      vp.innerHTML = `
+        <div class="shelf">
+          <div class="shelf-container" id="shelfContainer">
+            ${MODES.map((m, i) => `
+              <div class="spine${i === activeSpine ? ' active' : ''}" data-index="${i}" style="--flex:${i === activeSpine ? 3 : 0.8}; --bg:${m.bg}; --accent-color:${m.accent}">
+                <div class="spine-image" style="background:${m.bg}"></div>
+                <div class="spine-overlay"></div>
+                <div class="spine-accent"></div>
+                <div class="spine-title">${m.name}</div>
+                <div class="spine-info"><p>${m.desc}</p></div>
+                <div class="spine-icon">${m.icon}</div>
+                <div class="spine-action"><span>${m.action}</span></div>
+              </div>
+            `).join('')}
+            <div class="spine spine-nav" data-index="nav" style="--flex:${activeSpine === -1 ? 2.5 : 0.6}">
+              <div class="spine-nav-label">More</div>
+              <div class="spine-nav-content">
+                <div class="spine-nav-brand">Xefig</div>
+                <button class="spine-nav-btn">Archive</button>
+                <button class="spine-nav-btn">Settings</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+
+      // Bind spine clicks
+      vp.querySelectorAll('.spine').forEach(spine => {
+        spine.addEventListener('click', () => {
+          const idx = spine.dataset.index
+          if (idx === 'nav') {
+            activeSpine = -1
+          } else {
+            activeSpine = Number(idx)
+          }
+          vp.querySelectorAll('.spine').forEach(s => {
+            const si = s.dataset.index
+            if (si === 'nav') {
+              const navActive = activeSpine === -1
+              s.classList.toggle('active', navActive)
+              s.style.setProperty('--flex', navActive ? 2.5 : 0.6)
+            } else {
+              const isActive = Number(si) === activeSpine
+              s.classList.toggle('active', isActive)
+              s.style.setProperty('--flex', isActive ? 3 : 0.8)
+            }
+          })
+        })
+      })
+    }
+
+    function updateDevice() {
+      const dev = DEVICES[currentDevice]
+      const frame = document.getElementById('device')
+      const isLandscape = currentOrientation === 'landscape'
+
+      frame.className = 'device-frame ' + currentOrientation
+      frame.style.width = (isLandscape ? dev.w : dev.h) + 'px'
+      frame.style.height = (isLandscape ? dev.h : dev.w) + 'px'
+
+      const notchEl = frame.querySelector('.notch')
+      notchEl.style.display = dev.notch === 0 ? 'none' : 'block'
+      frame.style.setProperty('--notch-depth', dev.notch + 'px')
+
+      const sai = isLandscape ? dev.sai : dev.saiP
+      frame.style.setProperty('--sim-sai-top', sai.top + 'px')
+      frame.style.setProperty('--sim-sai-bottom', sai.bottom + 'px')
+      frame.style.setProperty('--sim-sai-left', sai.left + 'px')
+      frame.style.setProperty('--sim-sai-right', sai.right + 'px')
+
+      buildMenu()
+
+      // Compute collapsed spine center as a fixed pixel value so titles/icons
+      // don't jump when the flex transition changes the spine width.
+      requestAnimationFrame(() => {
+        const container = document.getElementById('shelfContainer')
+        const collapsed = container.querySelector('.spine:not(.active):not(.spine-nav)')
+        const active = container.querySelector('.spine.active:not(.spine-nav)')
+        if (collapsed) {
+          const center = collapsed.offsetWidth / 2
+          container.style.setProperty('--spine-center', center + 'px')
+        }
+        if (active) {
+          // Lock info width to the active spine's available space so text
+          // wraps correctly when expanded but doesn't reflow during collapse
+          const infoWidth = active.offsetWidth - collapsed.offsetWidth / 2 - 19 // 1.2rem right padding
+          container.style.setProperty('--info-width', infoWidth + 'px')
+        }
+      })
+    }
+
+    function setOrientation(o) {
+      currentOrientation = o
+      document.getElementById('btn-landscape').classList.toggle('active', o === 'landscape')
+      document.getElementById('btn-portrait').classList.toggle('active', o === 'portrait')
+      updateDevice()
+    }
+
+    function toggleSAI(on) {
+      document.getElementById('sai-outline').style.display = on ? 'block' : 'none'
+      document.getElementById('btn-sai-on').classList.toggle('active', on)
+      document.getElementById('btn-sai-off').classList.toggle('active', !on)
+    }
+
+    document.getElementById('device-select').addEventListener('change', (e) => {
+      currentDevice = e.target.value
+      updateDevice()
+    })
+
+    updateDevice()
+  </script>
+
+
+</body></html>

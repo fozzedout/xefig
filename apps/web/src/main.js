@@ -666,6 +666,22 @@ const SLICE_ICONS = {
   [GAME_MODE_DIAMOND]: '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="22" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/><rect x="22" y="13" width="7" height="7" rx="1"/><rect x="4" y="22" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/><rect x="13" y="22" width="7" height="7" rx="1"/><rect x="22" y="22" width="7" height="7" rx="1" fill="currentColor" opacity="0.3"/></svg>',
 }
 
+const SPINE_LABELS = {
+  [GAME_MODE_JIGSAW]: 'Jigsaw',
+  [GAME_MODE_SLIDING]: 'Slider',
+  [GAME_MODE_SWAP]: 'Swap',
+  [GAME_MODE_POLYGRAM]: 'Polygram',
+  [GAME_MODE_DIAMOND]: 'Paint',
+}
+
+const SPINE_ACTIONS = {
+  [GAME_MODE_JIGSAW]: 'Solve now',
+  [GAME_MODE_SLIDING]: 'Slide now',
+  [GAME_MODE_SWAP]: 'Swap now',
+  [GAME_MODE_POLYGRAM]: 'Build now',
+  [GAME_MODE_DIAMOND]: 'Paint now',
+}
+
 const SLICE_DESCRIPTIONS = {
   [GAME_MODE_JIGSAW]: 'Drag and place interlocking pieces to reconstruct the full image. Start with edges and corners, then work inward.',
   [GAME_MODE_SLIDING]: 'Slide tiles into the empty space to reorder the scrambled image. Deceptively simple, maddeningly strategic.',
@@ -721,6 +737,21 @@ function bindLandscapeNavEvents(pageEl, container) {
   container.addEventListener('scroll', updateCarouselDots, { passive: true })
 }
 
+function computeSliceCenter(container) {
+  requestAnimationFrame(() => {
+    const collapsed = container.querySelector('.slice:not(.active)')
+    const active = container.querySelector('.slice.active')
+    if (collapsed) {
+      const center = collapsed.offsetWidth / 2
+      container.style.setProperty('--slice-center', center + 'px')
+    }
+    if (active && collapsed) {
+      const infoWidth = active.offsetWidth - collapsed.offsetWidth / 2 - 19
+      container.style.setProperty('--info-width', infoWidth + 'px')
+    }
+  })
+}
+
 function renderLauncher() {
   destroyPuzzle()
 
@@ -755,6 +786,10 @@ function renderLauncher() {
             <img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
             <div class="slice-overlay"></div>
             <div class="slice-icon">${SLICE_ICONS[mode]}</div>
+            <div class="slice-accent" style="background:${ACCENT_MAP_FULL[mode]}"></div>
+            <div class="slice-title">${SPINE_LABELS[mode]}</div>
+            <div class="slice-info"><p>${SLICE_DESCRIPTIONS[mode]}</p></div>
+            <div class="slice-action"><span>${hasSave ? 'Resume' : SPINE_ACTIONS[mode]}</span></div>
             <div class="slice-bar">
               <span class="bar-title">${title}</span>
               <div class="bar-icon info-btn" title="More info">
@@ -915,6 +950,7 @@ function renderLauncher() {
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
       bindLandscapeNavEvents(pageEl, container)
+      computeSliceCenter(container)
 
       // Progressive image upgrade: swap thumbnails for full-size images once loaded
       const sliceImages = container.querySelectorAll('.slice-image')
