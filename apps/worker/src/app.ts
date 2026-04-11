@@ -1122,9 +1122,9 @@ export function createApp() {
   })
 
   app.post('/api/sync/pull', async (c) => {
-    let body: { playerGuid?: string; sinceCursor?: number; limit?: number } | null = null
+    let body: { playerGuid?: string; revision?: number } | null = null
     try {
-      body = (await c.req.json()) as { playerGuid?: string }
+      body = (await c.req.json()) as { playerGuid?: string; revision?: number }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
     }
@@ -1135,9 +1135,8 @@ export function createApp() {
     }
 
     try {
-      const sinceCursor = Math.max(0, Number(body?.sinceCursor) || 0)
-      const limit = Math.max(1, Math.min(250, Number(body?.limit) || 100))
-      const result = await pullProfile(c.env.DB, playerGuid, sinceCursor, limit)
+      const knownRevision = Math.max(0, Number(body?.revision) || 0)
+      const result = await pullProfile(c.env.DB, playerGuid, knownRevision)
       if (!result) {
         return c.json({ notFound: true })
       }

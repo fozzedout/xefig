@@ -1,6 +1,5 @@
 const SHARE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const SHARE_CODE_LENGTH = 6
-const DEFAULT_PULL_LIMIT = 100
 
 let tablesReady = false
 
@@ -34,27 +33,11 @@ export type DeletedActiveRunEntry = {
   deletedAt: string
 }
 
-type ChangeEntityType = 'settings' | 'completed' | 'active' | 'active_deleted'
-
-type ChangeRow = {
-  id: number
-  revision: number
-  entity_type: ChangeEntityType
-  entity_key: string
-  payload: string | null
-}
-
 type ProfileRow = {
   profile_name: string
   board_color_index: number
   revision: number
   updated_at: string
-}
-
-type ChangeRecord = {
-  entityType: ChangeEntityType
-  entityKey: string
-  payload: string | null
 }
 
 export type AssembledProfile = {
@@ -63,7 +46,6 @@ export type AssembledProfile = {
   activeRuns: Record<string, { puzzleDate: string; gameMode: string; difficulty: string | null; imageUrl: string | null; elapsedActiveMs: number; puzzleState: unknown; updatedAt: string }>
   updatedAt: string
   revision: number
-  cursor: number
 }
 
 export type PushInput = {
@@ -76,18 +58,8 @@ export type PushInput = {
 }
 
 export type PullResult =
+  | { noChanges: true; revision: number }
   | ({ fullSync: true } & AssembledProfile)
-  | {
-      fullSync?: false
-      revision: number
-      updatedAt: string
-      cursor: number
-      hasMore: boolean
-      settings?: SyncSettings
-      completedRuns: CompletedRunEntry[]
-      activeRuns: ActiveRunEntry[]
-      deletedActiveRuns: DeletedActiveRunEntry[]
-    }
 
 function makeEntityKey(puzzleDate: string, gameMode: string): string {
   return `${puzzleDate}:${gameMode}`
@@ -140,47 +112,6 @@ export function mergeCompletedEntry(
   }
 }
 
-export function collapseChanges(rows: ChangeRow[]): {
-  settings?: SyncSettings
-  completedRuns: CompletedRunEntry[]
-  activeRuns: ActiveRunEntry[]
-  deletedActiveRuns: DeletedActiveRunEntry[]
-} {
-  const settings = new Map<string, SyncSettings>()
-  const completedRuns = new Map<string, CompletedRunEntry>()
-  const activeRuns = new Map<string, ActiveRunEntry>()
-  const deletedActiveRuns = new Map<string, DeletedActiveRunEntry>()
-
-  for (const row of rows) {
-    if (row.entity_type === 'settings') {
-      if (!row.payload) continue
-      settings.set(row.entity_key, JSON.parse(row.payload) as SyncSettings)
-      continue
-    }
-    if (row.entity_type === 'completed') {
-      if (!row.payload) continue
-      completedRuns.set(row.entity_key, JSON.parse(row.payload) as CompletedRunEntry)
-      continue
-    }
-    if (row.entity_type === 'active') {
-      if (!row.payload) continue
-      activeRuns.set(row.entity_key, JSON.parse(row.payload) as ActiveRunEntry)
-      deletedActiveRuns.delete(row.entity_key)
-      continue
-    }
-    if (!row.payload) continue
-    deletedActiveRuns.set(row.entity_key, JSON.parse(row.payload) as DeletedActiveRunEntry)
-    activeRuns.delete(row.entity_key)
-  }
-
-  return {
-    settings: settings.get('settings'),
-    completedRuns: Array.from(completedRuns.values()),
-    activeRuns: Array.from(activeRuns.values()),
-    deletedActiveRuns: Array.from(deletedActiveRuns.values()),
-  }
-}
-
 export async function ensureSyncTables(db: D1Database): Promise<void> {
   if (tablesReady) return
 
@@ -194,10 +125,6 @@ export async function ensureSyncTables(db: D1Database): Promise<void> {
     db.prepare(
       `CREATE TABLE IF NOT EXISTS player_active_runs (player_guid TEXT NOT NULL, puzzle_date TEXT NOT NULL, game_mode TEXT NOT NULL, run_state TEXT NOT NULL DEFAULT '{}', elapsed_ms INTEGER NOT NULL DEFAULT 0, difficulty TEXT, image_url TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (player_guid, puzzle_date, game_mode))`,
     ),
-    db.prepare(
-      `CREATE TABLE IF NOT EXISTS player_sync_changes (id INTEGER PRIMARY KEY AUTOINCREMENT, player_guid TEXT NOT NULL, revision INTEGER NOT NULL, entity_type TEXT NOT NULL CHECK (entity_type IN ('settings', 'completed', 'active', 'active_deleted')), entity_key TEXT NOT NULL, payload TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-    ),
-    db.prepare(`CREATE INDEX IF NOT EXISTS idx_player_sync_changes_guid_id ON player_sync_changes (player_guid, id)`),
   ])
 
   try {
@@ -328,14 +255,6 @@ function isValidShareCode(code: unknown): code is string {
   )
 }
 
-async function getProfileCursor(db: D1Database, playerGuid: string): Promise<number> {
-  const row = await db
-    .prepare('SELECT COALESCE(MAX(id), 0) AS cursor FROM player_sync_changes WHERE player_guid = ?')
-    .bind(playerGuid)
-    .first<{ cursor: number | string }>()
-  return Number(row?.cursor) || 0
-}
-
 async function assembleProfile(db: D1Database, playerGuid: string): Promise<AssembledProfile | null> {
   const [profileResult, completedResult, activeResult] = await db.batch([
     db.prepare('SELECT profile_name, board_color_index, revision, updated_at FROM player_profiles WHERE player_guid = ?').bind(playerGuid),
@@ -377,42 +296,13 @@ async function assembleProfile(db: D1Database, playerGuid: string): Promise<Asse
     activeRuns,
     updatedAt: profile.updated_at,
     revision: Number(profile.revision) || 0,
-    cursor: await getProfileCursor(db, playerGuid),
   }
-}
-
-async function recordChanges(
-  db: D1Database,
-  playerGuid: string,
-  revision: number,
-  changes: ChangeRecord[],
-): Promise<number> {
-  if (changes.length === 0) {
-    return getProfileCursor(db, playerGuid)
-  }
-
-  const stmts = changes.map((change) =>
-    db
-      .prepare('INSERT INTO player_sync_changes (player_guid, revision, entity_type, entity_key, payload) VALUES (?, ?, ?, ?, ?)')
-      .bind(playerGuid, revision, change.entityType, change.entityKey, change.payload),
-  )
-
-  for (let i = 0; i < stmts.length; i += 50) {
-    await db.batch(stmts.slice(i, i + 50))
-  }
-
-  const row = await db
-    .prepare('SELECT COALESCE(MAX(id), 0) AS cursor FROM player_sync_changes WHERE player_guid = ? AND revision = ?')
-    .bind(playerGuid, revision)
-    .first<{ cursor: number | string }>()
-
-  return Number(row?.cursor) || 0
 }
 
 export async function registerProfile(
   db: D1Database,
   playerGuid: string,
-): Promise<{ shareCode: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number; cursor: number }> {
+): Promise<{ shareCode: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number }> {
   await ensureSyncTables(db)
 
   if (!isValidPlayerGuid(playerGuid)) {
@@ -433,7 +323,6 @@ export async function registerProfile(
       activeRuns: assembled?.activeRuns || {},
       updatedAt: assembled?.updatedAt || '',
       revision: assembled?.revision || 0,
-      cursor: assembled?.cursor || 0,
     }
   }
 
@@ -454,7 +343,6 @@ export async function registerProfile(
         activeRuns: {},
         updatedAt: result?.updated_at ?? '',
         revision: Number(result?.revision) || 0,
-        cursor: 0,
       }
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : ''
@@ -469,7 +357,7 @@ export async function registerProfile(
 export async function linkProfile(
   db: D1Database,
   shareCode: string,
-): Promise<{ playerGuid: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number; cursor: number } | null> {
+): Promise<{ playerGuid: string; settings: object; completedRuns: object; activeRuns: object; updatedAt: string; revision: number } | null> {
   await ensureSyncTables(db)
 
   if (!isValidShareCode(shareCode)) return null
@@ -491,7 +379,6 @@ export async function linkProfile(
     activeRuns: assembled.activeRuns,
     updatedAt: assembled.updatedAt,
     revision: assembled.revision,
-    cursor: assembled.cursor,
   }
 }
 
@@ -499,7 +386,7 @@ export async function pushProfile(
   db: D1Database,
   input: PushInput,
 ): Promise<
-  | { ok: true; updatedAt: string; revision: number; cursor: number }
+  | { ok: true; updatedAt: string; revision: number }
   | { conflict: true; currentRevision: number }
   | { notFound: true }
 > {
@@ -534,7 +421,6 @@ export async function pushProfile(
       ok: true,
       updatedAt: existing.updated_at,
       revision: currentRevision,
-      cursor: await getProfileCursor(db, input.playerGuid),
     }
   }
 
@@ -562,20 +448,10 @@ export async function pushProfile(
   }
 
   const stmts: D1PreparedStatement[] = []
-  const changes: ChangeRecord[] = []
-
-  if (hasSettings) {
-    changes.push({
-      entityType: 'settings',
-      entityKey: 'settings',
-      payload: JSON.stringify({ profileName, boardColorIndex }),
-    })
-  }
 
   const completedKeys = new Set<string>()
   for (const entry of completedRuns) {
-    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
-    completedKeys.add(key)
+    completedKeys.add(makeEntityKey(entry.puzzleDate, entry.gameMode))
     stmts.push(
       db
         .prepare(
@@ -596,32 +472,10 @@ export async function pushProfile(
         .prepare('DELETE FROM player_active_runs WHERE player_guid = ? AND puzzle_date = ? AND game_mode = ?')
         .bind(input.playerGuid, entry.puzzleDate, entry.gameMode),
     )
-    changes.push({
-      entityType: 'completed',
-      entityKey: key,
-      payload: JSON.stringify({
-        puzzleDate: entry.puzzleDate,
-        gameMode: entry.gameMode,
-        difficulty: entry.difficulty || null,
-        elapsedActiveMs: entry.elapsedActiveMs,
-        bestElapsedMs: entry.bestElapsedMs,
-        completedAt: entry.completedAt,
-      }),
-    })
-    changes.push({
-      entityType: 'active_deleted',
-      entityKey: key,
-      payload: JSON.stringify({
-        puzzleDate: entry.puzzleDate,
-        gameMode: entry.gameMode,
-        deletedAt: entry.completedAt,
-      }),
-    })
   }
 
   for (const entry of activeRuns) {
-    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
-    if (completedKeys.has(key)) continue
+    if (completedKeys.has(makeEntityKey(entry.puzzleDate, entry.gameMode))) continue
     stmts.push(
       db
         .prepare(
@@ -638,59 +492,32 @@ export async function pushProfile(
           entry.updatedAt,
         ),
     )
-    changes.push({
-      entityType: 'active',
-      entityKey: key,
-      payload: JSON.stringify({
-        puzzleDate: entry.puzzleDate,
-        gameMode: entry.gameMode,
-        difficulty: entry.difficulty || null,
-        imageUrl: entry.imageUrl || null,
-        elapsedActiveMs: entry.elapsedActiveMs,
-        puzzleState: entry.puzzleState || null,
-        updatedAt: entry.updatedAt,
-      }),
-    })
   }
 
   for (const entry of deletedActiveRuns) {
-    const key = makeEntityKey(entry.puzzleDate, entry.gameMode)
-    if (completedKeys.has(key)) continue
+    if (completedKeys.has(makeEntityKey(entry.puzzleDate, entry.gameMode))) continue
     stmts.push(
       db
         .prepare('DELETE FROM player_active_runs WHERE player_guid = ? AND puzzle_date = ? AND game_mode = ?')
         .bind(input.playerGuid, entry.puzzleDate, entry.gameMode),
     )
-    changes.push({
-      entityType: 'active_deleted',
-      entityKey: key,
-      payload: JSON.stringify({
-        puzzleDate: entry.puzzleDate,
-        gameMode: entry.gameMode,
-        deletedAt: entry.deletedAt,
-      }),
-    })
   }
 
   for (let i = 0; i < stmts.length; i += 50) {
     await db.batch(stmts.slice(i, i + 50))
   }
 
-  const cursor = await recordChanges(db, input.playerGuid, nextRevision, changes)
-
   return {
     ok: true,
     updatedAt: updatedProfile.updated_at,
     revision: Number(updatedProfile.revision) || nextRevision,
-    cursor,
   }
 }
 
 export async function pullProfile(
   db: D1Database,
   playerGuid: string,
-  sinceCursor = 0,
-  limit = DEFAULT_PULL_LIMIT,
+  knownRevision = 0,
 ): Promise<PullResult | null> {
   await ensureSyncTables(db)
 
@@ -699,51 +526,18 @@ export async function pullProfile(
   }
 
   const profile = await db
-    .prepare('SELECT profile_name, board_color_index, revision, updated_at FROM player_profiles WHERE player_guid = ?')
+    .prepare('SELECT revision FROM player_profiles WHERE player_guid = ?')
     .bind(playerGuid)
-    .first<ProfileRow>()
+    .first<{ revision: number | string }>()
 
   if (!profile) return null
 
-  const normalizedCursor = Math.max(0, Number(sinceCursor) || 0)
-  if (normalizedCursor <= 0) {
-    const assembled = await assembleProfile(db, playerGuid)
-    if (!assembled) return null
-    return { ...assembled, fullSync: true }
+  const currentRevision = Number(profile.revision) || 0
+  if (knownRevision > 0 && knownRevision >= currentRevision) {
+    return { noChanges: true, revision: currentRevision }
   }
 
-  const latestCursor = await getProfileCursor(db, playerGuid)
-  if (latestCursor <= normalizedCursor) {
-    return {
-      revision: Number(profile.revision) || 0,
-      updatedAt: profile.updated_at,
-      cursor: normalizedCursor,
-      hasMore: false,
-      completedRuns: [],
-      activeRuns: [],
-      deletedActiveRuns: [],
-    }
-  }
-
-  const rowsResult = await db
-    .prepare(
-      'SELECT id, revision, entity_type, entity_key, payload FROM player_sync_changes WHERE player_guid = ? AND id > ? ORDER BY id ASC LIMIT ?',
-    )
-    .bind(playerGuid, normalizedCursor, Math.max(1, Math.min(limit, 250)))
-    .all<ChangeRow>()
-
-  const rows = (rowsResult.results || []) as ChangeRow[]
-  const lastCursor = rows.length > 0 ? Number(rows[rows.length - 1].id) || normalizedCursor : normalizedCursor
-  const collapsed = collapseChanges(rows)
-
-  return {
-    revision: Number(profile.revision) || 0,
-    updatedAt: profile.updated_at,
-    cursor: lastCursor,
-    hasMore: latestCursor > lastCursor,
-    settings: collapsed.settings,
-    completedRuns: collapsed.completedRuns,
-    activeRuns: collapsed.activeRuns,
-    deletedActiveRuns: collapsed.deletedActiveRuns,
-  }
+  const assembled = await assembleProfile(db, playerGuid)
+  if (!assembled) return null
+  return { ...assembled, fullSync: true }
 }

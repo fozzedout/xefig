@@ -1,6 +1,5 @@
 const SYNC_SHARE_CODE_KEY = 'xefig:sync:share-code:v1'
 const SYNC_REVISION_KEY = 'xefig:sync:revision:v2'
-const SYNC_CURSOR_KEY = 'xefig:sync:cursor:v2'
 const SYNC_ENABLED_KEY = 'xefig:sync:enabled:v1'
 const SYNC_JOURNAL_KEY = 'xefig:sync:journal:v2'
 const PROFILE_NAME_KEY = 'xefig:profile-name:v1'
@@ -9,7 +8,6 @@ const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
 const ACTIVE_RUN_PREFIX = 'xefig:run:'
 
-const DEFAULT_PULL_LIMIT = 100
 const DEFAULT_PUSH_LIMIT = 24
 
 let syncEnabled = false
@@ -148,14 +146,6 @@ function getSyncRevision() {
 
 function setSyncRevision(revision) {
   localStorage.setItem(SYNC_REVISION_KEY, String(Math.max(0, Number(revision) || 0)))
-}
-
-function getSyncCursor() {
-  return Math.max(0, Number(localStorage.getItem(SYNC_CURSOR_KEY)) || 0)
-}
-
-function setSyncCursor(cursor) {
-  localStorage.setItem(SYNC_CURSOR_KEY, String(Math.max(0, Number(cursor) || 0)))
 }
 
 function getLocalSettings() {
@@ -506,20 +496,6 @@ function applyFullSync(data) {
   applyActiveEntries(remoteActiveEntries, { preserveLocalOnly: true })
 }
 
-function applyDeltaSync(data) {
-  if (!data || typeof data !== 'object') return
-  if (data.settings) mergeRemoteSettings(data.settings)
-  if (Array.isArray(data.completedRuns) && data.completedRuns.length > 0) {
-    applyCompletedEntries(data.completedRuns)
-  }
-  if (Array.isArray(data.activeRuns) && data.activeRuns.length > 0) {
-    applyActiveEntries(data.activeRuns)
-  }
-  if (Array.isArray(data.deletedActiveRuns) && data.deletedActiveRuns.length > 0) {
-    applyDeletedActiveEntries(data.deletedActiveRuns)
-  }
-}
-
 function buildPushBatch(limit = DEFAULT_PUSH_LIMIT) {
   const batch = {
     baseRevision: getSyncRevision(),
@@ -649,38 +625,30 @@ function acknowledgeBatch(ack) {
   persistJournal()
 }
 
-async function pullFromServer(limit = DEFAULT_PULL_LIMIT) {
+async function pullFromServer() {
   const guid = getPlayerGuid()
   if (!guid) return null
 
   const result = await apiPost('/api/sync/pull', {
     playerGuid: guid,
-    sinceCursor: getSyncCursor(),
-    limit,
+    revision: getSyncRevision(),
   })
   if (result.notFound) return null
   return result
 }
 
 async function pullAllRemoteChanges() {
-  while (true) {
-    const result = await pullFromServer()
-    if (!result) return
+  const result = await pullFromServer()
+  if (!result) return
 
-    if (result.fullSync) {
-      applyFullSync(result)
-      setSyncRevision(result.revision)
-      setSyncCursor(result.cursor)
-      return
-    }
-
-    if (result.settings || result.completedRuns?.length || result.activeRuns?.length || result.deletedActiveRuns?.length) {
-      applyDeltaSync(result)
-    }
-
+  if (result.noChanges) {
     if (typeof result.revision === 'number') setSyncRevision(result.revision)
-    if (typeof result.cursor === 'number') setSyncCursor(result.cursor)
-    if (!result.hasMore) return
+    return
+  }
+
+  if (result.fullSync) {
+    applyFullSync(result)
+    if (typeof result.revision === 'number') setSyncRevision(result.revision)
   }
 }
 
@@ -709,7 +677,6 @@ async function pushPendingBatches() {
     }
 
     if (typeof result.revision === 'number') setSyncRevision(result.revision)
-    if (typeof result.cursor === 'number') setSyncCursor(result.cursor)
     acknowledgeBatch(payload.ack)
   }
 }
@@ -827,7 +794,6 @@ export async function enableSync(playerGuid) {
 
   applyFullSync(result)
   setSyncRevision(result.revision || 0)
-  setSyncCursor(result.cursor || 0)
   await syncNow()
   startSyncTimer()
 
@@ -846,7 +812,6 @@ export async function linkSync(shareCode) {
 
   applyFullSync(result)
   setSyncRevision(result.revision || 0)
-  setSyncCursor(result.cursor || 0)
 
   await syncNow()
   startSyncTimer()
@@ -862,7 +827,6 @@ export function disableSync() {
   localStorage.removeItem(SYNC_ENABLED_KEY)
   localStorage.removeItem(SYNC_SHARE_CODE_KEY)
   localStorage.removeItem(SYNC_REVISION_KEY)
-  localStorage.removeItem(SYNC_CURSOR_KEY)
 }
 
 export function startSyncTimer() {
