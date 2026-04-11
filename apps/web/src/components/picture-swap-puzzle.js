@@ -1,3 +1,5 @@
+import { loadImage, releaseLoadedImage } from './image-loader.js'
+
 const MIN_COLS = 4
 const MIN_ROWS = 3
 const TARGET_TILE_COUNTS = { easy: 24, medium: 42, hard: 72 }
@@ -19,6 +21,7 @@ export class PictureSwapPuzzle {
 
     this.completed = false
     this.referenceVisible = false
+    this.displayImageUrl = imageUrl
     this.selectedTileId = null
 
     this.cols = 0
@@ -39,6 +42,7 @@ export class PictureSwapPuzzle {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
+    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.calculateGrid()
     this.totalTiles = this.cols * this.rows
     this.startedAtMs = Date.now()
@@ -68,6 +72,9 @@ export class PictureSwapPuzzle {
     this.tiles = []
     this.slots = []
     this.selectedTileId = null
+    releaseLoadedImage(this.image)
+    this.image = null
+    this.displayImageUrl = this.imageUrl
     this.container.innerHTML = ''
   }
 
@@ -109,7 +116,7 @@ export class PictureSwapPuzzle {
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'picture-swap-reference'
-    this.referenceImage.src = this.imageUrl
+    this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
 
     this.tileLayer = document.createElement('div')
@@ -225,7 +232,7 @@ export class PictureSwapPuzzle {
 
     tile.element.style.width = `${this.tileWidth}px`
     tile.element.style.height = `${this.tileHeight}px`
-    tile.element.style.backgroundImage = `url("${this.imageUrl}")`
+    tile.element.style.backgroundImage = `url("${this.displayImageUrl}")`
     tile.element.style.backgroundSize = cover.bgSize
     tile.element.style.backgroundPosition = `${cover.offsetX - col * this.tileWidth}px ${cover.offsetY - row * this.tileHeight}px`
   }
@@ -589,16 +596,6 @@ export class PictureSwapPuzzle {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
-    image.src = url
-  })
 }
 
 function isValidPermutation(values, maxValue) {

@@ -203,3 +203,35 @@ test('diamond board can zoom back out to a fully visible fitted view', async ({ 
   expect(Math.abs(metrics.leftGap - metrics.rightGap)).toBeLessThanOrEqual(2)
   expect(Math.abs(metrics.topGap - metrics.bottomGap)).toBeLessThanOrEqual(2)
 })
+
+test('diamond canvas redraws after the page is shown again', async ({ page }) => {
+  await openDiamondGame(page)
+
+  const metrics = await readDiamondCanvasMetrics(page)
+  expect(metrics).not.toBeNull()
+
+  const alphaBefore = await page.evaluate(() => {
+    const canvas = document.querySelector('.diamond-canvas')
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return null
+    return ctx.getImageData(10, 10, 1, 1).data[3]
+  })
+  expect(alphaBefore).toBeGreaterThan(0)
+
+  await page.evaluate(() => {
+    const canvas = document.querySelector('.diamond-canvas')
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) throw new Error('Diamond canvas not found')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    window.dispatchEvent(new Event('pageshow'))
+  })
+
+  await expect
+    .poll(async () => page.evaluate(() => {
+      const canvas = document.querySelector('.diamond-canvas')
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) return null
+      return ctx.getImageData(10, 10, 1, 1).data[3]
+    }))
+    .toBeGreaterThan(0)
+})

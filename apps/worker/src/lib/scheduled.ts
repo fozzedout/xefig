@@ -310,7 +310,6 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
 
   // Transition to 'fetched' phase
   job.phase = 'fetched'
-  job.processedCategories = []
   await saveBatchJob(env.DB, job)
 
   return {
@@ -320,7 +319,7 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
     targetDate,
     state: 'fetched',
     submittedAt,
-    imagesProcessed: 0,
+    imagesProcessed: job.processedCategories.length,
   }
 }
 
@@ -344,6 +343,28 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
 
   const tempObject = await env.assets.get(tempKey)
   if (!tempObject) {
+    if (env.GOOGLE_AI_API_KEY) {
+      const details = await generateSingleCategoryPrompt(env.DB, category)
+      const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
+        { category, prompt: details.prompt },
+      ])
+
+      job.categories[category] = { theme: details.theme, keywords: details.keywords }
+      job.phase = 'submitted'
+      job.batchName = newBatch
+      await saveBatchJob(env.DB, job)
+
+      return {
+        found: true,
+        message: `Temp image for ${category} was missing at ${tempKey}. Submitted a regeneration batch for ${category}.`,
+        batchName: newBatch,
+        targetDate,
+        state: 'regenerating',
+        submittedAt,
+        imagesProcessed: processed.size,
+      }
+    }
+
     return {
       found: true,
       message: `Temp image for ${category} not found at ${tempKey}. Job kept for retry.`,

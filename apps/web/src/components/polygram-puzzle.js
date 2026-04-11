@@ -1,3 +1,5 @@
+import { loadImage, releaseLoadedImage } from './image-loader.js'
+
 const SHARD_COUNT_RANGES = {
   easy: [36, 42],
   medium: [52, 60],
@@ -25,6 +27,7 @@ export class PolygramPuzzle {
 
     this.completed = false
     this.referenceVisible = false
+    this.displayImageUrl = imageUrl
 
     this.shardCount = 0
     this.pieces = []
@@ -49,6 +52,7 @@ export class PolygramPuzzle {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
+    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
 
     const rng = createSeededRng(`${this.imageUrl}|${String(this.difficulty || 'medium')}`)
     this.shardCount = resolveShardCount(this.difficulty, rng)
@@ -92,6 +96,9 @@ export class PolygramPuzzle {
     this.panState = null
     this.ringDragState = null
     this.trackingPointerId = null
+    releaseLoadedImage(this.image)
+    this.image = null
+    this.displayImageUrl = this.imageUrl
     this.container.innerHTML = ''
 
     if (this.audioContext) {
@@ -119,13 +126,13 @@ export class PolygramPuzzle {
 
     this.ghostImage = document.createElement('img')
     this.ghostImage.className = 'polygram-ghost'
-    this.ghostImage.src = this.imageUrl
+    this.ghostImage.src = this.displayImageUrl
     this.ghostImage.alt = ''
     this.ghostImage.setAttribute('aria-hidden', 'true')
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'polygram-reference'
-    this.referenceImage.src = this.imageUrl
+    this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
 
     this.lockedLayer = document.createElement('div')
@@ -847,9 +854,9 @@ export class PolygramPuzzle {
     if (!this.root || !this.board || !this.tray) return
 
     const rootWidth = this.root.clientWidth || this.container.clientWidth || window.innerWidth
-    const rootHeight = this.root.clientHeight || this.container.clientHeight || window.innerHeight
+    const rootHeight = window.innerHeight || this.root.clientHeight || this.container.clientHeight
 
-    const isLandscapeDesktop = rootWidth >= 1024 && rootWidth > rootHeight
+    const isLandscapeDesktop = rootWidth > rootHeight
     const isPortrait = rootHeight > rootWidth
 
     if (isLandscapeDesktop) {
@@ -893,7 +900,7 @@ export class PolygramPuzzle {
 
       piece.element.style.width = `${piece.widthPx}px`
       piece.element.style.height = `${piece.heightPx}px`
-      piece.element.style.backgroundImage = `url("${this.imageUrl}")`
+      piece.element.style.backgroundImage = `url("${this.displayImageUrl}")`
       piece.element.style.backgroundSize = `${cover.drawWidth}px ${cover.drawHeight}px`
       piece.element.style.backgroundPosition = `${cover.offsetX - pieceBoardX}px ${cover.offsetY - pieceBoardY}px`
     }
@@ -1257,16 +1264,6 @@ function createSeededRng(seedText) {
   let h = 2166136261 >>> 0
   for (let i = 0; i < seedText.length; i += 1) { h ^= seedText.charCodeAt(i); h = Math.imul(h, 16777619) }
   return function rng() { h += 0x6d2b79f5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
-    image.src = url
-  })
 }
 
 function midpoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }

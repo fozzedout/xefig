@@ -19,6 +19,17 @@
     <meta name="generator" content="AI-generated imagery via Google Gemini" />
     <link rel="stylesheet" href="/src/style.css" />
     <script>
+      // In Safari browser mode, 100vh includes the area behind the toolbar.
+      // Set --app-height to window.innerHeight so #app fits the visible area.
+      // Skip in standalone/PWA mode where 100vh is correct.
+      (function(){
+        if(window.navigator.standalone||window.matchMedia('(display-mode: standalone)').matches)return;
+        function setH(){document.documentElement.style.setProperty('--app-height',window.innerHeight+'px')}
+        setH();
+        window.addEventListener('resize',setH);
+      })();
+    </script>
+    <script>
       // Preload the LCP image (first slice thumbnail) from localStorage cache.
       // Images change once per day so the cached URL is almost always correct.
       // Only preload the first image to avoid competing bandwidth for non-LCP images.
@@ -54,9 +65,7 @@
         return r.json();
       }).then(function(p){
         if(p&&p.date&&p.categories){
-          try{localStorage.setItem('xefig:daily-cache',JSON.stringify({
-            date:p.date,categories:p.categories
-          }))}catch(e){}
+          try{localStorage.setItem('xefig:daily-cache',JSON.stringify(p))}catch(e){}
         }
         return p;
       }).catch(function(){return null});

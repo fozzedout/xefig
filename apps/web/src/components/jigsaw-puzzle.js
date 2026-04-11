@@ -1,3 +1,5 @@
+import { loadImage, releaseLoadedImage } from './image-loader.js'
+
 const DIFFICULTY_TO_GRID = {
   easy: 8,
   medium: 10,
@@ -24,6 +26,7 @@ const BOARD_COLORS_DARK = [
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
+const MAX_SIDEBAR_BOARD_RATIO = 2.1
 
 export class JigsawPuzzle {
   constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, boardColorIndex } = {}) {
@@ -54,6 +57,7 @@ export class JigsawPuzzle {
     this.pendingLift = null
     this.referenceVisible = false
     this.audioContext = null
+    this.displayImageUrl = imageUrl
     this.boardColors = this.isDarkMode() ? BOARD_COLORS_DARK : BOARD_COLORS_LIGHT
     const initColorIdx = Number(boardColorIndex)
     this.boardColorIndex = Number.isFinite(initColorIdx) && initColorIdx >= 0 && initColorIdx < this.boardColors.length ? initColorIdx : 0
@@ -75,6 +79,7 @@ export class JigsawPuzzle {
     this.completed = false
 
     this.image = await loadImage(this.imageUrl)
+    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.gridSize = this.resolveGridSize(this.difficulty)
     this.rows = this.gridSize
     this.cols = this.gridSize
@@ -113,6 +118,9 @@ export class JigsawPuzzle {
     this.touchPoints.clear()
     this.pinchState = null
     this.panState = null
+    releaseLoadedImage(this.image)
+    this.image = null
+    this.displayImageUrl = this.imageUrl
     this.pieces = []
     this.container.innerHTML = ''
   }
@@ -157,7 +165,7 @@ export class JigsawPuzzle {
     this.pieceCanvasHeight = Math.ceil(this.pieceHeight + this.bleed * 2)
 
     const maxPieceDimension = Math.max(this.pieceCanvasWidth, this.pieceCanvasHeight)
-    const trayPieceTarget = this.isLandscapeDesktop() ? 112 : 92
+    const trayPieceTarget = this.usesSidebarTray() ? 112 : 92
     this.carouselScale = Math.min(1, trayPieceTarget / maxPieceDimension)
 
     this.root = document.createElement('section')
@@ -182,7 +190,7 @@ export class JigsawPuzzle {
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'jigsaw-reference'
-    this.referenceImage.src = this.imageUrl
+    this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
 
     this.pieceLayer = document.createElement('div')
@@ -190,6 +198,27 @@ export class JigsawPuzzle {
 
     this.carousel = document.createElement('div')
     this.carousel.className = 'jigsaw-carousel'
+
+    this.carouselTools = document.createElement('div')
+    this.carouselTools.className = 'jigsaw-tray-tools'
+
+    this.highlightTrayBtn = document.createElement('button')
+    this.highlightTrayBtn.type = 'button'
+    this.highlightTrayBtn.className = 'jigsaw-tray-tool'
+    this.highlightTrayBtn.setAttribute('aria-label', 'Highlight loose pieces')
+    this.highlightTrayBtn.title = 'Highlight loose pieces'
+    this.highlightTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>'
+    this.highlightTrayBtn.addEventListener('click', () => this.highlightLoosePieces())
+
+    this.edgesTrayBtn = document.createElement('button')
+    this.edgesTrayBtn.type = 'button'
+    this.edgesTrayBtn.className = 'jigsaw-tray-tool'
+    this.edgesTrayBtn.setAttribute('aria-label', 'Show only edge pieces in tray')
+    this.edgesTrayBtn.title = 'Show only edge pieces in tray'
+    this.edgesTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>'
+    this.edgesTrayBtn.addEventListener('click', () => this.toggleEdgesOnly())
+
+    this.carouselTools.append(this.highlightTrayBtn, this.edgesTrayBtn)
 
     this.carouselTrack = document.createElement('div')
     this.carouselTrack.className = 'jigsaw-carousel-track'
@@ -205,7 +234,7 @@ export class JigsawPuzzle {
     this.stage.append(this.stageContent)
     this.boardFrame.append(this.stage)
     this.carousel.append(this.carouselTrack)
-    this.root.append(this.svgDefs, this.boardFrame, this.carousel)
+    this.root.append(this.svgDefs, this.boardFrame, this.carousel, this.carouselTools)
     this.container.append(this.root)
 
     this.stage.addEventListener('pointerdown', this.handleStagePointerDown)
@@ -216,17 +245,21 @@ export class JigsawPuzzle {
   }
 
   calculateBoardSize() {
-    const isLandscapeDesktop = this.isLandscapeDesktop()
-    const containerWidth = this.container.clientWidth || window.innerWidth - 16
-    const containerHeight = this.container.clientHeight || window.innerHeight
-    const sideTrayReserve = isLandscapeDesktop ? 152 : 0
-    const bottomTrayReserve = isLandscapeDesktop ? 0 : window.innerWidth <= 640 ? 142 : 122
+    const usesSidebarTray = this.usesSidebarTray()
+    const viewportWidth = window.innerWidth || this.container.clientWidth || 0
+    const viewportHeight = window.innerHeight || this.container.clientHeight || 0
+    const containerWidth = Math.min(this.container.clientWidth || viewportWidth - 16, viewportWidth)
+    const containerHeight = this.container.clientHeight || viewportHeight
+    // Match the CSS grid sidebar column: minmax(118px, 10.5vw) + 0.55rem gap
+    const sideTrayReserve = usesSidebarTray ? Math.max(118, viewportWidth * 0.105) + 9 : 0
+    const bottomTrayReserve = usesSidebarTray ? 0 : viewportWidth <= 640 ? 142 : 122
 
     const availableWidth = Math.max(280, containerWidth - sideTrayReserve)
     const availableHeight = Math.max(220, containerHeight - bottomTrayReserve)
-    const maxWidth = Math.min(availableWidth, isLandscapeDesktop ? 1560 : 1100)
-    const maxHeight = Math.min(availableHeight, isLandscapeDesktop ? 980 : 760)
-    const desiredRatio = clamp(maxWidth / maxHeight, MIN_BOARD_RATIO, MAX_BOARD_RATIO)
+    const maxWidth = availableWidth
+    const maxHeight = availableHeight
+    const maxRatio = usesSidebarTray ? MAX_SIDEBAR_BOARD_RATIO : MAX_BOARD_RATIO
+    const desiredRatio = clamp(maxWidth / maxHeight, MIN_BOARD_RATIO, maxRatio)
 
     let width = maxWidth
     let height = Math.round(width / desiredRatio)
@@ -245,8 +278,8 @@ export class JigsawPuzzle {
     }
   }
 
-  isLandscapeDesktop() {
-    return window.innerWidth >= 1024 && window.innerWidth > window.innerHeight
+  usesSidebarTray() {
+    return window.innerWidth > window.innerHeight
   }
 
   calculateImageCrop(targetRatio) {
@@ -1090,7 +1123,7 @@ export class JigsawPuzzle {
   }
 
   onCarouselWheel(event) {
-    if (!this.isLandscapeDesktop() || !this.carousel) {
+    if (!this.usesSidebarTray() || !this.carousel) {
       return
     }
 
@@ -1174,6 +1207,9 @@ export class JigsawPuzzle {
       }
       piece.carouselItem.classList.toggle('is-hidden', this.edgesOnly && !this.isEdgePiece(piece))
     }
+    if (this.edgesTrayBtn) {
+      this.edgesTrayBtn.setAttribute('aria-pressed', this.edgesOnly ? 'true' : 'false')
+    }
     return this.edgesOnly
   }
 
@@ -1255,16 +1291,6 @@ function configureHiDpiCanvas(canvas, width, height, scale) {
   canvas.height = Math.round(height * internalScale)
   canvas.style.width = `${width}px`
   canvas.style.height = `${height}px`
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
-    image.src = url
-  })
 }
 
 function randomSign() {

@@ -1,3 +1,5 @@
+import { loadImage, releaseLoadedImage } from './image-loader.js'
+
 const MIN_COLS = 3
 const MIN_ROWS = 3
 const TARGET_TILE_COUNTS = { easy: 20, medium: 35, hard: 56 }
@@ -20,6 +22,7 @@ export class SlidingTilePuzzle {
 
     this.completed = false
     this.referenceVisible = false
+    this.displayImageUrl = imageUrl
 
     this.cols = 0
     this.rows = 0
@@ -34,6 +37,7 @@ export class SlidingTilePuzzle {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
+    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.calculateGrid()
     this.totalSlots = this.cols * this.rows
     this.tileCount = this.totalSlots - 1
@@ -63,6 +67,9 @@ export class SlidingTilePuzzle {
     }
 
     this.pointerStarts.clear()
+    releaseLoadedImage(this.image)
+    this.image = null
+    this.displayImageUrl = this.imageUrl
     this.tiles = []
     this.slots = []
     this.container.innerHTML = ''
@@ -102,7 +109,7 @@ export class SlidingTilePuzzle {
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'sliding-reference'
-    this.referenceImage.src = this.imageUrl
+    this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
 
     this.tileLayer = document.createElement('div')
@@ -175,7 +182,7 @@ export class SlidingTilePuzzle {
     const tileCol = tile.homeIndex % this.cols
     const cover = this.getCoverMetrics()
 
-    tile.element.style.backgroundImage = `url("${this.imageUrl}")`
+    tile.element.style.backgroundImage = `url("${this.displayImageUrl}")`
     tile.element.style.backgroundSize = cover.bgSize
     tile.element.style.backgroundPosition = `${cover.offsetX - tileCol * this.tileSize}px ${cover.offsetY - tileRow * this.tileSize}px`
     tile.element.style.width = `${this.tileSize}px`
@@ -188,7 +195,7 @@ export class SlidingTilePuzzle {
     const tileCol = lastIndex % this.cols
     const cover = this.getCoverMetrics()
 
-    this.victoryTile.style.backgroundImage = `url("${this.imageUrl}")`
+    this.victoryTile.style.backgroundImage = `url("${this.displayImageUrl}")`
     this.victoryTile.style.backgroundSize = cover.bgSize
     this.victoryTile.style.backgroundPosition = `${cover.offsetX - tileCol * this.tileSize}px ${cover.offsetY - tileRow * this.tileSize}px`
     this.victoryTile.style.width = `${this.tileSize}px`
@@ -600,16 +607,6 @@ function resolveSwipeDirection(dx, dy) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
-    image.src = url
-  })
 }
 
 function isValidSlotsState(slots, tileCount) {

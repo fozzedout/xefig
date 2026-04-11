@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v3'
+const CACHE_NAME = 'xefig-v4'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -22,7 +22,7 @@ self.addEventListener('activate', (event) => {
 function cacheKey(request) {
   const url = new URL(request.url)
   url.search = ''
-  return new Request(url.toString(), { method: request.method, headers: request.headers })
+  return new Request(url.toString())
 }
 
 self.addEventListener('fetch', (event) => {
@@ -36,6 +36,16 @@ self.addEventListener('fetch', (event) => {
 
   // API requests: network-first, fall back to cache
   if (url.pathname.startsWith('/api')) {
+    if (request.method !== 'GET') {
+      event.respondWith(
+        fetch(request).catch(() => new Response('{"error":"offline"}', {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+      )
+      return
+    }
+
     const key = cacheKey(request)
     event.respondWith(
       fetch(request)

@@ -50,6 +50,7 @@ body,
 
 #app {
   position: relative;
+  height: var(--app-height, 100vh);
 }
 
 body {
@@ -1879,6 +1880,10 @@ h1 {
   -webkit-touch-callout: none;
 }
 
+.game-shell--immersive {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 /* ─── Game toolbar ─── */
 .game-toolbar {
   display: flex;
@@ -2077,11 +2082,72 @@ h1 {
   .gt-counter { font-size: 0.6rem; }
 }
 
+@media (orientation: landscape) {
+  .workspace--immersive {
+    padding-top: 20px;
+  }
+
+  .floating-game-controls {
+    top: calc(0.85rem + var(--sai-top) + 20px);
+  }
+}
+
 .workspace {
   height: 100%;
   min-height: 0;
   display: grid;
   overflow: hidden;
+}
+
+.workspace--immersive {
+  position: relative;
+}
+
+.floating-game-controls {
+  position: absolute;
+  top: calc(0.85rem + var(--sai-top));
+  left: calc(0.85rem + var(--sai-left));
+  z-index: 30;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.workspace--controls-hidden .floating-game-controls {
+  opacity: 0.22;
+  transform: none;
+  pointer-events: auto;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace--controls-hidden .floating-game-controls {
+    opacity: 0.28;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .workspace--controls-hidden .floating-game-controls:hover {
+    opacity: 1;
+  }
+}
+
+.gt-menu-wrap--floating {
+  position: relative;
+}
+
+.gt-icon-btn--floating {
+  width: 42px;
+  height: 42px;
+  background: rgba(12, 12, 18, 0.82);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.gt-menu--floating {
+  top: calc(100% + 0.55rem);
+  left: 0;
+  right: auto;
+  min-width: 210px;
 }
 
 .settings-overlay {
@@ -2165,6 +2231,7 @@ h1 {
 }
 
 .jigsaw-root {
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -2331,6 +2398,53 @@ h1 {
   overscroll-behavior: contain;
 }
 
+.jigsaw-tray-tools {
+  display: flex;
+  flex-direction: row;
+  gap: 0.3rem;
+  z-index: 10;
+  /* Portrait: place at left side of the board/tray border */
+  grid-row: 2;
+  grid-column: 1;
+  align-self: start;
+  justify-self: start;
+  margin-left: 0.4rem;
+  margin-top: -14px;
+}
+
+.jigsaw-tray-tool {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 10, 15, 0.7);
+  color: #e8e6e0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  padding: 0;
+  font: inherit;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.jigsaw-tray-tool:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.jigsaw-tray-tool svg {
+  width: 13px;
+  height: 13px;
+}
+
+.jigsaw-tray-tool[aria-pressed='true'] {
+  color: #f0c040;
+  background: rgba(240, 192, 64, 0.18);
+  border-color: rgba(240, 192, 64, 0.4);
+}
+
 .jigsaw-carousel-track {
   display: flex;
   gap: 0.3rem;
@@ -2370,7 +2484,7 @@ h1 {
   stroke-linejoin: round;
 }
 
-@media (min-width: 1024px) and (orientation: landscape) {
+@media (orientation: landscape) {
   .jigsaw-root {
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
@@ -2379,6 +2493,8 @@ h1 {
   }
 
   .jigsaw-carousel {
+    grid-row: 1;
+    grid-column: 2;
     border-top: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
@@ -2395,6 +2511,16 @@ h1 {
     align-items: center;
     height: max-content;
     gap: 0.3rem;
+  }
+
+  .jigsaw-tray-tools {
+    flex-direction: column;
+    grid-row: 1;
+    grid-column: 2;
+    align-self: start;
+    justify-self: start;
+    margin-left: -14px;
+    margin-top: 0.5rem;
   }
 }
 
@@ -2843,7 +2969,7 @@ h1 {
   }
 }
 
-@media (min-width: 1024px) and (orientation: landscape) {
+@media (orientation: landscape) {
   .polygram-root {
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
@@ -2851,6 +2977,8 @@ h1 {
   }
 
   .polygram-tray {
+    display: flex;
+    align-self: stretch;
     border-top: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
@@ -2861,6 +2989,8 @@ h1 {
   }
 
   .polygram-tray-grid {
+    min-height: 100%;
+    flex: 1 1 auto;
     flex-direction: column;
     align-items: center;
     height: 100%;
@@ -3163,4 +3293,3 @@ h1 {
 .diamond-swatch:hover:not(.selected) {
   border-color: var(--muted);
 }
-

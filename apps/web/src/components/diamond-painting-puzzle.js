@@ -1,3 +1,5 @@
+import { loadImage, releaseLoadedImage } from './image-loader.js'
+
 const TARGET_CELLS = 10000
 const NUM_COLORS = 16
 const MIN_COLS = 20
@@ -23,6 +25,7 @@ export class DiamondPaintingPuzzle {
 
     this.completed = false
     this.referenceVisible = false
+    this.displayImageUrl = imageUrl
     this.selectedColor = 0
 
     this.cols = 0
@@ -52,12 +55,14 @@ export class DiamondPaintingPuzzle {
     this.didDrag = false
 
     this.handleWindowResize = () => this.onWindowResize()
+    this.handleWindowResume = () => this.onWindowResume()
   }
 
   async init() {
     this.destroy()
 
     this.image = await loadImage(this.imageUrl)
+    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
 
     const aspect = this.image.naturalWidth / this.image.naturalHeight
     this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(TARGET_CELLS * aspect)))
@@ -80,12 +85,18 @@ export class DiamondPaintingPuzzle {
     this.emitProgress()
 
     window.addEventListener('resize', this.handleWindowResize)
+    window.addEventListener('focus', this.handleWindowResume)
+    window.addEventListener('pageshow', this.handleWindowResume)
+    document.addEventListener('visibilitychange', this.handleWindowResume)
   }
 
   destroy() {
     clearTimeout(this._fillTimer)
     this.filling = false
     window.removeEventListener('resize', this.handleWindowResize)
+    window.removeEventListener('focus', this.handleWindowResume)
+    window.removeEventListener('pageshow', this.handleWindowResume)
+    document.removeEventListener('visibilitychange', this.handleWindowResume)
 
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this._onPointerDown)
@@ -100,6 +111,9 @@ export class DiamondPaintingPuzzle {
     this.grid = null
     this.fills = null
     this.pieces = []
+    releaseLoadedImage(this.image)
+    this.image = null
+    this.displayImageUrl = this.imageUrl
     this.container.innerHTML = ''
   }
 
@@ -156,7 +170,7 @@ export class DiamondPaintingPuzzle {
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'diamond-reference'
-    this.referenceImage.src = this.imageUrl
+    this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
 
     this.boardContent.append(this.canvas, this.referenceImage)
@@ -706,6 +720,15 @@ export class DiamondPaintingPuzzle {
     if (!this.grid) return
     this.clampPan()
     this.applyTransform()
+    this.drawGrid()
+  }
+
+  onWindowResume() {
+    if (!this.grid || document.visibilityState === 'hidden') return
+    requestAnimationFrame(() => {
+      if (!this.grid || document.visibilityState === 'hidden') return
+      this.drawGrid()
+    })
   }
 }
 
@@ -734,16 +757,6 @@ function playBuzzer() {
     osc.start(ac.currentTime + start)
     osc.stop(ac.currentTime + start + duration)
   }
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(`Failed to load image: ${url}`))
-    image.src = url
-  })
 }
 
 function rgbString(c) {

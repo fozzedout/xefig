@@ -40,6 +40,9 @@ const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
+const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
+const EARLY_PUZZLE_WAIT_MS = 1500
+const PUZZLE_FETCH_TIMEOUT_MS = 8000
 
 const BOARD_COLORS_LIGHT = [
   { name: 'birch', color: '#d6cbb5' },
@@ -603,36 +606,91 @@ function createConfettiOverlay(container) {
 
 function cacheDailyPayload(payload) {
   if (payload?.date && payload?.categories) {
-    writeJsonStorage('xefig:daily-cache', { date: payload.date, categories: payload.categories })
+    writeJsonStorage(DAILY_PUZZLE_CACHE_KEY, payload)
+  }
+}
+
+function getCachedDailyPayload(date = getIsoDate(new Date())) {
+  const cached = readJsonStorage(DAILY_PUZZLE_CACHE_KEY)
+  if (!cached || typeof cached !== 'object') {
+    return null
+  }
+  if (cached.date !== date || !cached.categories || typeof cached.categories !== 'object') {
+    return null
+  }
+  return cached
+}
+
+function timeoutAfter(ms, message) {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), ms)
+  })
+}
+
+async function fetchPuzzlePayloadFromApi(url, timeoutMs = PUZZLE_FETCH_TIMEOUT_MS) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null
+
+  try {
+    const response = await fetch(url, { signal: controller?.signal })
+    const payload = await response.json()
+    if (!response.ok) {
+      throw new Error(payload.error || 'Puzzle not found.')
+    }
+    return payload
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Timed out loading puzzle metadata.')
+    }
+    throw error
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId)
+    }
   }
 }
 
 async function fetchPuzzlePayload({ date = null } = {}) {
   const today = getIsoDate(new Date())
+  const isTodayRequest = !date || date === today
+  const cachedToday = isTodayRequest ? getCachedDailyPayload(today) : null
 
   // For the default "today" request, use the early fetch started in index.html
   // so we don't wait for the module to load before hitting the API.
   if (!date && window.__earlyPuzzle) {
-    const early = await window.__earlyPuzzle
+    const earlyPromise = window.__earlyPuzzle
     window.__earlyPuzzle = null
-    // Only use the early result if it matches today's date
-    if (early && early.date === today) {
-      cacheDailyPayload(early)
-      return early
+
+    try {
+      const early = await Promise.race([
+        earlyPromise,
+        timeoutAfter(EARLY_PUZZLE_WAIT_MS, 'Timed out waiting for early puzzle fetch.'),
+      ])
+      // Only use the early result if it matches today's date
+      if (early && early.date === today) {
+        cacheDailyPayload(early)
+        return early
+      }
+    } catch {
+      if (cachedToday) {
+        return cachedToday
+      }
     }
-    // Stale — fall through to a fresh fetch
   }
 
   const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
   // Bust browser cache for "today" if the day has rolled over
   const cacheBust = !date ? `?_=${today}` : ''
-  const response = await fetch(apiUrl(endpoint + cacheBust))
-  const payload = await response.json()
-  if (!response.ok) {
-    throw new Error(payload.error || 'Puzzle not found.')
+  try {
+    const payload = await fetchPuzzlePayloadFromApi(apiUrl(endpoint + cacheBust))
+    if (!date) cacheDailyPayload(payload)
+    return payload
+  } catch (error) {
+    if (cachedToday) {
+      return cachedToday
+    }
+    throw error
   }
-  if (!date) cacheDailyPayload(payload)
-  return payload
 }
 
 const SLICE_ICONS = {
@@ -1357,9 +1415,21 @@ function renderGame({ resumeRun = null } = {}) {
   const compactModeLabel = gameMode === GAME_MODE_DIAMOND ? 'Paint' : MODE_LABELS[gameMode]
   const titleLabel = `${compactModeLabel}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
   const showPieceCount = gameMode !== GAME_MODE_DIAMOND
+  const useImmersiveJigsawChrome = gameMode === GAME_MODE_JIGSAW
+  const viewButtonMarkup = gameMode !== GAME_MODE_DIAMOND
+    ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+        Reference image
+      </button>`
+    : ''
+  const restartButtonMarkup = `<button id="restart-btn" class="gt-menu-item gt-menu-item--danger" type="button">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
+      Restart
+    </button>`
 
   gameEl.innerHTML = `
-    <main class="game-shell game-shell--${gameMode}">
+    <main class="game-shell game-shell--${gameMode}${useImmersiveJigsawChrome ? ' game-shell--immersive' : ''}">
+      ${useImmersiveJigsawChrome ? '' : `
       <header class="game-toolbar game-toolbar--${gameMode}">
         <button id="back-btn" class="gt-icon-btn" type="button" aria-label="Back to launcher" title="Back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -1383,14 +1453,8 @@ function renderGame({ resumeRun = null } = {}) {
                 Edges only
               </button>
               ` : ''}
-              ${gameMode !== GAME_MODE_DIAMOND ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
-                Reference image
-              </button>` : ''}
-              <button id="restart-btn" class="gt-menu-item gt-menu-item--danger" type="button">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
-                Restart
-              </button>
+              ${viewButtonMarkup}
+              ${restartButtonMarkup}
             </div>
           </div>
         </div>
@@ -1406,14 +1470,34 @@ function renderGame({ resumeRun = null } = {}) {
 
         <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
       </header>
+      `}
 
-      <section class="workspace">
+      <section class="workspace${useImmersiveJigsawChrome ? ' workspace--immersive' : ''}">
         <div id="puzzle-mount" class="puzzle-mount"></div>
+        ${useImmersiveJigsawChrome ? `
+          <div class="floating-game-controls">
+            <div class="gt-menu-wrap gt-menu-wrap--floating">
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating" type="button" aria-label="Puzzle menu" aria-expanded="false" title="Puzzle menu">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              </button>
+              <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
+                <button id="back-btn" class="gt-menu-item" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  Back to puzzles
+                </button>
+                ${viewButtonMarkup}
+                ${restartButtonMarkup}
+              </div>
+            </div>
+          </div>
+          <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
+        ` : ''}
       </section>
     </main>
   `
 
   const statusEl = gameEl.querySelector('#status')
+  const workspaceEl = gameEl.querySelector('.workspace')
   const mount = gameEl.querySelector('#puzzle-mount')
   const backBtn = gameEl.querySelector('#back-btn')
   const viewBtn = gameEl.querySelector('#view-btn')
@@ -1478,6 +1562,7 @@ function renderGame({ resumeRun = null } = {}) {
   document.addEventListener('gestureend', preventBrowserZoom)
 
   backBtn.addEventListener('click', () => {
+    clearImmersiveControlsTimer()
     document.removeEventListener('gesturestart', preventBrowserZoom)
     document.removeEventListener('gesturechange', preventBrowserZoom)
     document.removeEventListener('gestureend', preventBrowserZoom)
@@ -1504,16 +1589,52 @@ function renderGame({ resumeRun = null } = {}) {
     const show = open ?? menuPanel.hidden
     menuPanel.hidden = !show
     menuBtn.setAttribute('aria-expanded', show ? 'true' : 'false')
+    if (useImmersiveJigsawChrome) {
+      setImmersiveControlsVisible(true, { persist: show })
+    }
   }
   menuBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu() })
   const closeMenu = () => toggleMenu(false)
   document.addEventListener('click', closeMenu)
   menuPanel.addEventListener('click', closeMenu)
 
+  let immersiveControlsHideTimer = null
+  const clearImmersiveControlsTimer = () => {
+    if (immersiveControlsHideTimer) {
+      window.clearTimeout(immersiveControlsHideTimer)
+      immersiveControlsHideTimer = null
+    }
+  }
+  const setImmersiveControlsVisible = (visible, { persist = false } = {}) => {
+    if (!useImmersiveJigsawChrome || !workspaceEl) return
+    workspaceEl.classList.toggle('workspace--controls-hidden', !visible)
+    clearImmersiveControlsTimer()
+    if (visible && !persist) {
+      immersiveControlsHideTimer = window.setTimeout(() => {
+        if (!menuPanel.hidden) return
+        workspaceEl.classList.add('workspace--controls-hidden')
+      }, 2600)
+    }
+  }
+  if (useImmersiveJigsawChrome && workspaceEl) {
+    const wakeImmersiveControls = (event) => {
+      if (event?.target?.closest?.('.floating-game-controls, .jigsaw-carousel, .gt-menu')) {
+        setImmersiveControlsVisible(true, { persist: !menuPanel.hidden })
+        return
+      }
+      setImmersiveControlsVisible(true)
+    }
+    workspaceEl.addEventListener('pointerdown', wakeImmersiveControls, { passive: true })
+    workspaceEl.addEventListener('pointermove', wakeImmersiveControls, { passive: true })
+    workspaceEl.addEventListener('focusin', wakeImmersiveControls)
+    setImmersiveControlsVisible(true)
+  }
+
   const restartBtn = gameEl.querySelector('#restart-btn')
   restartBtn.addEventListener('click', () => {
     if (!currentRun) return
     if (!confirm('Restart this puzzle? Your current progress will be lost.')) return
+    clearImmersiveControlsTimer()
     stopTimerDisplay()
     clearRunForMode(currentRun)
     currentRun = null
