@@ -261,16 +261,21 @@ export class JigsawPuzzle {
     const viewportHeight = window.innerHeight || this.container.clientHeight || 0
     const containerWidth = Math.min(this.container.clientWidth || viewportWidth - 16, viewportWidth)
     const containerHeight = this.container.clientHeight || viewportHeight
-    // Match the CSS grid sidebar column: minmax(118px, 10.5vw) + 0.55rem gap
-    const sideTrayReserve = usesSidebarTray ? Math.max(118, viewportWidth * 0.105) + 9 : 0
-    // Portrait: tray is at top, board fills the rest; account for SAI
-    const saiTop = usesSidebarTray ? 0 : this.getSafeAreaInset('top')
-    const saiBottom = usesSidebarTray ? 0 : this.getSafeAreaInset('bottom')
-    // Carousel height: padding (0.4rem + sai-top + 0.4rem) + track min-height (82px)
-    const topTrayReserve = usesSidebarTray ? 0 : Math.round(13 + saiTop + 82)
+    const sai = this.getRealSafeAreaInsets()
 
-    const availableWidth = Math.max(280, containerWidth - sideTrayReserve)
-    const availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
+    if (usesSidebarTray) {
+      // Landscape: tray on right, notch on one side
+      // Sidebar column: minmax(118px, 10.5vw) + 0.55rem gap + notch inset on right
+      const sideTrayReserve = Math.max(118, viewportWidth * 0.105) + 9 + sai.right
+      var availableWidth = Math.max(280, containerWidth - sideTrayReserve - sai.left)
+      var availableHeight = Math.max(220, containerHeight - sai.top - sai.bottom)
+    } else {
+      // Portrait: tray at top with sai-top padding
+      // Carousel height: padding (0.4rem + sai-top + 0.4rem) + track min-height (82px)
+      const topTrayReserve = Math.round(13 + sai.top + 82)
+      var availableWidth = Math.max(280, containerWidth)
+      var availableHeight = Math.max(220, containerHeight - topTrayReserve - sai.bottom)
+    }
     const maxWidth = availableWidth
     const maxHeight = availableHeight
     const maxRatio = usesSidebarTray ? MAX_SIDEBAR_BOARD_RATIO : MAX_BOARD_RATIO
@@ -304,6 +309,38 @@ export class JigsawPuzzle {
     const val = el.offsetHeight
     el.remove()
     return val
+  }
+
+  // iOS reports symmetric SAI left/right in landscape even though the notch
+  // is only on one side. Use window.orientation to determine the real side.
+  getNotchSide() {
+    const angle = typeof window.orientation !== 'undefined'
+      ? window.orientation
+      : (screen.orientation?.angle ?? 0)
+    if (angle === 90) return 'left'
+    if (angle === -90 || angle === 270) return 'right'
+    return 'top' // portrait
+  }
+
+  getRealSafeAreaInsets() {
+    const top = this.getSafeAreaInset('top')
+    const bottom = this.getSafeAreaInset('bottom')
+    const rawLeft = this.getSafeAreaInset('left')
+    const rawRight = this.getSafeAreaInset('right')
+
+    if (!this.usesSidebarTray()) {
+      return { top, bottom, left: rawLeft, right: rawRight }
+    }
+
+    // In landscape, iOS reports symmetric left/right. Only apply to the notch side.
+    const notch = this.getNotchSide()
+    const notchInset = Math.max(rawLeft, rawRight)
+    return {
+      top,
+      bottom,
+      left: notch === 'left' ? notchInset : 0,
+      right: notch === 'right' ? notchInset : 0,
+    }
   }
 
   calculateImageCrop(targetRatio) {
@@ -1128,9 +1165,13 @@ export class JigsawPuzzle {
   }
 
   getBoardRestPosition() {
-    // Where the board should sit at zoom 1 (below tray in portrait, beside sidebar in landscape)
+    const sai = this.getRealSafeAreaInsets()
     if (this.usesSidebarTray()) {
-      return { x: 0, y: 20 } // landscape: workspace padding-top
+      // Landscape: offset by notch inset on left, SAI top
+      return {
+        x: Math.round(sai.left),
+        y: Math.round(sai.top),
+      }
     }
     // Portrait: below the carousel
     const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
@@ -1145,17 +1186,16 @@ export class JigsawPuzzle {
     const scaledWidth = this.boardWidth * scale
     const scaledHeight = this.boardHeight * scale
 
-    // At zoom 1, keep the board within SAI zones. When zoomed, allow full panning.
-    const saiBottom = this.getSafeAreaInset('bottom')
-    const saiRight = this.getSafeAreaInset('right')
-    const saiLeft = this.getSafeAreaInset('left')
-    const bottomInset = scale <= 1 ? saiBottom : 0
-    const sideInset = scale <= 1 ? Math.max(saiLeft, saiRight) : 0
+    if (scale <= 1) {
+      // At zoom 1, lock to rest position (board is sized to fit exactly)
+      return { x: rest.x, y: rest.y }
+    }
 
+    // When zoomed, allow full panning to viewport edges
     const maxX = rest.x
     const maxY = rest.y
-    const minX = Math.min(maxX, window.innerWidth - scaledWidth - sideInset)
-    const minY = Math.min(maxY, window.innerHeight - scaledHeight - bottomInset)
+    const minX = Math.min(maxX, window.innerWidth - scaledWidth)
+    const minY = Math.min(maxY, window.innerHeight - scaledHeight)
 
     return {
       x: clamp(panX, minX, maxX),

@@ -2084,12 +2084,9 @@ h1 {
 }
 
 @media (orientation: landscape) {
-  .workspace--immersive {
-    padding-top: 20px;
-  }
-
   .floating-game-controls {
-    top: calc(0.85rem + var(--sai-top) + 20px);
+    top: calc(0.85rem + var(--sai-top));
+    left: calc(0.85rem + var(--sai-left));
   }
 }
 
@@ -2497,7 +2494,7 @@ h1 {
     grid-row: 1;
     grid-column: 2;
     border-bottom: 0;
-    padding: 0.45rem 0.15rem 0.45rem 0.45rem;
+    padding: 0.45rem calc(0.15rem + var(--sai-right)) 0.45rem 0.45rem;
     height: 100%;
     min-height: 0;
     overflow-x: hidden;
@@ -2532,7 +2529,7 @@ h1 {
     justify-self: auto;
     margin-top: 0;
     margin-left: 0;
-    top: calc(0.85rem + var(--sai-top) + 20px);
+    top: calc(0.85rem + var(--sai-top));
     left: calc(0.85rem + var(--sai-left));
   }
 }
