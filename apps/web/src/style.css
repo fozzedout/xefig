@@ -1376,7 +1376,7 @@ h1 {
     display: flex;
     align-items: center;
     margin: 0.5rem;
-    padding: 0;
+    padding: 0.5rem;
     background: none;
     border: none;
     border-radius: 4px;
