@@ -1152,6 +1152,9 @@ export class JigsawPuzzle {
 
   onOrientationChange() {
     // Delay to let viewport finish resizing
+    // Update notch class immediately so CSS doesn't flash the wrong side
+    this.updateNotchSide()
+    // Debounce the layout recalculation until viewport has settled
     if (this._orientationTimer) clearTimeout(this._orientationTimer)
     this._orientationTimer = setTimeout(() => {
       this._orientationTimer = null
