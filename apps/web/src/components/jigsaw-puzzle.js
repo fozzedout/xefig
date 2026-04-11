@@ -1139,12 +1139,17 @@ export class JigsawPuzzle {
     const scaledWidth = this.boardWidth * scale
     const scaledHeight = this.boardHeight * scale
 
-    // At zoom 1, pan should be at rest position. When zoomed, allow panning
-    // from showing the board at the rest position to showing the far edges.
+    // At zoom 1, keep the board within SAI zones. When zoomed, allow full panning.
+    const saiBottom = this.getSafeAreaInset('bottom')
+    const saiRight = this.getSafeAreaInset('right')
+    const saiLeft = this.getSafeAreaInset('left')
+    const bottomInset = scale <= 1 ? saiBottom : 0
+    const sideInset = scale <= 1 ? Math.max(saiLeft, saiRight) : 0
+
     const maxX = rest.x
     const maxY = rest.y
-    const minX = Math.min(maxX, window.innerWidth - scaledWidth)
-    const minY = Math.min(maxY, window.innerHeight - scaledHeight)
+    const minX = Math.min(maxX, window.innerWidth - scaledWidth - sideInset)
+    const minY = Math.min(maxY, window.innerHeight - scaledHeight - bottomInset)
 
     return {
       x: clamp(panX, minX, maxX),
