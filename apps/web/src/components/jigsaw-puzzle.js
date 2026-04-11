@@ -71,6 +71,7 @@ export class JigsawPuzzle {
     this.handleStagePointerDown = (event) => this.onStagePointerDown(event)
     this.handleStagePointerMove = (event) => this.onStagePointerMove(event)
     this.handleStagePointerUp = (event) => this.onStagePointerUp(event)
+    this.handleStageWheel = (event) => this.onStageWheel(event)
     this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
   }
 
@@ -102,6 +103,7 @@ export class JigsawPuzzle {
       this.stage.removeEventListener('pointermove', this.handleStagePointerMove)
       this.stage.removeEventListener('pointerup', this.handleStagePointerUp)
       this.stage.removeEventListener('pointercancel', this.handleStagePointerUp)
+      this.stage.removeEventListener('wheel', this.handleStageWheel)
     }
     if (this.carousel) {
       this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
@@ -255,6 +257,7 @@ export class JigsawPuzzle {
     this.stage.addEventListener('pointermove', this.handleStagePointerMove)
     this.stage.addEventListener('pointerup', this.handleStagePointerUp)
     this.stage.addEventListener('pointercancel', this.handleStagePointerUp)
+    this.stage.addEventListener('wheel', this.handleStageWheel, { passive: false })
     this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
   }
 
@@ -1055,6 +1058,7 @@ export class JigsawPuzzle {
       this.panX = clamped.x
       this.panY = clamped.y
       this.updateStageTransform()
+      this.updateImmersiveZoom()
       return
     }
 
@@ -1133,6 +1137,12 @@ export class JigsawPuzzle {
     this.stageContent.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`
   }
 
+  updateImmersiveZoom() {
+    if (this.root) {
+      this.root.classList.toggle('is-zoomed', this.zoom > 1)
+    }
+  }
+
   resetView() {
     this.zoom = 1
     this.panX = 0
@@ -1140,6 +1150,7 @@ export class JigsawPuzzle {
     if (this.stageContent) {
       this.updateStageTransform()
     }
+    this.updateImmersiveZoom()
     this.emitProgress()
   }
 
@@ -1161,6 +1172,31 @@ export class JigsawPuzzle {
     this.carousel.scrollTop += delta
     event.preventDefault()
     event.stopPropagation()
+  }
+
+  onStageWheel(event) {
+    event.preventDefault()
+    const delta = -event.deltaY * 0.002
+    const nextScale = clamp(this.zoom * (1 + delta), 1, 4)
+    if (nextScale === this.zoom) return
+
+    const stageRect = this.stage.getBoundingClientRect()
+    const cursorX = event.clientX - stageRect.left
+    const cursorY = event.clientY - stageRect.top
+
+    // Anchor zoom at cursor position
+    const anchorX = (cursorX - this.panX) / this.zoom
+    const anchorY = (cursorY - this.panY) / this.zoom
+
+    const nextPanX = cursorX - anchorX * nextScale
+    const nextPanY = cursorY - anchorY * nextScale
+
+    this.zoom = nextScale
+    const clamped = this.clampPan(nextPanX, nextPanY, nextScale)
+    this.panX = clamped.x
+    this.panY = clamped.y
+    this.updateStageTransform()
+    this.updateImmersiveZoom()
   }
 
   setReferenceVisible(visible) {

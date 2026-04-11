@@ -2255,6 +2255,18 @@ h1 {
   align-content: stretch;
 }
 
+/* Immersive zoom: stage expands to fill the entire viewport */
+.jigsaw-root.is-zoomed .jigsaw-board-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+}
+
+.jigsaw-root.is-zoomed .jigsaw-stage {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .jigsaw-stage {
   position: relative;
   border: none;
@@ -2395,17 +2407,15 @@ h1 {
 .jigsaw-carousel {
   grid-row: 1;
   grid-column: 1;
-  background: rgba(10, 10, 15, 0.65);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  background: transparent;
   padding: calc(0.4rem + var(--sai-top)) 0.4rem 0.4rem;
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
   touch-action: pan-x;
   overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
+  mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
 }
 
 .jigsaw-tray-tools {
@@ -2526,14 +2536,14 @@ h1 {
     grid-row: 1;
     grid-column: 2;
     border-bottom: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
     padding: 0.45rem 0.15rem 0.45rem 0.45rem;
     height: 100%;
     min-height: 0;
     overflow-x: hidden;
     overflow-y: scroll;
     touch-action: pan-y;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
   }
 
   .jigsaw-carousel-track {
