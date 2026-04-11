@@ -1152,22 +1152,22 @@ export class JigsawPuzzle {
   }
 
   onOrientationChange() {
-    // orientationchange fires after window.orientation is updated
-    this.updateNotchSide()
-    // Debounce the layout recalculation until viewport has settled
+    // Hide everything immediately so CSS reflow isn't visible
+    if (this.root) this.root.style.visibility = 'hidden'
     if (this._orientationTimer) clearTimeout(this._orientationTimer)
     this._orientationTimer = setTimeout(() => {
       this._orientationTimer = null
+      this.updateNotchSide()
       this.resetView()
-    }, 200)
+      if (this.root) this.root.style.visibility = ''
+    }, 250)
   }
 
   onResize() {
-    // resize fires during rotation before window.orientation updates,
-    // so only debounce resetView — never updateNotchSide from here
-    if (this._orientationTimer) clearTimeout(this._orientationTimer)
-    this._orientationTimer = setTimeout(() => {
-      this._orientationTimer = null
+    if (this._orientationTimer) return // rotation in progress, let orientationchange handle it
+    if (this._resizeTimer) clearTimeout(this._resizeTimer)
+    this._resizeTimer = setTimeout(() => {
+      this._resizeTimer = null
       this.resetView()
     }, 200)
   }
