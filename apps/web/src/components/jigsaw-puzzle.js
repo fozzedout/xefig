@@ -1166,8 +1166,12 @@ export class JigsawPuzzle {
   updateNotchSide() {
     if (!this.root) return
     const notch = this.getNotchSide()
-    this.root.classList.toggle('jigsaw-root--notch-left', notch === 'left')
-    this.root.classList.toggle('jigsaw-root--notch-right', notch === 'right')
+    const landscape = this.usesSidebarTray()
+    // In landscape, always set one of the two classes so CSS can show the tray
+    const isLeft = landscape && notch === 'left'
+    const isRight = landscape && notch !== 'left'
+    this.root.classList.toggle('jigsaw-root--notch-left', isLeft)
+    this.root.classList.toggle('jigsaw-root--notch-right', isRight)
   }
 
   getViewLayout() {
