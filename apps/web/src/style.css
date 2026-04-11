@@ -2255,16 +2255,15 @@ h1 {
   align-content: stretch;
 }
 
-/* Immersive zoom: stage expands behind the tray to fill the viewport */
-.jigsaw-root.is-zoomed .jigsaw-board-frame {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-}
-
+/* Immersive zoom: stage breaks out of grid to fill the viewport */
 .jigsaw-root.is-zoomed .jigsaw-stage {
+  position: fixed;
+  inset: 0;
   width: 100% !important;
   height: 100% !important;
+  z-index: 1;
+  margin: 0;
+  border-radius: 0;
 }
 
 .jigsaw-root.is-zoomed .jigsaw-carousel {
