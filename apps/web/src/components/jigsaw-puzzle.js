@@ -1170,12 +1170,17 @@ export class JigsawPuzzle {
       areaH = window.innerHeight - carouselHeight - saiBottom
     }
 
-    // Never scale below 1 — if the board doesn't fit, let the user pan
-    const restX = Math.round(areaX + Math.max(0, areaW - this.boardWidth) / 2)
-    const restY = Math.round(areaY)
+    // Fill the available width; height overflows and is pannable
+    const baseZoom = areaW / this.boardWidth
+    const scaledH = this.boardHeight * baseZoom
+    const restX = Math.round(areaX)
+    // Center vertically if it fits, top-align if it overflows
+    const restY = scaledH <= areaH
+      ? Math.round(areaY + (areaH - scaledH) / 2)
+      : Math.round(areaY)
 
     return {
-      baseZoom: 1,
+      baseZoom,
       restX,
       restY,
     }
