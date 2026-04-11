@@ -25,6 +25,11 @@
       font-size: 14px;
     }
 
+    /* In browser (not PWA), use dvh to match visible viewport */
+    @media not all and (display-mode: standalone) {
+      html, body { height: 100dvh; }
+    }
+
     .screen {
       position: relative;
       height: 100%;
