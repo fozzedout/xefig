@@ -73,6 +73,7 @@ export class JigsawPuzzle {
     this.handleStagePointerUp = (event) => this.onStagePointerUp(event)
     this.handleStageWheel = (event) => this.onStageWheel(event)
     this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
+    this.handleOrientationChange = () => this.onOrientationChange()
   }
 
   async init() {
@@ -105,6 +106,8 @@ export class JigsawPuzzle {
       this.stage.removeEventListener('pointercancel', this.handleStagePointerUp)
       this.stage.removeEventListener('wheel', this.handleStageWheel)
     }
+    window.removeEventListener('orientationchange', this.handleOrientationChange)
+    window.removeEventListener('resize', this.handleOrientationChange)
     if (this.carousel) {
       this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
     }
@@ -253,6 +256,8 @@ export class JigsawPuzzle {
     this.stage.addEventListener('pointercancel', this.handleStagePointerUp)
     this.stage.addEventListener('wheel', this.handleStageWheel, { passive: false })
     this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
+    window.addEventListener('orientationchange', this.handleOrientationChange)
+    window.addEventListener('resize', this.handleOrientationChange)
   }
 
   calculateBoardSize() {
@@ -1162,6 +1167,15 @@ export class JigsawPuzzle {
       anchorX: (center.x - stageRect.left - this.panX) / this.zoom,
       anchorY: (center.y - stageRect.top - this.panY) / this.zoom,
     }
+  }
+
+  onOrientationChange() {
+    // Delay to let viewport finish resizing
+    if (this._orientationTimer) clearTimeout(this._orientationTimer)
+    this._orientationTimer = setTimeout(() => {
+      this._orientationTimer = null
+      this.resetView()
+    }, 200)
   }
 
   getBoardRestPosition() {
