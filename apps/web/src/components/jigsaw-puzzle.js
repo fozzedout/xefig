@@ -686,8 +686,9 @@ export class JigsawPuzzle {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
     }
-    this.carouselScrolling = null
     this.attachWindowTracking()
   }
 
@@ -698,7 +699,6 @@ export class JigsawPuzzle {
 
     this.pendingLift.piece.pointerId = null
     this.pendingLift = null
-    this.carouselScrolling = null
 
     if (!this.draggingPiece) {
       this.detachWindowTracking()
@@ -751,59 +751,29 @@ export class JigsawPuzzle {
   }
 
   onWindowPointerMove(event) {
-    // Active carousel scroll — keep scrolling until pointer up
-    if (this.carouselScrolling && this.carouselScrolling.pointerId === event.pointerId) {
-      const sidebar = this.usesSidebarTray()
-      const delta = sidebar
-        ? event.clientY - this.carouselScrolling.lastY
-        : event.clientX - this.carouselScrolling.lastX
-      if (sidebar) {
-        this.carousel.scrollTop -= delta
-      } else {
-        this.carousel.scrollLeft -= delta
-      }
-      this.carouselScrolling.lastX = event.clientX
-      this.carouselScrolling.lastY = event.clientY
-      event.preventDefault()
-      return
-    }
-
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
-      const dx = event.clientX - this.pendingLift.startX
-      const dy = event.clientY - this.pendingLift.startY
+      const sidebar = this.usesSidebarTray()
 
-      if (this.usesSidebarTray()) {
-        // Landscape sidebar: drag left to lift, vertical scroll to dismiss
-        // Lift wins unless the gesture is nearly vertical (within ~21° of the axis)
-        const isVerticalScroll = Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx) * 2.5
-        const isLift = dx < -12 && !isVerticalScroll
-        if (isVerticalScroll) {
-          this.carouselScrolling = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY }
-          this.pendingLift.piece.pointerId = null
-          this.pendingLift = null
-          return
-        }
-        if (isLift) {
-          const piece = this.pendingLift.piece
-          this.pendingLift = null
-          this.startDraggingPiece(event, piece)
-        }
+      // Scroll the carousel by the movement delta along the scroll axis
+      const scrollDelta = sidebar
+        ? event.clientY - this.pendingLift.lastY
+        : event.clientX - this.pendingLift.lastX
+      if (sidebar) {
+        this.carousel.scrollTop -= scrollDelta
       } else {
-        // Portrait top tray: drag down to lift, horizontal scroll to dismiss
-        // Lift wins unless the gesture is nearly horizontal (within ~21° of the axis)
-        const isHorizontalScroll = Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 2.5
-        const isDownwardLift = dy > 12 && !isHorizontalScroll
-        if (isHorizontalScroll) {
-          this.carouselScrolling = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY }
-          this.pendingLift.piece.pointerId = null
-          this.pendingLift = null
-          return
-        }
-        if (isDownwardLift) {
-          const piece = this.pendingLift.piece
-          this.pendingLift = null
-          this.startDraggingPiece(event, piece)
-        }
+        this.carousel.scrollLeft -= scrollDelta
+      }
+      this.pendingLift.lastX = event.clientX
+      this.pendingLift.lastY = event.clientY
+
+      // If the finger has moved far enough away from the tray, snap to drag
+      const liftDistance = sidebar
+        ? this.pendingLift.startX - event.clientX  // leftward in landscape
+        : event.clientY - this.pendingLift.startY   // downward in portrait
+      if (liftDistance > 30) {
+        const piece = this.pendingLift.piece
+        this.pendingLift = null
+        this.startDraggingPiece(event, piece)
       }
       return
     }
@@ -822,12 +792,6 @@ export class JigsawPuzzle {
   }
 
   onWindowPointerUp(event) {
-    if (this.carouselScrolling && this.carouselScrolling.pointerId === event.pointerId) {
-      this.carouselScrolling = null
-      this.detachWindowTracking()
-      return
-    }
-
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
       this.cancelPendingLift()
       return
