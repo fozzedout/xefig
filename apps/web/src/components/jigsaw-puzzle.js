@@ -241,6 +241,7 @@ export class JigsawPuzzle {
     this.carousel.append(this.carouselTrack)
     this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
     this.container.append(this.root)
+    this.updateNotchSide()
 
     // Adopt floating game controls into the jigsaw grid so they align with tray tools
     const floatingControls = this.container.parentElement?.querySelector('.floating-game-controls')
@@ -313,6 +314,22 @@ export class JigsawPuzzle {
     const val = el.offsetHeight
     el.remove()
     return val
+  }
+
+  getNotchSide() {
+    const angle = typeof window.orientation !== 'undefined'
+      ? window.orientation
+      : (screen.orientation?.angle ?? 0)
+    if (angle === 90) return 'left'
+    if (angle === -90 || angle === 270) return 'right'
+    return 'top'
+  }
+
+  updateNotchSide() {
+    if (!this.root) return
+    const notch = this.getNotchSide()
+    const landscape = this.usesSidebarTray()
+    this.root.classList.toggle('jigsaw-root--notch-left', landscape && notch === 'left')
   }
 
 
