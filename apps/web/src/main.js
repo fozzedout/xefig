@@ -75,31 +75,8 @@ function setGlobalBoardColorIndex(index) {
   localStorage.setItem(BOARD_COLOR_KEY, String(index))
 }
 
-const LANDSCAPE_LAYOUT_KEY = 'xefig:landscape-layout'
-const LANDSCAPE_LAYOUTS = [
-  { id: 'default', name: 'Default', desc: 'Standard horizontal slices with top nav' },
-  { id: 'bottom-dock', name: 'Bottom Dock', desc: 'Nav moves to a compact dock at the bottom' },
-  { id: 'side-rail', name: 'Side Rail', desc: 'Vertical nav rail on the left edge' },
-  { id: 'immersive', name: 'Immersive', desc: 'No nav \u2014 full-screen slices with floating pill menu' },
-  { id: 'split-panel', name: 'Split Panel', desc: 'Dark sidebar with puzzle list, full-bleed active image' },
-  { id: 'carousel', name: 'Carousel', desc: 'Full-screen single puzzle with swipe navigation' },
-]
-
-function getLandscapeLayout() {
-  const saved = localStorage.getItem(LANDSCAPE_LAYOUT_KEY)
-  return LANDSCAPE_LAYOUTS.find(l => l.id === saved) ? saved : 'default'
-}
-
-function setLandscapeLayout(id) {
-  localStorage.setItem(LANDSCAPE_LAYOUT_KEY, id)
-  applyLandscapeLayout()
-}
-
 function applyLandscapeLayout() {
-  const id = getLandscapeLayout()
-  const root = document.documentElement
-  LANDSCAPE_LAYOUTS.forEach(l => root.classList.remove('ls-' + l.id))
-  root.classList.add('ls-' + id)
+  document.documentElement.classList.add('ls-default')
 }
 const GAME_MODE_JIGSAW = 'jigsaw'
 const GAME_MODE_SLIDING = 'sliding'
@@ -698,44 +675,6 @@ const SLICE_TAGS = {
   [GAME_MODE_DIAMOND]: ['Tap & Paint', '16 colors', 'Relaxing'],
 }
 
-function bindLandscapeNavEvents(pageEl, container) {
-  // Immersive pill, split sidebar nav links, carousel corners — all use data-page
-  pageEl.querySelectorAll('[data-page]').forEach(btn => {
-    if (btn.closest('.slice') || btn.closest('#navTabs')) return // skip slice/nav buttons
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      const page = btn.dataset.page
-      if (page && window.switchToPage) window.switchToPage(page)
-    })
-  })
-
-  // Split sidebar mode buttons
-  pageEl.querySelectorAll('.split-mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const index = Number(btn.dataset.index)
-      const slices = container.querySelectorAll('.slice')
-      if (slices[index]) {
-        slices.forEach((s, i) => {
-          const isActive = i === index
-          s.classList.toggle('active', isActive)
-          s.style.setProperty('--flex', isActive ? 2.2 : 0.9)
-        })
-        pageEl.querySelectorAll('.split-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.index === btn.dataset.index))
-      }
-    })
-  })
-
-  // Carousel scroll → update dots
-  const updateCarouselDots = () => {
-    const dots = pageEl.querySelectorAll('.carousel-dot')
-    if (!dots.length) return
-    const scrollLeft = container.scrollLeft
-    const width = container.clientWidth
-    const activeIndex = Math.round(scrollLeft / width)
-    dots.forEach((d, i) => d.classList.toggle('active', i === activeIndex))
-  }
-  container.addEventListener('scroll', updateCarouselDots, { passive: true })
-}
 
 function computeSliceCenter(container) {
   requestAnimationFrame(() => {
@@ -839,30 +778,8 @@ function renderLauncher() {
   const pageEl = document.querySelector('#page-play')
   pageEl.innerHTML = `
     <main class="slice-launcher">
-      <div class="split-sidebar">
-        <div class="split-brand">Xefig</div>
-        <div class="split-mode-list">
-          ${modes.map((m, i) => `<button class="split-mode-btn${m === pickMode ? ' active' : ''}" data-mode="${m}" data-index="${i}"><span class="split-mode-dot" style="background:${ACCENT_MAP_FULL[m]}"></span>${MODE_LABELS[m]}</button>`).join('')}
-        </div>
-        <div class="split-nav-links">
-          <button class="split-nav-btn" data-page="archive">Archive</button>
-          <button class="split-nav-btn" data-page="settings">Settings</button>
-        </div>
-      </div>
       <div id="slice-container" class="slice-container">
         <div class="slice" style="--flex:1;opacity:0"></div>
-      </div>
-      <div class="immersive-pill">
-        <button data-page="play" class="active">Play</button>
-        <button data-page="archive">Archive</button>
-        <button data-page="settings">Settings</button>
-      </div>
-      <div class="carousel-dots">
-        ${modes.map((m, i) => `<div class="carousel-dot${m === pickMode ? ' active' : ''}" data-index="${i}"></div>`).join('')}
-      </div>
-      <div class="carousel-corners">
-        <button class="carousel-corner-btn cc-archive" data-page="archive">Archive</button>
-        <button class="carousel-corner-btn cc-settings" data-page="settings">Settings</button>
       </div>
     </main>
   `
@@ -1000,7 +917,6 @@ function renderLauncher() {
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
-      bindLandscapeNavEvents(pageEl, container)
       computeSliceCenter(container)
 
       // Recompute on orientation change (portrait widths differ from landscape)
@@ -1876,12 +1792,6 @@ const NAV_HTML = `
 let currentPage = 'play'
 let archiveRendered = false
 let settingsRendered = false
-let lastSetHash = ''
-
-function setHash(hash) {
-  lastSetHash = hash
-  window.location.hash = hash
-}
 
 function initAppShell() {
   applyLandscapeLayout()
@@ -1890,7 +1800,7 @@ function initAppShell() {
   const topNav = document.querySelector('#topNav')
   const topTabs = [...document.querySelectorAll('#navTabs .nav-tab')]
 
-  function switchPage(pageName, { updateHash = true } = {}) {
+  function switchPage(pageName) {
     if (pageName === currentPage) return
     currentPage = pageName
 
@@ -1908,13 +1818,10 @@ function initAppShell() {
 
     if (pageName === 'play') {
       renderLauncher()
-      if (updateHash) setHash('#play')
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
-      if (updateHash) setHash('#archive')
     } else if (pageName === 'settings') {
       renderSettingsPage()
-      if (updateHash) setHash('#settings')
     }
   }
 
@@ -1922,95 +1829,7 @@ function initAppShell() {
 
   topTabs.forEach((tab) => tab.addEventListener('click', () => switchPage(tab.dataset.page)))
 
-  // Route based on current hash
-  const initialRoute = parseHash()
-  if (initialRoute.page === 'game' && initialRoute.mode && initialRoute.date) {
-    // Resume into a game directly
-    renderLauncher()
-    resumeGameFromHash(initialRoute.mode, initialRoute.date)
-  } else if (initialRoute.page === 'archive') {
-    switchPage('archive', { updateHash: false })
-  } else if (initialRoute.page === 'settings') {
-    switchPage('settings', { updateHash: false })
-  } else {
-    renderLauncher()
-  }
-
-  // Handle browser back/forward — ignore hash changes we set ourselves
-  window.addEventListener('hashchange', () => {
-    const currentHash = window.location.hash
-    if (currentHash === lastSetHash) return
-    lastSetHash = currentHash
-    const route = parseHash()
-    if (route.page === 'game' && route.mode && route.date) {
-      resumeGameFromHash(route.mode, route.date)
-    } else if (['play', 'archive', 'settings'].includes(route.page)) {
-      switchPage(route.page, { updateHash: false })
-    } else {
-      switchPage('play', { updateHash: false })
-    }
-  })
-}
-
-function parseHash() {
-  const hash = window.location.hash.replace(/^#/, '')
-  const parts = hash.split('/')
-  // #game/jigsaw/2026-03-27 or #play or #archive or #settings
-  if (parts[0] === 'game' && parts.length >= 3) {
-    return { page: 'game', mode: parts[1], date: parts[2] }
-  }
-  return { page: parts[0] || 'play' }
-}
-
-function resumeGameFromHash(mode, date) {
-  const normalizedMode = normalizeGameMode(mode)
-  state.gameMode = normalizedMode
-  state.sourceMode = 'today'
-  state.difficulty = state.difficulty || 'medium'
-
-  // Try to find a saved run for this mode+date
-  const savedRun = getRunForMode(date, normalizedMode)
-  if (savedRun) {
-    state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
-    state.puzzle = { date }
-    renderGame({ resumeRun: savedRun })
-    return
-  }
-
-  // Check if this puzzle was already completed
-  const completedModes = getCompletedModesForDate(date)
-  if (completedModes.has(normalizedMode)) {
-    ;(async () => {
-      try {
-        const payload = await fetchPuzzlePayload({ date })
-        state.puzzle = payload
-        const entry = getCompletionEntry(date, normalizedMode)
-        showCompletedPuzzleScreen({
-          gameMode: normalizedMode,
-          puzzleDate: date,
-          entry,
-          onReplay: () => renderGame(),
-          onBack: () => returnFromGame(),
-        })
-      } catch {
-        window.switchToPage('play')
-      }
-    })()
-    return
-  }
-
-  // No saved run — fetch the puzzle and start fresh
-  ;(async () => {
-    try {
-      const payload = await fetchPuzzlePayload({ date })
-      state.puzzle = payload
-      state.imageUrl = resolvePuzzleImageUrl(payload, normalizedMode)
-      renderGame()
-    } catch {
-      // Can't load puzzle — fall back to launcher
-      window.switchToPage('play')
-    }
-  })()
+  renderLauncher()
 }
 
 function showGamePage() {
@@ -2019,10 +1838,6 @@ function showGamePage() {
   document.querySelectorAll('.app-page').forEach((p) => {
     p.classList.toggle('visible', p.id === 'page-game')
   })
-  // Set hash: #game/mode/date
-  const gameMode = state.gameMode || 'jigsaw'
-  const puzzleDate = state.puzzle?.date || getIsoDate(new Date())
-  setHash(`#game/${gameMode}/${puzzleDate}`)
 }
 
 function returnFromGame() {
@@ -2072,18 +1887,6 @@ function renderSettingsPage() {
           <div id="settings-sync-content"></div>
         </div>
         <div class="settings-group">
-          <div class="settings-group-title">Landscape Layout</div>
-          <p class="about-text" style="margin-bottom:0.8rem">Choose how the puzzle menu appears in landscape orientation.</p>
-          <div id="settings-landscape-layouts" class="settings-landscape-grid">
-            ${LANDSCAPE_LAYOUTS.map(l => `
-              <button class="settings-landscape-btn${l.id === getLandscapeLayout() ? ' is-active' : ''}" data-layout="${l.id}">
-                <span class="sl-name">${l.name}</span>
-                <span class="sl-desc">${l.desc}</span>
-              </button>
-            `).join('')}
-          </div>
-        </div>
-        <div class="settings-group">
           <div class="settings-group-title">AI-Generated Content</div>
           <p class="about-text">
             All puzzle images on Xefig are generated using artificial intelligence
@@ -2130,16 +1933,6 @@ function renderSettingsPage() {
     markSettingsDirty()
     grid.querySelectorAll('.settings-color-swatch').forEach((s, i) => {
       s.classList.toggle('is-active', i === index)
-    })
-  })
-
-  const lsGrid = container.querySelector('#settings-landscape-layouts')
-  lsGrid.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-layout]')
-    if (!btn) return
-    setLandscapeLayout(btn.dataset.layout)
-    lsGrid.querySelectorAll('.settings-landscape-btn').forEach(b => {
-      b.classList.toggle('is-active', b.dataset.layout === btn.dataset.layout)
     })
   })
 
