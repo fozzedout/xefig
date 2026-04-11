@@ -53,6 +53,16 @@ body,
   height: var(--app-height, 100vh);
 }
 
+/* In browser (not PWA), use dvh to match visible viewport */
+@media not all and (display-mode: standalone) {
+  html, body, #app {
+    height: 100dvh;
+  }
+  #app {
+    height: var(--app-height, 100dvh);
+  }
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
