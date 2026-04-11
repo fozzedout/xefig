@@ -992,7 +992,7 @@ export class JigsawPuzzle {
     }
 
     const rawZoom = Number(payload.zoom)
-    const minZoom = this.getViewLayout().baseZoom
+    const minZoom = 1
     const zoom = Number.isFinite(rawZoom) ? clamp(rawZoom, minZoom, 4) : minZoom
     const rawPanX = Number(payload.panX)
     const rawPanY = Number(payload.panY)
@@ -1065,7 +1065,7 @@ export class JigsawPuzzle {
       const stageRect = this.stage.getBoundingClientRect()
 
       const scaleRatio = distance / this.pinchState.startDistance
-      const nextScale = clamp(this.pinchState.startScale * scaleRatio, this.getViewLayout().baseZoom, 4)
+      const nextScale = clamp(this.pinchState.startScale * scaleRatio, 1, 4)
 
       const centerX = center.x - stageRect.left
       const centerY = center.y - stageRect.top
@@ -1141,56 +1141,43 @@ export class JigsawPuzzle {
 
   onLayoutChange() {
     if (this._layoutTimer) clearTimeout(this._layoutTimer)
-    this._layoutTimer = setTimeout(() => {
+    this._layoutTimer = setTimeout(async () => {
       this._layoutTimer = null
-      this.resetView()
-    }, 200)
+      if (this.completed) {
+        this.resetView()
+        return
+      }
+      // Re-init the puzzle for the new viewport dimensions
+      const progress = this.getProgressState()
+      await this.init()
+      if (progress) {
+        this.applyProgressState(progress)
+      }
+    }, 250)
   }
 
   getViewLayout() {
-    // Calculate the available area and the zoom needed to fit the board in it.
-    // The tray is on the notch side in landscape, so it absorbs the notch inset.
-    const saiBottom = this.getSafeAreaInset('bottom')
-    let areaX, areaY, areaW, areaH
-
     if (this.usesSidebarTray()) {
-      // Landscape: tray always on right (CSS media query)
-      const trayRect = this.carousel ? this.carousel.getBoundingClientRect() : null
-      const trayWidth = trayRect ? trayRect.width : Math.max(118, window.innerWidth * 0.105)
-      areaX = 0
-      areaW = window.innerWidth - trayWidth - 9
-      areaY = 0
-      areaH = window.innerHeight - saiBottom
-    } else {
-      // Portrait: tray on top
-      const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
-      areaX = 0
-      areaY = carouselHeight
-      areaW = window.innerWidth
-      areaH = window.innerHeight - carouselHeight - saiBottom
+      return { baseZoom: 1, restX: 0, restY: 0 }
     }
-
-    // Fill the available width; height overflows and is pannable
-    const baseZoom = areaW / this.boardWidth
-    const scaledH = this.boardHeight * baseZoom
-    const restX = Math.round(areaX)
-    // Center vertically if it fits, top-align if it overflows
-    const restY = scaledH <= areaH
-      ? Math.round(areaY + (areaH - scaledH) / 2)
-      : Math.round(areaY)
-
+    // Portrait: board sits below the carousel
+    const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
     return {
-      baseZoom,
-      restX,
-      restY,
+      baseZoom: 1,
+      restX: Math.round((window.innerWidth - this.boardWidth) / 2),
+      restY: Math.round(carouselHeight),
     }
   }
 
   clampPan(panX, panY, scale) {
     const layout = this.getViewLayout()
+
+    if (scale <= 1) {
+      return { x: layout.restX, y: layout.restY }
+    }
+
     const scaledWidth = this.boardWidth * scale
     const scaledHeight = this.boardHeight * scale
-
     const maxX = layout.restX
     const maxY = layout.restY
     const minX = Math.min(maxX, window.innerWidth - scaledWidth)
@@ -1241,7 +1228,7 @@ export class JigsawPuzzle {
   onStageWheel(event) {
     event.preventDefault()
     const delta = -event.deltaY * 0.002
-    const nextScale = clamp(this.zoom * (1 + delta), this.getViewLayout().baseZoom, 4)
+    const nextScale = clamp(this.zoom * (1 + delta), 1, 4)
     if (nextScale === this.zoom) return
 
     const stageRect = this.stage.getBoundingClientRect()
