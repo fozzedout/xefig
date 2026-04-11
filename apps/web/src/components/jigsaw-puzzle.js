@@ -73,8 +73,7 @@ export class JigsawPuzzle {
     this.handleStagePointerUp = (event) => this.onStagePointerUp(event)
     this.handleStageWheel = (event) => this.onStageWheel(event)
     this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
-    this.handleOrientationChange = () => this.onOrientationChange()
-    this.handleResize = () => this.onResize()
+    this.handleLayoutChange = () => this.onLayoutChange()
   }
 
   async init() {
@@ -107,8 +106,8 @@ export class JigsawPuzzle {
       this.stage.removeEventListener('pointercancel', this.handleStagePointerUp)
       this.stage.removeEventListener('wheel', this.handleStageWheel)
     }
-    window.removeEventListener('orientationchange', this.handleOrientationChange)
-    window.removeEventListener('resize', this.handleResize)
+    window.removeEventListener('orientationchange', this.handleLayoutChange)
+    window.removeEventListener('resize', this.handleLayoutChange)
     if (this.carousel) {
       this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
     }
@@ -237,15 +236,11 @@ export class JigsawPuzzle {
     this.defs = document.createElementNS(SVG_NS, 'defs')
     this.svgDefs.append(this.defs)
 
-    this.rotationCover = document.createElement('div')
-    this.rotationCover.className = 'jigsaw-rotation-cover'
-
     this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer)
     this.stage.append(this.stageContent)
     this.carousel.append(this.carouselTrack)
-    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools, this.rotationCover)
+    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
     this.container.append(this.root)
-    this.updateNotchSide()
 
     // Adopt floating game controls into the jigsaw grid so they align with tray tools
     const floatingControls = this.container.parentElement?.querySelector('.floating-game-controls')
@@ -261,8 +256,8 @@ export class JigsawPuzzle {
     this.stage.addEventListener('pointercancel', this.handleStagePointerUp)
     this.stage.addEventListener('wheel', this.handleStageWheel, { passive: false })
     this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
-    window.addEventListener('orientationchange', this.handleOrientationChange)
-    window.addEventListener('resize', this.handleResize)
+    window.addEventListener('orientationchange', this.handleLayoutChange)
+    window.addEventListener('resize', this.handleLayoutChange)
   }
 
   calculateBoardSize() {
@@ -275,7 +270,7 @@ export class JigsawPuzzle {
     const saiBottom = this.getSafeAreaInset('bottom')
 
     if (usesSidebarTray) {
-      // Landscape: tray on notch side absorbs the notch inset
+      // Landscape: tray on right
       const sideTrayReserve = Math.max(118, viewportWidth * 0.105) + 9
       var availableWidth = Math.max(280, containerWidth - sideTrayReserve)
       var availableHeight = Math.max(220, containerHeight - saiBottom)
@@ -320,16 +315,6 @@ export class JigsawPuzzle {
     return val
   }
 
-  // iOS reports symmetric SAI left/right in landscape even though the notch
-  // is only on one side. Use window.orientation to determine the real side.
-  getNotchSide() {
-    const angle = typeof window.orientation !== 'undefined'
-      ? window.orientation
-      : (screen.orientation?.angle ?? 0)
-    if (angle === 90) return 'left'
-    if (angle === -90 || angle === 270) return 'right'
-    return 'top' // portrait
-  }
 
 
   calculateImageCrop(targetRatio) {
@@ -1154,33 +1139,12 @@ export class JigsawPuzzle {
     }
   }
 
-  onOrientationChange() {
-    if (this._orientationTimer) clearTimeout(this._orientationTimer)
-    this._orientationTimer = setTimeout(() => {
-      this._orientationTimer = null
-      this.updateNotchSide()
-      this.resetView()
-    }, 250)
-  }
-
-  onResize() {
-    if (this._orientationTimer) return // rotation in progress, let orientationchange handle it
-    if (this._resizeTimer) clearTimeout(this._resizeTimer)
-    this._resizeTimer = setTimeout(() => {
-      this._resizeTimer = null
+  onLayoutChange() {
+    if (this._layoutTimer) clearTimeout(this._layoutTimer)
+    this._layoutTimer = setTimeout(() => {
+      this._layoutTimer = null
       this.resetView()
     }, 200)
-  }
-
-  updateNotchSide() {
-    if (!this.root) return
-    const notch = this.getNotchSide()
-    const landscape = this.usesSidebarTray()
-    // In landscape, always set one of the two classes so CSS can show the tray
-    const isLeft = landscape && notch === 'left'
-    const isRight = landscape && notch !== 'left'
-    this.root.classList.toggle('jigsaw-root--notch-left', isLeft)
-    this.root.classList.toggle('jigsaw-root--notch-right', isRight)
   }
 
   getViewLayout() {
@@ -1190,19 +1154,11 @@ export class JigsawPuzzle {
     let areaX, areaY, areaW, areaH
 
     if (this.usesSidebarTray()) {
-      // Landscape: tray is on the notch side (handled by CSS class)
+      // Landscape: tray always on right (CSS media query)
       const trayRect = this.carousel ? this.carousel.getBoundingClientRect() : null
       const trayWidth = trayRect ? trayRect.width : Math.max(118, window.innerWidth * 0.105)
-      const notch = this.getNotchSide()
-      if (notch === 'left') {
-        // Tray on left, board on right
-        areaX = trayWidth + 9
-        areaW = window.innerWidth - trayWidth - 9
-      } else {
-        // Tray on right, board on left
-        areaX = 0
-        areaW = window.innerWidth - trayWidth - 9
-      }
+      areaX = 0
+      areaW = window.innerWidth - trayWidth - 9
       areaY = 0
       areaH = window.innerHeight - saiBottom
     } else {
