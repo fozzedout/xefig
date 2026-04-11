@@ -1023,7 +1023,8 @@ export class JigsawPuzzle {
     }
 
     const rawZoom = Number(payload.zoom)
-    const zoom = Number.isFinite(rawZoom) ? clamp(rawZoom, 1, 4) : 1
+    const minZoom = this.getViewLayout().baseZoom
+    const zoom = Number.isFinite(rawZoom) ? clamp(rawZoom, minZoom, 4) : minZoom
     const rawPanX = Number(payload.panX)
     const rawPanY = Number(payload.panY)
     this.zoom = zoom
@@ -1095,7 +1096,7 @@ export class JigsawPuzzle {
       const stageRect = this.stage.getBoundingClientRect()
 
       const scaleRatio = distance / this.pinchState.startDistance
-      const nextScale = clamp(this.pinchState.startScale * scaleRatio, 1, 4)
+      const nextScale = clamp(this.pinchState.startScale * scaleRatio, this.getViewLayout().baseZoom, 4)
 
       const centerX = center.x - stageRect.left
       const centerY = center.y - stageRect.top
@@ -1178,36 +1179,49 @@ export class JigsawPuzzle {
     }, 200)
   }
 
-  getBoardRestPosition() {
+  getViewLayout() {
+    // Calculate the available area and the zoom needed to fit the board in it
     const sai = this.getRealSafeAreaInsets()
+    let areaX, areaY, areaW, areaH
+
     if (this.usesSidebarTray()) {
-      // Landscape: offset by notch inset on left, SAI top
-      return {
-        x: Math.round(sai.left),
-        y: Math.round(sai.top),
-      }
+      // Landscape: tray on right
+      const trayWidth = this.carousel ? this.carousel.getBoundingClientRect().width : Math.max(118, window.innerWidth * 0.105)
+      areaX = sai.left
+      areaY = sai.top
+      areaW = window.innerWidth - sai.left - trayWidth - 9
+      areaH = window.innerHeight - sai.top - sai.bottom
+    } else {
+      // Portrait: tray on top
+      const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
+      areaX = 0
+      areaY = carouselHeight
+      areaW = window.innerWidth
+      areaH = window.innerHeight - carouselHeight - sai.bottom
     }
-    // Portrait: below the carousel
-    const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
+
+    const fitZoom = Math.min(areaW / this.boardWidth, areaH / this.boardHeight, 1)
+    const scaledW = this.boardWidth * fitZoom
+    const scaledH = this.boardHeight * fitZoom
+
     return {
-      x: Math.round((window.innerWidth - this.boardWidth) / 2),
-      y: Math.round(carouselHeight),
+      baseZoom: fitZoom,
+      restX: Math.round(areaX + (areaW - scaledW) / 2),
+      restY: Math.round(areaY + (areaH - scaledH) / 2),
     }
   }
 
   clampPan(panX, panY, scale) {
-    const rest = this.getBoardRestPosition()
-    const scaledWidth = this.boardWidth * scale
-    const scaledHeight = this.boardHeight * scale
+    const layout = this.getViewLayout()
 
-    if (scale <= 1) {
-      // At zoom 1, lock to rest position (board is sized to fit exactly)
-      return { x: rest.x, y: rest.y }
+    if (scale <= layout.baseZoom) {
+      return { x: layout.restX, y: layout.restY }
     }
 
-    // When zoomed, allow full panning to viewport edges
-    const maxX = rest.x
-    const maxY = rest.y
+    const scaledWidth = this.boardWidth * scale
+    const scaledHeight = this.boardHeight * scale
+    const maxX = layout.restX
+    const maxY = layout.restY
     const minX = Math.min(maxX, window.innerWidth - scaledWidth)
     const minY = Math.min(maxY, window.innerHeight - scaledHeight)
 
@@ -1223,10 +1237,10 @@ export class JigsawPuzzle {
   }
 
   resetView() {
-    this.zoom = 1
-    const rest = this.getBoardRestPosition()
-    this.panX = rest.x
-    this.panY = rest.y
+    const layout = this.getViewLayout()
+    this.zoom = layout.baseZoom
+    this.panX = layout.restX
+    this.panY = layout.restY
     if (this.stageContent) {
       this.updateStageTransform()
     }
@@ -1256,7 +1270,7 @@ export class JigsawPuzzle {
   onStageWheel(event) {
     event.preventDefault()
     const delta = -event.deltaY * 0.002
-    const nextScale = clamp(this.zoom * (1 + delta), 1, 4)
+    const nextScale = clamp(this.zoom * (1 + delta), this.getViewLayout().baseZoom, 4)
     if (nextScale === this.zoom) return
 
     const stageRect = this.stage.getBoundingClientRect()
