@@ -1330,7 +1330,7 @@ export class JigsawPuzzle {
     if (this.edgesOnly) {
       this.setEdgesOnly(false)
     }
-    this.edgesTrayBtn.hidden = true
+    this.edgesTrayBtn.style.display = 'none'
   }
 
   setEdgesOnly(enabled) {
