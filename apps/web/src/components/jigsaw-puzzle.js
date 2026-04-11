@@ -610,7 +610,7 @@ export class JigsawPuzzle {
     piece.inCarousel = true
 
     piece.canvas.classList.remove('is-locked', 'is-dragging', 'is-loose')
-    piece.canvas.style.touchAction = 'none'
+    piece.canvas.style.touchAction = this.usesSidebarTray() ? 'pan-y' : 'pan-x'
     piece.canvas.style.position = 'absolute'
     piece.canvas.style.left = '0px'
     piece.canvas.style.top = '0px'
@@ -686,8 +686,6 @@ export class JigsawPuzzle {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
     }
     this.attachWindowTracking()
   }
@@ -762,22 +760,10 @@ export class JigsawPuzzle {
 
   onWindowPointerMove(event) {
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
-      const sidebar = this.usesSidebarTray()
-
-      // Scroll the carousel by the movement delta along the scroll axis
-      const scrollDelta = sidebar
-        ? event.clientY - this.pendingLift.lastY
-        : event.clientX - this.pendingLift.lastX
-      if (sidebar) {
-        this.carousel.scrollTop -= scrollDelta
-      } else {
-        this.carousel.scrollLeft -= scrollDelta
-      }
-      this.pendingLift.lastX = event.clientX
-      this.pendingLift.lastY = event.clientY
-
-      // If the finger has moved far enough away from the tray, snap to drag
-      const liftDistance = sidebar
+      // If the finger has moved far enough away from the tray, snap to drag.
+      // Native scroll handles the scroll axis — if the browser claims the gesture
+      // for scroll, pointercancel fires and cancelPendingLift cleans up.
+      const liftDistance = this.usesSidebarTray()
         ? this.pendingLift.startX - event.clientX  // leftward in landscape
         : event.clientY - this.pendingLift.startY   // downward in portrait
       if (liftDistance > 30) {
