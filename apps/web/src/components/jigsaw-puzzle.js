@@ -74,6 +74,7 @@ export class JigsawPuzzle {
     this.handleStageWheel = (event) => this.onStageWheel(event)
     this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
     this.handleOrientationChange = () => this.onOrientationChange()
+    this.handleResize = () => this.onResize()
   }
 
   async init() {
@@ -107,7 +108,7 @@ export class JigsawPuzzle {
       this.stage.removeEventListener('wheel', this.handleStageWheel)
     }
     window.removeEventListener('orientationchange', this.handleOrientationChange)
-    window.removeEventListener('resize', this.handleOrientationChange)
+    window.removeEventListener('resize', this.handleResize)
     if (this.carousel) {
       this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
     }
@@ -258,7 +259,7 @@ export class JigsawPuzzle {
     this.stage.addEventListener('wheel', this.handleStageWheel, { passive: false })
     this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
     window.addEventListener('orientationchange', this.handleOrientationChange)
-    window.addEventListener('resize', this.handleOrientationChange)
+    window.addEventListener('resize', this.handleResize)
   }
 
   calculateBoardSize() {
@@ -1151,14 +1152,22 @@ export class JigsawPuzzle {
   }
 
   onOrientationChange() {
-    // Delay to let viewport finish resizing
-    // Update notch class immediately so CSS doesn't flash the wrong side
+    // orientationchange fires after window.orientation is updated
     this.updateNotchSide()
     // Debounce the layout recalculation until viewport has settled
     if (this._orientationTimer) clearTimeout(this._orientationTimer)
     this._orientationTimer = setTimeout(() => {
       this._orientationTimer = null
-      this.updateNotchSide()
+      this.resetView()
+    }, 200)
+  }
+
+  onResize() {
+    // resize fires during rotation before window.orientation updates,
+    // so only debounce resetView — never updateNotchSide from here
+    if (this._orientationTimer) clearTimeout(this._orientationTimer)
+    this._orientationTimer = setTimeout(() => {
+      this._orientationTimer = null
       this.resetView()
     }, 200)
   }
