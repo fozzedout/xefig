@@ -705,7 +705,7 @@ export class JigsawPuzzle {
     }
   }
 
-  startDraggingPiece(event, piece) {
+  startDraggingPiece(event, piece, { centerOnPointer = false } = {}) {
     event.stopPropagation()
     event.preventDefault()
 
@@ -723,11 +723,21 @@ export class JigsawPuzzle {
     this.draggingPiece = piece
 
     const rect = piece.canvas.getBoundingClientRect()
-    piece.dragOffsetX = event.clientX - rect.left
-    piece.dragOffsetY = event.clientY - rect.top
-    piece.dragLeft = rect.left
-    piece.dragTop = rect.top
     piece.dragScale = Math.max(0.1, rect.width / this.pieceCanvasWidth)
+
+    if (centerOnPointer) {
+      const scaledW = this.pieceCanvasWidth * piece.dragScale
+      const scaledH = this.pieceCanvasHeight * piece.dragScale
+      piece.dragOffsetX = scaledW / 2
+      piece.dragOffsetY = scaledH / 2
+      piece.dragLeft = event.clientX - piece.dragOffsetX
+      piece.dragTop = event.clientY - piece.dragOffsetY
+    } else {
+      piece.dragOffsetX = event.clientX - rect.left
+      piece.dragOffsetY = event.clientY - rect.top
+      piece.dragLeft = rect.left
+      piece.dragTop = rect.top
+    }
 
     piece.canvas.classList.add('is-dragging')
     piece.canvas.style.position = 'fixed'
@@ -773,7 +783,7 @@ export class JigsawPuzzle {
       if (liftDistance > 30) {
         const piece = this.pendingLift.piece
         this.pendingLift = null
-        this.startDraggingPiece(event, piece)
+        this.startDraggingPiece(event, piece, { centerOnPointer: true })
       }
       return
     }
