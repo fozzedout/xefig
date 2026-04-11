@@ -241,6 +241,7 @@ export class JigsawPuzzle {
     this.carousel.append(this.carouselTrack)
     this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
     this.container.append(this.root)
+    this.updateNotchSide()
 
     // Adopt floating game controls into the jigsaw grid so they align with tray tools
     const floatingControls = this.container.parentElement?.querySelector('.floating-game-controls')
@@ -266,20 +267,19 @@ export class JigsawPuzzle {
     const viewportHeight = window.innerHeight || this.container.clientHeight || 0
     const containerWidth = Math.min(this.container.clientWidth || viewportWidth - 16, viewportWidth)
     const containerHeight = this.container.clientHeight || viewportHeight
-    const sai = this.getRealSafeAreaInsets()
+    const saiTop = this.getSafeAreaInset('top')
+    const saiBottom = this.getSafeAreaInset('bottom')
 
     if (usesSidebarTray) {
-      // Landscape: tray on right, notch on one side
-      // Sidebar column: minmax(118px, 10.5vw) + 0.55rem gap + notch inset on right
-      const sideTrayReserve = Math.max(118, viewportWidth * 0.105) + 9 + sai.right
-      var availableWidth = Math.max(280, containerWidth - sideTrayReserve - sai.left)
-      var availableHeight = Math.max(220, containerHeight - sai.top - sai.bottom)
+      // Landscape: tray on notch side absorbs the notch inset
+      const sideTrayReserve = Math.max(118, viewportWidth * 0.105) + 9
+      var availableWidth = Math.max(280, containerWidth - sideTrayReserve)
+      var availableHeight = Math.max(220, containerHeight - saiBottom)
     } else {
       // Portrait: tray at top with sai-top padding
-      // Carousel height: padding (0.4rem + sai-top + 0.4rem) + track min-height (82px)
-      const topTrayReserve = Math.round(13 + sai.top + 82)
+      const topTrayReserve = Math.round(13 + saiTop + 82)
       var availableWidth = Math.max(280, containerWidth)
-      var availableHeight = Math.max(220, containerHeight - topTrayReserve - sai.bottom)
+      var availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
     }
     const maxWidth = availableWidth
     const maxHeight = availableHeight
@@ -327,26 +327,6 @@ export class JigsawPuzzle {
     return 'top' // portrait
   }
 
-  getRealSafeAreaInsets() {
-    const top = this.getSafeAreaInset('top')
-    const bottom = this.getSafeAreaInset('bottom')
-    const rawLeft = this.getSafeAreaInset('left')
-    const rawRight = this.getSafeAreaInset('right')
-
-    if (!this.usesSidebarTray()) {
-      return { top, bottom, left: rawLeft, right: rawRight }
-    }
-
-    // In landscape, iOS reports symmetric left/right. Only apply to the notch side.
-    const notch = this.getNotchSide()
-    const notchInset = Math.max(rawLeft, rawRight)
-    return {
-      top,
-      bottom,
-      left: notch === 'left' ? notchInset : 0,
-      right: notch === 'right' ? notchInset : 0,
-    }
-  }
 
   calculateImageCrop(targetRatio) {
     const sourceWidth = this.image.width
@@ -1175,29 +1155,47 @@ export class JigsawPuzzle {
     if (this._orientationTimer) clearTimeout(this._orientationTimer)
     this._orientationTimer = setTimeout(() => {
       this._orientationTimer = null
+      this.updateNotchSide()
       this.resetView()
     }, 200)
   }
 
+  updateNotchSide() {
+    if (!this.root) return
+    const notch = this.getNotchSide()
+    this.root.classList.toggle('jigsaw-root--notch-left', notch === 'left')
+    this.root.classList.toggle('jigsaw-root--notch-right', notch === 'right')
+  }
+
   getViewLayout() {
-    // Calculate the available area and the zoom needed to fit the board in it
-    const sai = this.getRealSafeAreaInsets()
+    // Calculate the available area and the zoom needed to fit the board in it.
+    // The tray is on the notch side in landscape, so it absorbs the notch inset.
+    const saiBottom = this.getSafeAreaInset('bottom')
     let areaX, areaY, areaW, areaH
 
     if (this.usesSidebarTray()) {
-      // Landscape: tray on right
-      const trayWidth = this.carousel ? this.carousel.getBoundingClientRect().width : Math.max(118, window.innerWidth * 0.105)
-      areaX = sai.left
-      areaY = sai.top
-      areaW = window.innerWidth - sai.left - trayWidth - 9
-      areaH = window.innerHeight - sai.top - sai.bottom
+      // Landscape: tray is on the notch side (handled by CSS class)
+      const trayRect = this.carousel ? this.carousel.getBoundingClientRect() : null
+      const trayWidth = trayRect ? trayRect.width : Math.max(118, window.innerWidth * 0.105)
+      const notch = this.getNotchSide()
+      if (notch === 'left') {
+        // Tray on left, board on right
+        areaX = trayWidth + 9
+        areaW = window.innerWidth - trayWidth - 9
+      } else {
+        // Tray on right, board on left
+        areaX = 0
+        areaW = window.innerWidth - trayWidth - 9
+      }
+      areaY = 0
+      areaH = window.innerHeight - saiBottom
     } else {
       // Portrait: tray on top
       const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
       areaX = 0
       areaY = carouselHeight
       areaW = window.innerWidth
-      areaH = window.innerHeight - carouselHeight - sai.bottom
+      areaH = window.innerHeight - carouselHeight - saiBottom
     }
 
     const fitZoom = Math.min(areaW / this.boardWidth, areaH / this.boardHeight, 1)
