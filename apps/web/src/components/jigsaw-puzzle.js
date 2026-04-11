@@ -263,9 +263,11 @@ export class JigsawPuzzle {
     const containerHeight = this.container.clientHeight || viewportHeight
     // Match the CSS grid sidebar column: minmax(118px, 10.5vw) + 0.55rem gap
     const sideTrayReserve = usesSidebarTray ? Math.max(118, viewportWidth * 0.105) + 9 : 0
-    // Portrait: tray is at top, board fills the rest; account for SAI bottom
+    // Portrait: tray is at top, board fills the rest; account for SAI
+    const saiTop = usesSidebarTray ? 0 : this.getSafeAreaInset('top')
     const saiBottom = usesSidebarTray ? 0 : this.getSafeAreaInset('bottom')
-    const topTrayReserve = usesSidebarTray ? 0 : viewportWidth <= 640 ? 112 : 102
+    // Carousel height: padding (0.4rem + sai-top + 0.4rem) + track min-height (82px)
+    const topTrayReserve = usesSidebarTray ? 0 : Math.round(13 + saiTop + 82)
 
     const availableWidth = Math.max(280, containerWidth - sideTrayReserve)
     const availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
