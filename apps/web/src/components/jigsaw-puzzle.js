@@ -179,13 +179,8 @@ export class JigsawPuzzle {
     this.root = document.createElement('section')
     this.root.className = 'jigsaw-root'
 
-    this.boardFrame = document.createElement('div')
-    this.boardFrame.className = 'jigsaw-board-frame'
-
     this.stage = document.createElement('div')
     this.stage.className = 'jigsaw-stage'
-    this.stage.style.width = `${this.boardWidth}px`
-    this.stage.style.height = `${this.boardHeight}px`
 
     this.stageContent = document.createElement('div')
     this.stageContent.className = 'jigsaw-stage-content'
@@ -240,9 +235,8 @@ export class JigsawPuzzle {
 
     this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer)
     this.stage.append(this.stageContent)
-    this.boardFrame.append(this.stage)
     this.carousel.append(this.carouselTrack)
-    this.root.append(this.svgDefs, this.boardFrame, this.carousel, this.carouselTools)
+    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
     this.container.append(this.root)
 
     // Adopt floating game controls into the jigsaw grid so they align with tray tools
@@ -1067,7 +1061,6 @@ export class JigsawPuzzle {
       this.panX = clamped.x
       this.panY = clamped.y
       this.updateStageTransform()
-      this.updateImmersiveZoom()
       return
     }
 
@@ -1128,16 +1121,34 @@ export class JigsawPuzzle {
     }
   }
 
+  getBoardRestPosition() {
+    // Where the board should sit at zoom 1 (below tray in portrait, beside sidebar in landscape)
+    if (this.usesSidebarTray()) {
+      return { x: 0, y: 20 } // landscape: workspace padding-top
+    }
+    // Portrait: below the carousel
+    const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
+    return {
+      x: Math.round((window.innerWidth - this.boardWidth) / 2),
+      y: Math.round(carouselHeight),
+    }
+  }
+
   clampPan(panX, panY, scale) {
+    const rest = this.getBoardRestPosition()
     const scaledWidth = this.boardWidth * scale
     const scaledHeight = this.boardHeight * scale
 
-    const minX = Math.min(0, this.boardWidth - scaledWidth)
-    const minY = Math.min(0, this.boardHeight - scaledHeight)
+    // At zoom 1, pan should be at rest position. When zoomed, allow panning
+    // from showing the board at the rest position to showing the far edges.
+    const maxX = rest.x
+    const maxY = rest.y
+    const minX = Math.min(maxX, window.innerWidth - scaledWidth)
+    const minY = Math.min(maxY, window.innerHeight - scaledHeight)
 
     return {
-      x: clamp(panX, minX, 0),
-      y: clamp(panY, minY, 0),
+      x: clamp(panX, minX, maxX),
+      y: clamp(panY, minY, maxY),
     }
   }
 
@@ -1146,20 +1157,14 @@ export class JigsawPuzzle {
     this.stageContent.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})`
   }
 
-  updateImmersiveZoom() {
-    if (this.root) {
-      this.root.classList.toggle('is-zoomed', this.zoom > 1)
-    }
-  }
-
   resetView() {
     this.zoom = 1
-    this.panX = 0
-    this.panY = 0
+    const rest = this.getBoardRestPosition()
+    this.panX = rest.x
+    this.panY = rest.y
     if (this.stageContent) {
       this.updateStageTransform()
     }
-    this.updateImmersiveZoom()
     this.emitProgress()
   }
 

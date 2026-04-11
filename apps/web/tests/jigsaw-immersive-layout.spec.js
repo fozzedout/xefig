@@ -34,22 +34,19 @@ test('jigsaw board uses most of the available board frame in immersive desktop l
   await page.locator('.jigsaw-root').waitFor()
 
   const layout = await page.evaluate(() => {
-    const frame = document.querySelector('.jigsaw-board-frame')?.getBoundingClientRect()
     const stage = document.querySelector('.jigsaw-stage')?.getBoundingClientRect()
     const floatingMenuButton = document.querySelector('#menu-btn')
     const toolbar = document.querySelector('.game-toolbar')
-    if (!frame || !stage) return null
+    if (!stage) return null
     return {
-      widthRatio: stage.width / frame.width,
-      heightRatio: stage.height / frame.height,
+      stageCoversViewport: stage.width >= window.innerWidth && stage.height >= window.innerHeight,
       hasFloatingMenuButton: Boolean(floatingMenuButton),
       hasToolbar: Boolean(toolbar),
     }
   })
 
   expect(layout).not.toBeNull()
-  expect(layout.widthRatio).toBeGreaterThan(0.9)
-  expect(layout.heightRatio).toBeGreaterThan(0.94)
+  expect(layout.stageCoversViewport).toBe(true)
   expect(layout.hasFloatingMenuButton).toBe(true)
   expect(layout.hasToolbar).toBe(false)
 })

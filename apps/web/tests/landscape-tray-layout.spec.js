@@ -38,11 +38,9 @@ test('jigsaw uses a right-side tray on landscape mobile', async ({ page }) => {
   await openGame(page, 'jigsaw', '.jigsaw-root')
 
   const layout = await page.evaluate(() => {
-    const board = document.querySelector('.jigsaw-board-frame')?.getBoundingClientRect()
     const tray = document.querySelector('.jigsaw-carousel')?.getBoundingClientRect()
-    if (!board || !tray) return null
+    if (!tray) return null
     return {
-      boardRight: board.right,
       trayLeft: tray.left,
       trayHeight: tray.height,
       trayWidth: tray.width,
@@ -51,7 +49,8 @@ test('jigsaw uses a right-side tray on landscape mobile', async ({ page }) => {
   })
 
   expect(layout).not.toBeNull()
-  expect(layout.trayLeft).toBeGreaterThanOrEqual(layout.boardRight - 2)
+  // Tray should be on the right side, taking less than 35% of viewport
+  expect(layout.trayLeft).toBeGreaterThan(layout.viewportWidth * 0.6)
   expect(layout.trayWidth).toBeLessThan(layout.viewportWidth * 0.35)
 })
 
