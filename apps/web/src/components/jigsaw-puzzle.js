@@ -755,8 +755,9 @@ export class JigsawPuzzle {
 
       if (this.usesSidebarTray()) {
         // Landscape sidebar: drag left to lift, vertical scroll to dismiss
-        const isLift = dx < -12 && Math.abs(dx) > Math.abs(dy) * 0.4
+        // Lift wins unless the gesture is nearly vertical (within ~21° of the axis)
         const isVerticalScroll = Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx) * 2.5
+        const isLift = dx < -12 && !isVerticalScroll
         if (isVerticalScroll) { this.cancelPendingLift(); return }
         if (isLift) {
           const piece = this.pendingLift.piece
@@ -765,8 +766,9 @@ export class JigsawPuzzle {
         }
       } else {
         // Portrait top tray: drag down to lift, horizontal scroll to dismiss
-        const isDownwardLift = dy > 12 && Math.abs(dy) > Math.abs(dx) * 0.4
+        // Lift wins unless the gesture is nearly horizontal (within ~21° of the axis)
         const isHorizontalScroll = Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 2.5
+        const isDownwardLift = dy > 12 && !isHorizontalScroll
         if (isHorizontalScroll) { this.cancelPendingLift(); return }
         if (isDownwardLift) {
           const piece = this.pendingLift.piece
