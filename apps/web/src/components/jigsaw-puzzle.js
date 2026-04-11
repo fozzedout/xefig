@@ -741,18 +741,27 @@ export class JigsawPuzzle {
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
       const dx = event.clientX - this.pendingLift.startX
       const dy = event.clientY - this.pendingLift.startY
-      const isUpwardLift = dy < -12 && Math.abs(dy) > Math.abs(dx) * 0.4
-      const isHorizontalScroll = Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 2.5
 
-      if (isHorizontalScroll) {
-        this.cancelPendingLift()
-        return
-      }
-
-      if (isUpwardLift) {
-        const piece = this.pendingLift.piece
-        this.pendingLift = null
-        this.startDraggingPiece(event, piece)
+      if (this.usesSidebarTray()) {
+        // Landscape sidebar: drag left to lift, vertical scroll to dismiss
+        const isLift = dx < -12 && Math.abs(dx) > Math.abs(dy) * 0.4
+        const isVerticalScroll = Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx) * 2.5
+        if (isVerticalScroll) { this.cancelPendingLift(); return }
+        if (isLift) {
+          const piece = this.pendingLift.piece
+          this.pendingLift = null
+          this.startDraggingPiece(event, piece)
+        }
+      } else {
+        // Portrait top tray: drag down to lift, horizontal scroll to dismiss
+        const isDownwardLift = dy > 12 && Math.abs(dy) > Math.abs(dx) * 0.4
+        const isHorizontalScroll = Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 2.5
+        if (isHorizontalScroll) { this.cancelPendingLift(); return }
+        if (isDownwardLift) {
+          const piece = this.pendingLift.piece
+          this.pendingLift = null
+          this.startDraggingPiece(event, piece)
+        }
       }
       return
     }
