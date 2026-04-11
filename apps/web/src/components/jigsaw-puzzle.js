@@ -1170,26 +1170,22 @@ export class JigsawPuzzle {
       areaH = window.innerHeight - carouselHeight - saiBottom
     }
 
-    const fitZoom = Math.min(areaW / this.boardWidth, areaH / this.boardHeight, 1)
-    const scaledW = this.boardWidth * fitZoom
-    const scaledH = this.boardHeight * fitZoom
+    // Never scale below 1 — if the board doesn't fit, let the user pan
+    const restX = Math.round(areaX + Math.max(0, areaW - this.boardWidth) / 2)
+    const restY = Math.round(areaY)
 
     return {
-      baseZoom: fitZoom,
-      restX: Math.round(areaX + (areaW - scaledW) / 2),
-      restY: Math.round(areaY + (areaH - scaledH) / 2),
+      baseZoom: 1,
+      restX,
+      restY,
     }
   }
 
   clampPan(panX, panY, scale) {
     const layout = this.getViewLayout()
-
-    if (scale <= layout.baseZoom) {
-      return { x: layout.restX, y: layout.restY }
-    }
-
     const scaledWidth = this.boardWidth * scale
     const scaledHeight = this.boardHeight * scale
+
     const maxX = layout.restX
     const maxY = layout.restY
     const minX = Math.min(maxX, window.innerWidth - scaledWidth)
