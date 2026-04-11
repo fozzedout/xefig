@@ -252,10 +252,12 @@ export class JigsawPuzzle {
     const containerHeight = this.container.clientHeight || viewportHeight
     // Match the CSS grid sidebar column: minmax(118px, 10.5vw) + 0.55rem gap
     const sideTrayReserve = usesSidebarTray ? Math.max(118, viewportWidth * 0.105) + 9 : 0
-    const bottomTrayReserve = usesSidebarTray ? 0 : viewportWidth <= 640 ? 142 : 122
+    // Portrait: tray is at top, board fills the rest; account for SAI bottom
+    const saiBottom = usesSidebarTray ? 0 : this.getSafeAreaInset('bottom')
+    const topTrayReserve = usesSidebarTray ? 0 : viewportWidth <= 640 ? 112 : 102
 
     const availableWidth = Math.max(280, containerWidth - sideTrayReserve)
-    const availableHeight = Math.max(220, containerHeight - bottomTrayReserve)
+    const availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
     const maxWidth = availableWidth
     const maxHeight = availableHeight
     const maxRatio = usesSidebarTray ? MAX_SIDEBAR_BOARD_RATIO : MAX_BOARD_RATIO
@@ -280,6 +282,11 @@ export class JigsawPuzzle {
 
   usesSidebarTray() {
     return window.innerWidth > window.innerHeight
+  }
+
+  getSafeAreaInset(side) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(`--sai-${side}`)
+    return parseFloat(value) || 0
   }
 
   calculateImageCrop(targetRatio) {

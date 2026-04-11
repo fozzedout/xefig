@@ -1882,6 +1882,7 @@ h1 {
 
 .game-shell--immersive {
   grid-template-rows: minmax(0, 1fr);
+  padding-bottom: 0;
 }
 
 /* ─── Game toolbar ─── */
@@ -2236,8 +2237,8 @@ h1 {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 0.45rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
 }
 
 .jigsaw-clip-defs {
@@ -2247,6 +2248,8 @@ h1 {
 }
 
 .jigsaw-board-frame {
+  grid-row: 2;
+  grid-column: 1;
   min-height: 0;
   display: grid;
   align-content: stretch;
@@ -2254,8 +2257,8 @@ h1 {
 
 .jigsaw-stage {
   position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.75rem;
+  border: none;
+  border-radius: 0;
   background: #0c0c12;
   overflow: hidden;
   touch-action: none;
@@ -2266,9 +2269,14 @@ h1 {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.3) 100%);
   pointer-events: none;
   z-index: 1;
+}
+
+@media (orientation: landscape) {
+  .jigsaw-stage::after {
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.3) 100%);
+  }
 }
 
 .jigsaw-stage-content {
@@ -2385,12 +2393,14 @@ h1 {
 }
 
 .jigsaw-carousel {
+  grid-row: 1;
+  grid-column: 1;
   background: rgba(10, 10, 15, 0.65);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-  padding: 0.5rem 0.4rem 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  padding: calc(0.4rem + var(--sai-top)) 0.4rem 0.4rem;
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -2403,12 +2413,11 @@ h1 {
   flex-direction: row;
   gap: 0.3rem;
   z-index: 10;
-  /* Portrait: place at left side of the board/tray border */
+  /* Portrait: hover halfway between tray (row 1) and canvas (row 2) */
   grid-row: 2;
   grid-column: 1;
   align-self: start;
-  justify-self: start;
-  margin-left: 0.4rem;
+  justify-self: center;
   margin-top: -14px;
 }
 
@@ -2492,10 +2501,19 @@ h1 {
     gap: 0.55rem;
   }
 
+  .jigsaw-board-frame {
+    grid-row: 1;
+  }
+
+  .jigsaw-stage {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.75rem;
+  }
+
   .jigsaw-carousel {
     grid-row: 1;
     grid-column: 2;
-    border-top: 0;
+    border-bottom: 0;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
     padding: 0.45rem 0.15rem 0.45rem 0.45rem;
