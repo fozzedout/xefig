@@ -166,6 +166,11 @@
       <div class="val-row"><span class="val-label">screen.height</span><span class="val-num" id="v-sh">—</span></div>
       <div class="val-row"><span class="val-label">slice-container top</span><span class="val-num" id="v-slice">—</span></div>
       <div class="val-row"><span class="val-label">mode</span><span class="val-num" id="v-mode">—</span></div>
+      <h3 style="margin-top:6px">Orientation / Notch Detection</h3>
+      <div class="val-row"><span class="val-label">window.orientation</span><span class="val-num" id="v-wo">—</span></div>
+      <div class="val-row"><span class="val-label">screen.orientation.angle</span><span class="val-num" id="v-soa">—</span></div>
+      <div class="val-row"><span class="val-label">screen.orientation.type</span><span class="val-num" id="v-sot">—</span></div>
+      <div class="val-row"><span class="val-label">notch side (inferred)</span><span class="val-num" id="v-notch">—</span></div>
       <div class="val-row"><span class="val-label">update count</span><span class="val-num" id="v-count">0</span></div>
       <div id="status"></div>
     </div>
@@ -220,6 +225,23 @@
 
       const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
       document.getElementById('v-mode').textContent = standalone ? 'PWA / standalone' : 'browser';
+
+      // Orientation / notch detection
+      const wo = typeof window.orientation !== 'undefined' ? window.orientation : 'N/A';
+      const soa = screen.orientation?.angle ?? 'N/A';
+      const sot = screen.orientation?.type ?? 'N/A';
+      document.getElementById('v-wo').textContent = wo;
+      document.getElementById('v-soa').textContent = soa;
+      document.getElementById('v-sot').textContent = sot;
+
+      // Infer notch side from orientation
+      let notchSide = 'top (portrait)';
+      const angle = typeof window.orientation !== 'undefined' ? window.orientation : (screen.orientation?.angle ?? 0);
+      if (angle === 90) notchSide = 'LEFT (device rotated CCW)';
+      else if (angle === -90 || angle === 270) notchSide = 'RIGHT (device rotated CW)';
+      else if (angle === 180) notchSide = 'bottom (upside-down)';
+      document.getElementById('v-notch').textContent = notchSide;
+
       document.getElementById('v-count').textContent = `${updateCount} (${source})`;
 
       // Status
