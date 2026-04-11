@@ -2461,7 +2461,6 @@ h1 {
   flex: 0 0 auto;
   display: block;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  touch-action: none;
 }
 
 .jigsaw-carousel-item:hover {
