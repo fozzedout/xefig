@@ -2247,6 +2247,36 @@ h1 {
 }
 
 
+/* Rotation cover — CSS-driven, synced with media query paint */
+.jigsaw-rotation-cover {
+  position: fixed;
+  inset: 0;
+  background: #0a0a0f;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+}
+
+@keyframes rotation-fade-to-landscape {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes rotation-fade-to-portrait {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (orientation: landscape) {
+  .jigsaw-rotation-cover {
+    animation: rotation-fade-to-landscape 350ms ease-out forwards;
+  }
+}
+@media (orientation: portrait) {
+  .jigsaw-rotation-cover {
+    animation: rotation-fade-to-portrait 350ms ease-out forwards;
+  }
+}
+
 .jigsaw-stage-content {
   position: absolute;
   top: 0;

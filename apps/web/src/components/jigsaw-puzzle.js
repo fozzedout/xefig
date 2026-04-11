@@ -237,10 +237,13 @@ export class JigsawPuzzle {
     this.defs = document.createElementNS(SVG_NS, 'defs')
     this.svgDefs.append(this.defs)
 
+    this.rotationCover = document.createElement('div')
+    this.rotationCover.className = 'jigsaw-rotation-cover'
+
     this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer)
     this.stage.append(this.stageContent)
     this.carousel.append(this.carouselTrack)
-    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
+    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools, this.rotationCover)
     this.container.append(this.root)
     this.updateNotchSide()
 
@@ -1152,14 +1155,11 @@ export class JigsawPuzzle {
   }
 
   onOrientationChange() {
-    // Hide everything immediately so CSS reflow isn't visible
-    if (this.root) this.root.style.visibility = 'hidden'
     if (this._orientationTimer) clearTimeout(this._orientationTimer)
     this._orientationTimer = setTimeout(() => {
       this._orientationTimer = null
       this.updateNotchSide()
       this.resetView()
-      if (this.root) this.root.style.visibility = ''
     }, 250)
   }
 
