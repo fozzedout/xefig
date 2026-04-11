@@ -2421,6 +2421,18 @@ h1 {
   margin-top: -14px;
 }
 
+/* When floating controls are adopted into the jigsaw grid (portrait) */
+.jigsaw-root > .floating-game-controls {
+  position: static;
+  grid-row: 2;
+  grid-column: 1;
+  align-self: start;
+  justify-self: start;
+  margin-top: -21px;
+  margin-left: calc(0.6rem + var(--sai-left));
+  z-index: 30;
+}
+
 .jigsaw-tray-tool {
   width: 28px;
   height: 28px;
@@ -2539,6 +2551,18 @@ h1 {
     justify-self: start;
     margin-left: -14px;
     margin-top: 0.5rem;
+  }
+
+  .jigsaw-root > .floating-game-controls {
+    position: absolute;
+    grid-row: auto;
+    grid-column: auto;
+    align-self: auto;
+    justify-self: auto;
+    margin-top: 0;
+    margin-left: 0;
+    top: calc(0.85rem + var(--sai-top) + 20px);
+    left: calc(0.85rem + var(--sai-left));
   }
 }
 

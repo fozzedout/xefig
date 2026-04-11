@@ -118,6 +118,12 @@ export class JigsawPuzzle {
     this.touchPoints.clear()
     this.pinchState = null
     this.panState = null
+    // Return floating controls to original parent before clearing
+    if (this.adoptedFloatingControls && this.floatingControlsOriginalParent) {
+      this.floatingControlsOriginalParent.append(this.adoptedFloatingControls)
+      this.adoptedFloatingControls = null
+      this.floatingControlsOriginalParent = null
+    }
     releaseLoadedImage(this.image)
     this.image = null
     this.displayImageUrl = this.imageUrl
@@ -236,6 +242,14 @@ export class JigsawPuzzle {
     this.carousel.append(this.carouselTrack)
     this.root.append(this.svgDefs, this.boardFrame, this.carousel, this.carouselTools)
     this.container.append(this.root)
+
+    // Adopt floating game controls into the jigsaw grid so they align with tray tools
+    const floatingControls = this.container.parentElement?.querySelector('.floating-game-controls')
+    if (floatingControls) {
+      this.adoptedFloatingControls = floatingControls
+      this.floatingControlsOriginalParent = floatingControls.parentElement
+      this.root.append(floatingControls)
+    }
 
     this.stage.addEventListener('pointerdown', this.handleStagePointerDown)
     this.stage.addEventListener('pointermove', this.handleStagePointerMove)
