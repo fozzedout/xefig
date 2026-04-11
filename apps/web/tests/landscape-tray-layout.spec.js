@@ -34,7 +34,7 @@ async function openGame(page, mode, readySelector) {
   await page.locator(readySelector).waitFor()
 }
 
-test('jigsaw uses a sidebar tray on landscape mobile', async ({ page }) => {
+test('jigsaw uses a right-side tray on landscape mobile', async ({ page }) => {
   await openGame(page, 'jigsaw', '.jigsaw-root')
 
   const layout = await page.evaluate(() => {
@@ -42,17 +42,14 @@ test('jigsaw uses a sidebar tray on landscape mobile', async ({ page }) => {
     if (!tray) return null
     return {
       trayLeft: tray.left,
-      trayRight: tray.right,
       trayWidth: tray.width,
       viewportWidth: window.innerWidth,
     }
   })
 
   expect(layout).not.toBeNull()
+  expect(layout.trayLeft).toBeGreaterThan(layout.viewportWidth * 0.6)
   expect(layout.trayWidth).toBeLessThan(layout.viewportWidth * 0.35)
-  const onRight = layout.trayLeft > layout.viewportWidth * 0.6
-  const onLeft = layout.trayRight < layout.viewportWidth * 0.4
-  expect(onRight || onLeft).toBe(true)
 })
 
 test('polygram uses a right-side tray on landscape mobile', async ({ page }) => {
