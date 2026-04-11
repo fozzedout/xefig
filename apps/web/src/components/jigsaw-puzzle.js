@@ -828,6 +828,7 @@ export class JigsawPuzzle {
       this.flashSnapOutline(piece)
       this.vibrateOnSnap()
       this.playSnapSound()
+      this.checkEdgesComplete()
       this.checkCompletion()
     } else {
       piece.x = clamped.x
@@ -1015,6 +1016,8 @@ export class JigsawPuzzle {
     if (payload.edgesOnly) {
       this.setEdgesOnly(true)
     }
+
+    this.checkEdgesComplete()
 
     const lockedCount = this.pieces.filter((piece) => piece.locked).length
     this.completed = lockedCount === this.pieces.length
@@ -1305,6 +1308,18 @@ export class JigsawPuzzle {
       piece.edges.bottom === 0 ||
       piece.edges.left === 0
     )
+  }
+
+  allEdgesPlaced() {
+    return this.pieces.every((piece) => !this.isEdgePiece(piece) || piece.locked)
+  }
+
+  checkEdgesComplete() {
+    if (!this.edgesTrayBtn || !this.allEdgesPlaced()) return
+    if (this.edgesOnly) {
+      this.setEdgesOnly(false)
+    }
+    this.edgesTrayBtn.hidden = true
   }
 
   setEdgesOnly(enabled) {

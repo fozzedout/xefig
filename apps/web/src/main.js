@@ -1626,7 +1626,7 @@ function renderGame({ resumeRun = null } = {}) {
   }
   if (useImmersiveJigsawChrome && workspaceEl) {
     const wakeImmersiveControls = (event) => {
-      if (event?.target?.closest?.('.floating-game-controls, .jigsaw-carousel, .gt-menu')) {
+      if (event?.target?.closest?.('.floating-game-controls, .jigsaw-carousel, .jigsaw-tray-tools, .gt-menu')) {
         setImmersiveControlsVisible(true, { persist: !menuPanel.hidden })
         return
       }

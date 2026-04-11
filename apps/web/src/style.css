@@ -2112,20 +2112,23 @@ h1 {
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
-.workspace--controls-hidden .floating-game-controls {
+.workspace--controls-hidden .floating-game-controls,
+.workspace--controls-hidden .jigsaw-tray-tools {
   opacity: 0.22;
   transform: none;
   pointer-events: auto;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .workspace--controls-hidden .floating-game-controls {
+  .workspace--controls-hidden .floating-game-controls,
+  .workspace--controls-hidden .jigsaw-tray-tools {
     opacity: 0.28;
     transform: none;
     pointer-events: auto;
   }
 
-  .workspace--controls-hidden .floating-game-controls:hover {
+  .workspace--controls-hidden .floating-game-controls:hover,
+  .workspace--controls-hidden .jigsaw-tray-tools:hover {
     opacity: 1;
   }
 }
@@ -2393,6 +2396,7 @@ h1 {
   flex-direction: row;
   gap: 2rem;
   z-index: 30;
+  transition: opacity 180ms ease;
   /* Portrait: hover halfway between tray (row 1) and canvas (row 2) */
   grid-row: 2;
   grid-column: 1;
