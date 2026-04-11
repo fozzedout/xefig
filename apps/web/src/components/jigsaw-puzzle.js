@@ -296,8 +296,12 @@ export class JigsawPuzzle {
   }
 
   getSafeAreaInset(side) {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(`--sai-${side}`)
-    return parseFloat(value) || 0
+    const el = document.createElement('div')
+    el.style.cssText = `position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-${side}, 0px);visibility:hidden;pointer-events:none`
+    document.body.appendChild(el)
+    const val = el.offsetHeight
+    el.remove()
+    return val
   }
 
   calculateImageCrop(targetRatio) {
