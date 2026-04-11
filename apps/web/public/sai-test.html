@@ -73,57 +73,6 @@
       letter-spacing: 0.1em;
     }
 
-    /* Nav simulation */
-    .nav-sim {
-      --nav-height: 52px;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: calc(var(--nav-height) + var(--sai-top));
-      padding-top: var(--sai-top);
-      padding-bottom: 20px;
-      background: linear-gradient(to bottom, rgba(10,10,15,0.92) calc(var(--sai-top) + 31px), rgba(10,10,15,0));
-      z-index: 200;
-      display: flex;
-      align-items: center;
-      padding-left: calc(1.5rem + var(--sai-left));
-    }
-    .nav-sim span {
-      font-weight: 800;
-      font-size: 1rem;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
-
-    .nav-bottom-line {
-      position: fixed;
-      top: calc(52px + var(--sai-top));
-      left: 0; right: 0;
-      border-top: 1px solid rgba(240, 192, 64, 0.5);
-      z-index: 201;
-    }
-    .nav-bottom-line::after {
-      content: 'nav bottom (52 + sai)';
-      position: absolute;
-      right: 8px; top: 2px;
-      font-size: 10px;
-      color: #f0c040;
-    }
-
-    .nav-gradient-line {
-      position: fixed;
-      top: calc(52px + var(--sai-top) + 20px);
-      left: 0; right: 0;
-      border-top: 1px dashed rgba(240, 96, 80, 0.5);
-      z-index: 201;
-    }
-    .nav-gradient-line::after {
-      content: 'gradient end (+20 pad)';
-      position: absolute;
-      right: 8px; top: 2px;
-      font-size: 10px;
-      color: #f06050;
-    }
-
     /* Slice container simulation */
     .slices-sim {
       position: absolute;
@@ -155,24 +104,24 @@
     /* Values panel */
     .values {
       position: fixed;
-      bottom: calc(20px + var(--sai-bottom));
-      left: calc(20px + var(--sai-left));
-      right: calc(20px + var(--sai-right));
+      bottom: calc(8px + var(--sai-bottom));
+      left: calc(8px + var(--sai-left));
+      right: calc(8px + var(--sai-right));
       background: rgba(10, 10, 15, 0.95);
       border: 1px solid rgba(255,255,255,0.15);
       border-radius: 12px;
-      padding: 16px;
+      padding: 10px 12px;
       z-index: 300;
       font-family: monospace;
-      font-size: 13px;
-      line-height: 1.8;
+      font-size: 11px;
+      line-height: 1.6;
     }
     .values h3 {
-      font-size: 12px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.12em;
       color: #50e8a0;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
     .val-row {
       display: flex;
@@ -182,11 +131,11 @@
     .val-num { color: #f0c040; font-weight: 700; }
     .val-num.mismatch { color: #f06050; }
     .status-msg {
-      margin-top: 12px;
-      padding: 8px;
+      margin-top: 6px;
+      padding: 6px;
       border-radius: 6px;
-      font-size: 12px;
-      line-height: 1.5;
+      font-size: 10px;
+      line-height: 1.4;
     }
     .status-msg.bug { background: rgba(240, 96, 80, 0.15); color: #f06050; }
     .status-msg.ok { background: rgba(80, 232, 160, 0.15); color: #50e8a0; }
@@ -196,10 +145,6 @@
   <div class="screen">
     <div class="safe-area"></div>
     <div class="safe-area-vars"></div>
-
-    <div class="nav-sim"><span>Xefig</span></div>
-    <div class="nav-bottom-line"></div>
-    <div class="nav-gradient-line"></div>
 
     <div class="slices-sim">
       <div class="slice-sim">Jigsaw</div>
@@ -215,12 +160,10 @@
       <div class="val-row"><span class="val-label">bottom</span><span class="val-num" id="v-bottom">—</span></div>
       <div class="val-row"><span class="val-label">left</span><span class="val-num" id="v-left">—</span></div>
       <div class="val-row"><span class="val-label">right</span><span class="val-num" id="v-right">—</span></div>
-      <h3 style="margin-top:12px">Layout</h3>
+      <h3 style="margin-top:6px">Layout</h3>
       <div class="val-row"><span class="val-label">viewport (100vh)</span><span class="val-num" id="v-vh">—</span></div>
-      <div class="val-row"><span class="val-label">viewport (dvh)</span><span class="val-num" id="v-dvh">—</span></div>
       <div class="val-row"><span class="val-label">window.innerHeight</span><span class="val-num" id="v-ih">—</span></div>
       <div class="val-row"><span class="val-label">screen.height</span><span class="val-num" id="v-sh">—</span></div>
-      <div class="val-row"><span class="val-label">nav rendered height</span><span class="val-num" id="v-nav">—</span></div>
       <div class="val-row"><span class="val-label">slice-container top</span><span class="val-num" id="v-slice">—</span></div>
       <div class="val-row"><span class="val-label">mode</span><span class="val-num" id="v-mode">—</span></div>
       <div class="val-row"><span class="val-label">update count</span><span class="val-num" id="v-count">0</span></div>
@@ -269,17 +212,8 @@
       document.getElementById('v-vh').textContent = vhEl.offsetHeight + 'px';
       vhEl.remove();
 
-      const dvhEl = document.createElement('div');
-      dvhEl.style.cssText = 'position:fixed;top:0;height:100dvh;pointer-events:none;visibility:hidden';
-      document.body.appendChild(dvhEl);
-      document.getElementById('v-dvh').textContent = dvhEl.offsetHeight + 'px';
-      dvhEl.remove();
-
       document.getElementById('v-ih').textContent = window.innerHeight + 'px';
       document.getElementById('v-sh').textContent = window.screen.height + 'px';
-
-      const nav = document.querySelector('.nav-sim');
-      document.getElementById('v-nav').textContent = nav.offsetHeight + 'px';
 
       const slices = document.querySelector('.slices-sim');
       document.getElementById('v-slice').textContent = slices.offsetTop + 'px';
@@ -311,7 +245,6 @@
     if (window.navigator.standalone) {
       const meta = document.querySelector('meta[name="viewport"]');
       const original = meta.getAttribute('content');
-      // Briefly switch to viewport-fit=auto then back to cover
       meta.setAttribute('content', original.replace('viewport-fit=cover', 'viewport-fit=auto'));
       requestAnimationFrame(() => {
         meta.setAttribute('content', original);
