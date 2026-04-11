@@ -2083,13 +2083,6 @@ h1 {
   .gt-counter { font-size: 0.6rem; }
 }
 
-@media (orientation: landscape) {
-  .floating-game-controls {
-    top: calc(0.85rem + var(--sai-top));
-    left: calc(0.85rem + var(--sai-left));
-  }
-}
-
 .workspace {
   height: 100%;
   min-height: 0;
@@ -2482,92 +2475,83 @@ h1 {
   stroke-linejoin: round;
 }
 
-@media (orientation: landscape) {
-  .jigsaw-root {
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
-    align-items: stretch;
-    gap: 0.55rem;
-  }
+/* Sidebar tray layout — JS-controlled, no media query.
+   notch-right: tray on right (column 2). notch-left: tray on left (column 1). */
+.jigsaw-root--notch-right,
+.jigsaw-root--notch-left {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
+  align-items: stretch;
+  gap: 0.55rem;
+}
 
-  /* Hide carousel until JS sets notch-left or notch-right to prevent flash */
-  .jigsaw-carousel {
-    grid-row: 1;
-    grid-column: 2;
-    visibility: hidden;
-    border-bottom: 0;
-    padding: 0.45rem calc(0.15rem + var(--sai-right)) 0.45rem 0.45rem;
-    height: 100%;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    touch-action: pan-y;
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
-    mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
-  }
+.jigsaw-root--notch-right .jigsaw-carousel,
+.jigsaw-root--notch-left .jigsaw-carousel {
+  grid-row: 1;
+  grid-column: 2;
+  border-bottom: 0;
+  padding: 0.45rem calc(0.15rem + var(--sai-right)) 0.45rem 0.45rem;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  touch-action: pan-y;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+}
 
-  .jigsaw-carousel-track {
-    flex-direction: column;
-    align-items: center;
-    height: max-content;
-    gap: 0.3rem;
-  }
+.jigsaw-root--notch-right .jigsaw-carousel-track,
+.jigsaw-root--notch-left .jigsaw-carousel-track {
+  flex-direction: column;
+  align-items: center;
+  height: max-content;
+  gap: 0.3rem;
+}
 
-  .jigsaw-tray-tools {
-    flex-direction: column;
-    grid-row: 1;
-    grid-column: 2;
-    align-self: start;
-    justify-self: start;
-    margin-left: -14px;
-    margin-top: 0.5rem;
-    visibility: hidden;
-  }
+.jigsaw-root--notch-right .jigsaw-tray-tools,
+.jigsaw-root--notch-left .jigsaw-tray-tools {
+  flex-direction: column;
+  grid-row: 1;
+  grid-column: 2;
+  align-self: start;
+  justify-self: start;
+  margin-left: -14px;
+  margin-top: 0.5rem;
+}
 
-  .jigsaw-root--notch-right .jigsaw-tray-tools,
-  .jigsaw-root--notch-left .jigsaw-tray-tools {
-    visibility: visible;
-  }
+.jigsaw-root--notch-right > .floating-game-controls,
+.jigsaw-root--notch-left > .floating-game-controls {
+  position: absolute;
+  grid-row: auto;
+  grid-column: auto;
+  align-self: auto;
+  justify-self: auto;
+  margin-top: 0;
+  margin-left: 0;
+  top: calc(0.85rem + var(--sai-top));
+  left: 0.85rem;
+}
 
-  .jigsaw-root > .floating-game-controls {
-    position: absolute;
-    grid-row: auto;
-    grid-column: auto;
-    align-self: auto;
-    justify-self: auto;
-    margin-top: 0;
-    margin-left: 0;
-    top: calc(0.85rem + var(--sai-top));
-    left: calc(0.85rem);
-  }
+/* Notch on left: flip grid so tray is on the left */
+.jigsaw-root--notch-left {
+  grid-template-columns: minmax(118px, 10.5vw) minmax(0, 1fr);
+}
 
-  /* Show carousel once JS has determined notch side */
-  .jigsaw-root--notch-right .jigsaw-carousel,
-  .jigsaw-root--notch-left .jigsaw-carousel {
-    visibility: visible;
-  }
+.jigsaw-root--notch-left .jigsaw-carousel {
+  grid-column: 1;
+  padding: 0.45rem 0.45rem 0.45rem calc(0.15rem + var(--sai-left));
+}
 
-  /* Notch on left: tray moves to left column */
-  .jigsaw-root--notch-left {
-    grid-template-columns: minmax(118px, 10.5vw) minmax(0, 1fr);
-  }
+.jigsaw-root--notch-left .jigsaw-tray-tools {
+  grid-column: 1;
+  margin-left: 0;
+  margin-right: -14px;
+  justify-self: end;
+}
 
-  .jigsaw-root--notch-left .jigsaw-carousel {
-    grid-column: 1;
-    padding: 0.45rem 0.45rem 0.45rem calc(0.15rem + var(--sai-left));
-  }
-
-  .jigsaw-root--notch-left .jigsaw-tray-tools {
-    grid-column: 1;
-    margin-left: 0;
-    margin-right: -14px;
-    justify-self: end;
-  }
-
-  .jigsaw-root--notch-left > .floating-game-controls {
-    left: auto;
-    right: calc(0.85rem);
-  }
+.jigsaw-root--notch-left > .floating-game-controls {
+  left: auto;
+  right: 0.85rem;
 }
 
 .sliding-root {
