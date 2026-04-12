@@ -1475,7 +1475,7 @@ h1 {
 
   /* Overlay — dark gradients for text legibility */
   .ls-default .slice-overlay {
-    background: linear-gradient(90deg, #000a 0%, #0007 35%, #0000 100%), linear-gradient(90deg, #0000 75%, #111a 90%, #000a 100%);
+    background: linear-gradient(90deg, #000a 0%, #0007 35%, #0000 100%), linear-gradient(90deg, #0000 75%, #0007 90%, #000a 100%);
   }
 
   .ls-default .slice.active .slice-overlay {
