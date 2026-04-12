@@ -1617,7 +1617,6 @@ h1 {
 
   /* Cards — right-aligned row, rightmost icon aligns with game slice icons */
   .ls-default .slice-more-cards {
-    position: absolute;
     right: 1.5rem;
     top: 0;
     bottom: 0;
