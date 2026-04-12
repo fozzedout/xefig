@@ -226,10 +226,8 @@ h1 {
 
 .page-back-btn svg { width: 14px; height: 14px; }
 
-/* Show back button when top-nav is hidden (landscape default) */
-@media (orientation: landscape) {
-  .ls-default .page-back-btn { display: flex; }
-}
+/* Show back button when top-nav is hidden (landscape & portrait) */
+.ls-default .page-back-btn { display: flex; }
 
 .settings-page {
   background: #0a0a0f;

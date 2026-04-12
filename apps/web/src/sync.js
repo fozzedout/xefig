@@ -829,17 +829,35 @@ export function disableSync() {
   localStorage.removeItem(SYNC_REVISION_KEY)
 }
 
+let pullIntervalId = null
+
 export function startSyncTimer() {
   if (syncIntervalId || !syncEnabled) return
+  // Only push when there are pending changes
   syncIntervalId = setInterval(() => {
-    syncNow()
+    if (!isJournalEmpty()) {
+      syncNow()
+    }
   }, 60_000)
+  // Pull-only check every 5 minutes to pick up remote changes
+  if (!pullIntervalId) {
+    pullIntervalId = setInterval(() => {
+      if (isJournalEmpty() && !syncInFlight) {
+        pullAllRemoteChanges().catch(() => {})
+      }
+    }, 300_000)
+  }
 }
 
 export function stopSyncTimer() {
-  if (!syncIntervalId) return
-  clearInterval(syncIntervalId)
-  syncIntervalId = null
+  if (syncIntervalId) {
+    clearInterval(syncIntervalId)
+    syncIntervalId = null
+  }
+  if (pullIntervalId) {
+    clearInterval(pullIntervalId)
+    pullIntervalId = null
+  }
 }
 
 export function onGameExit() {
@@ -861,6 +879,10 @@ export function onGameExit() {
         { type: 'application/json' },
       ),
     )
+    // Optimistically acknowledge — beacon is fire-and-forget so we can't
+    // wait for a response.  The next syncNow() will reconcile if the push
+    // actually failed (conflict path will re-pull).
+    acknowledgeBatch(payload.ack)
   } catch {}
 }
 
