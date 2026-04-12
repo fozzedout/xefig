@@ -1439,15 +1439,13 @@ h1 {
   }
 }
 
-/* More slice hidden outside landscape default */
+/* More slice hidden outside ls-default */
 .slice-more { display: none; }
 .slice-more-cards { display: none; }
-@media (orientation: landscape) {
-  .ls-default .slice-more { display: block; }
-  .ls-default .slice-more-cards { display: flex; }
-}
+.ls-default .slice-more { display: block; }
+.ls-default .slice-more-cards { display: flex; }
 
-/* ─── Portrait slice layout ─── */
+/* ─── Portrait spine layout ─── */
 @media (orientation: portrait) {
   .slice-container {
     flex-direction: column;
@@ -1459,28 +1457,223 @@ h1 {
     animation-name: sliceInV;
   }
 
-  .slice::after {
-    right: 10%;
-    top: auto;
-    bottom: 0;
-    height: 1px;
-    width: 80%;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.08) 70%, transparent);
-  }
-
-  .slice-bar {
-    padding-bottom: 0.8rem;
-  }
-
-  .slice-icon {
-    top: calc(52px + 1rem);
-  }
-
-  .mode-icon { position: relative; top: auto; left: auto; transform: none; display: none; }
-  .slice.active .mode-icon { display: block; position: absolute; top: 0.6rem; left: 1rem; }
-
   @keyframes sliceInV {
     to { opacity: 1; transform: scaleY(1); }
+  }
+
+  /* ─── Portrait spine (ls-default) ─── */
+  .ls-default .slice-container {
+    flex-direction: column;
+    inset: 0;
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .ls-default .slice {
+    border-radius: 6px;
+  }
+
+  /* Overlay — dark gradients for text legibility */
+  .ls-default .slice-overlay {
+    background: linear-gradient(90deg,#0a0a0add 0%,#0a0a0faa 55%,#0007 100%),linear-gradient(#0000 55%,#0a0a0fcc 90%,#000 100%);
+  }
+
+  .ls-default .slice.active .slice-overlay {
+    background: linear-gradient(90deg,#0a0a0fcc 0%,#0a0a0f40 50%,#0000 65%),linear-gradient(#0000 55%,#0a0a0fcc 70%,#000 100%);
+  }
+
+  /* Hide top nav, bottom bar, info panel — spine replaces them */
+  .ls-default .top-nav { display: none; }
+  .ls-default .slice-bar { display: none; }
+  .ls-default .info-panel { display: none; }
+
+  /* Immersive archive & settings — no top-nav, own padding */
+  .ls-default .archive-page {
+    padding: calc(1.5rem + var(--sai-top)) calc(1rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(1rem + var(--sai-left));
+  }
+
+  .ls-default .settings-page {
+    padding: calc(1.5rem + var(--sai-top)) calc(2rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(2rem + var(--sai-left));
+  }
+
+  /* Horizontal spine title */
+  .ls-default .slice-title {
+    display: block;
+    position: absolute;
+    writing-mode: horizontal-tb;
+    left: 1.5rem;
+    top: var(--slice-middle, 50%);
+    transform: translateY(-50%);
+    white-space: nowrap;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(232,230,224,0.7);
+    z-index: 3;
+    transition: color 0.4s, opacity 0.3s;
+  }
+
+  .ls-default .slice.active .slice-title {
+    color: #e8e6e0;
+  }
+
+  /* Icon — right side, vertically centered */
+  .ls-default .slice-icon {
+    top: var(--slice-middle, 50%);
+    left: auto;
+    right: 1.5rem;
+    transform: translateY(-50%);
+    color: rgba(232,230,224,0.5);
+    opacity: 1;
+    transition: color 0.4s, opacity 0.3s;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.5));
+  }
+
+  .ls-default .slice.active .slice-icon {
+    top: var(--slice-middle, 50%);
+    right: 1.5rem;
+    left: auto;
+    transform: translateY(-50%);
+    color: #e8e6e0;
+  }
+
+  /* Info text — fades in below title when active */
+  .ls-default .slice-info {
+    display: block;
+    position: absolute;
+    top: calc(var(--slice-middle, 50%) + 1.2rem);
+    left: 1.5rem;
+    right: 5rem;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .ls-default .slice.active .slice-info {
+    opacity: 1;
+  }
+
+  .ls-default .slice-info p {
+    line-height: 1.4;
+    color: rgba(232,230,224,0.7);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  }
+
+  /* Action label — bottom-left, fades in */
+  .ls-default .slice-action {
+    display: flex;
+    position: absolute;
+    bottom: 0.85rem;
+    left: 1.5rem;
+    z-index: 3;
+    align-items: center;
+    gap: 0.4rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .ls-default .slice.active .slice-action {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ls-default .slice-action span {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #e8e6e0;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    white-space: nowrap;
+  }
+
+  /* Accent bar — horizontal on top edge */
+  .ls-default .slice-accent {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    height: 3px;
+    width: 100%;
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: 4;
+  }
+
+  .ls-default .slice.active .slice-accent {
+    opacity: 1;
+  }
+
+  /* Remove divider lines — gap handles separation */
+  .ls-default .slice::after { display: none; }
+
+  /* ─── More/Nav slice (portrait) ─── */
+  .ls-default .slice-more {
+    background: linear-gradient(135deg, #12121f, #0a0a0f);
+    cursor: pointer;
+  }
+
+  .ls-default .slice-more-cards {
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: row;
+    z-index: 3;
+    padding: 0;
+    gap: 0.4rem;
+  }
+
+  .ls-default .more-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: rgba(232,230,224,0.5);
+    font-family: inherit;
+    overflow: hidden;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  .ls-default .more-card:hover {
+    color: #e8e6e0;
+  }
+
+  .ls-default .slice-more.active .more-card {
+    background: rgba(255,255,255,0.04);
+  }
+
+  .ls-default .slice-more.active .more-card:hover {
+    background: rgba(255,255,255,0.08);
+  }
+
+  .ls-default .more-card-img {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ls-default .more-card-img svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .ls-default .more-card-label {
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0;
+    margin-left: 0.6rem;
+    transition: opacity 0.3s 0.1s;
+    white-space: nowrap;
+  }
+
+  .ls-default .slice-more.active .more-card-label {
+    opacity: 1;
   }
 }
 

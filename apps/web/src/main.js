@@ -739,12 +739,11 @@ function computeSliceCenter(container) {
     const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
     const active = container.querySelector('.slice.active:not(.slice-more)')
     if (collapsed) {
-      const center = collapsed.offsetWidth / 2
-      container.style.setProperty('--slice-center', center + 'px')
+      container.style.setProperty('--slice-center', collapsed.offsetWidth / 2 + 'px')
+      container.style.setProperty('--slice-middle', collapsed.offsetHeight / 2 + 'px')
     }
     if (active && collapsed) {
-      const infoWidth = active.offsetWidth - collapsed.offsetWidth / 2 - 19
-      container.style.setProperty('--info-width', infoWidth + 'px')
+      container.style.setProperty('--info-width', (active.offsetWidth - collapsed.offsetWidth / 2 - 19) + 'px')
     }
   })
 }
