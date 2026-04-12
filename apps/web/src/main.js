@@ -504,8 +504,13 @@ function persistActiveRun(progressState) {
 
   const nextPuzzleState = progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState)
 
-  // Only mark dirty when the puzzle state actually changed (player interaction)
-  const puzzleChanged = JSON.stringify(nextPuzzleState) !== JSON.stringify(currentRun.puzzleState)
+  // Only mark dirty when gameplay state changed — ignore view-only fields (zoom/pan)
+  const stripViewState = (s) => {
+    if (!s || typeof s !== 'object') return s
+    const { zoom, panX, panY, ...rest } = s
+    return rest
+  }
+  const puzzleChanged = JSON.stringify(stripViewState(nextPuzzleState)) !== JSON.stringify(stripViewState(currentRun.puzzleState))
 
   const nextRun = {
     ...currentRun,
