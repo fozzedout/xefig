@@ -1537,11 +1537,11 @@ h1 {
     color: #e8e6e0;
   }
 
-  /* Info text — fades in below title when active */
+  /* Info text — positioned in the dark lower area above the action */
   .ls-default .slice-info {
     display: block;
     position: absolute;
-    top: calc(var(--slice-middle, 50%) + 1.2rem);
+    bottom: 2.8rem;
     left: 1.5rem;
     right: 5rem;
     z-index: 3;
