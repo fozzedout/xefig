@@ -1466,7 +1466,7 @@ h1 {
     flex-direction: column;
     inset: 0;
     gap: 3px;
-    padding: 3px;
+    padding: calc(3px + var(--sai-top)) 3px calc(3px + var(--sai-bottom)) 3px;
   }
 
   .ls-default .slice {
@@ -1606,48 +1606,46 @@ h1 {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* ─── More/Nav slice (portrait) ─── */
+  /* ─── More — dock-style bottom bar (portrait) ─── */
   .ls-default .slice-more {
-    background: linear-gradient(135deg, #12121f, #0a0a0f);
-    cursor: pointer;
+    flex: 0 0 auto;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
   }
 
+  .ls-default .slice-more .slice-overlay { display: none; }
+  .ls-default .slice-more .slice-title { display: none; }
+
   .ls-default .slice-more-cards {
-    position: absolute;
-    right: 1.5rem;
-    top: 50%;
-    transform: translateY(-50%);
+    position: static;
+    transform: none;
     flex-direction: row;
+    justify-content: center;
     z-index: 3;
-    padding: 0;
-    gap: 0.4rem;
+    padding: 0.6rem 0;
+    gap: 0.6rem;
   }
 
   .ls-default .more-card {
-    position: relative;
     display: flex;
     align-items: center;
-    padding: 0.5rem;
-    background: none;
-    border: none;
-    border-radius: 4px;
+    gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
     cursor: pointer;
-    color: rgba(232,230,224,0.5);
+    color: rgba(232,230,224,0.55);
     font-family: inherit;
-    overflow: hidden;
-    transition: background 0.3s, color 0.3s;
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
   }
 
-  .ls-default .more-card:hover {
+  .ls-default .more-card:hover,
+  .ls-default .more-card:active {
     color: #e8e6e0;
-  }
-
-  .ls-default .slice-more.active .more-card {
-    background: rgba(255,255,255,0.04);
-  }
-
-  .ls-default .slice-more.active .more-card:hover {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.14);
   }
 
   .ls-default .more-card-img {
@@ -1657,23 +1655,18 @@ h1 {
   }
 
   .ls-default .more-card-img svg {
-    width: 32px;
-    height: 32px;
+    width: 20px;
+    height: 20px;
   }
 
   .ls-default .more-card-label {
     font-weight: 700;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    opacity: 0;
-    margin-left: 0.6rem;
-    transition: opacity 0.3s 0.1s;
-    white-space: nowrap;
-  }
-
-  .ls-default .slice-more.active .more-card-label {
     opacity: 1;
+    margin-left: 0;
+    white-space: nowrap;
   }
 }
 
