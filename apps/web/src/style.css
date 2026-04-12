@@ -1502,7 +1502,7 @@ h1 {
     position: absolute;
     writing-mode: horizontal-tb;
     left: 1.5rem;
-    top: var(--slice-middle, 50%);
+    top: 50%;
     transform: translateY(-50%);
     white-space: nowrap;
     font-weight: 800;
@@ -1510,11 +1510,12 @@ h1 {
     text-transform: uppercase;
     color: rgba(232,230,224,0.7);
     z-index: 3;
-    transition: color 0.4s, opacity 0.3s;
+    transition: color 0.4s, opacity 0.3s, top 0.4s var(--ease-expo);
   }
 
   .ls-default .slice.active .slice-title {
     color: #e8e6e0;
+    top: var(--slice-middle);
   }
 
   /* Icon — right side, vertically centered */
@@ -1636,7 +1637,7 @@ h1 {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 0.5rem 0.8rem;
+    padding: 1.2rem 0.8rem;
     background: none;
     border: none;
     border-radius: 4px;
