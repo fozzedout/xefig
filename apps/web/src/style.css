@@ -1475,11 +1475,11 @@ h1 {
 
   /* Overlay — dark gradients for text legibility */
   .ls-default .slice-overlay {
-    background: linear-gradient(90deg,#0a0a0add 0%,#0a0a0faa 55%,#0007 100%),linear-gradient(#0000 55%,#0a0a0fcc 90%,#000 100%);
+    background: linear-gradient(90deg, #000a 0%, #0007 35%, #0000 100%), linear-gradient(90deg, #0000 75%, #111a 90%, #000a 100%);
   }
 
   .ls-default .slice.active .slice-overlay {
-    background: linear-gradient(90deg,#0a0a0fcc 0%,#0a0a0f40 50%,#0000 65%),linear-gradient(#0000 55%,#0a0a0fcc 70%,#000 100%);
+    background: linear-gradient(180deg, #111c 0%, #1117 20%, #0000 30%), linear-gradient(#0000 60%, #111a 70%, #000a 100%);
   }
 
   /* Hide top nav, bottom bar, info panel — spine replaces them */
