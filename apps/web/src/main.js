@@ -502,15 +502,22 @@ function persistActiveRun(progressState) {
     return
   }
 
+  const nextPuzzleState = progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState)
+
+  // Only mark dirty when the puzzle state actually changed (player interaction)
+  const puzzleChanged = JSON.stringify(nextPuzzleState) !== JSON.stringify(currentRun.puzzleState)
+
   const nextRun = {
     ...currentRun,
     elapsedActiveMs: elapsed,
     updatedAt: new Date().toISOString(),
-    puzzleState: progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState),
+    puzzleState: nextPuzzleState,
   }
   currentRun = nextRun
   saveRunForMode(nextRun)
-  markActiveRunDirty(nextRun)
+  if (puzzleChanged) {
+    markActiveRunDirty(nextRun)
+  }
 }
 
 async function submitLeaderboard(run) {
