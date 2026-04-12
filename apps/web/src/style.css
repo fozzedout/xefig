@@ -1537,11 +1537,11 @@ h1 {
     color: #e8e6e0;
   }
 
-  /* Info text — positioned in the dark lower area above the action */
+  /* Info text — deep in the dark bottom gradient */
   .ls-default .slice-info {
     display: block;
     position: absolute;
-    bottom: 2.8rem;
+    bottom: 1.2rem;
     left: 1.5rem;
     right: 5rem;
     z-index: 3;
@@ -1560,12 +1560,14 @@ h1 {
     text-shadow: 0 1px 6px rgba(0,0,0,0.8);
   }
 
-  /* Action label — bottom-left, fades in */
+  /* Action label — left of icon, vertically centered, fades in */
   .ls-default .slice-action {
     display: flex;
     position: absolute;
-    bottom: 0.85rem;
-    left: 1.5rem;
+    top: var(--slice-middle, 50%);
+    right: calc(1.5rem + 34px);
+    left: auto;
+    transform: translateY(-50%);
     z-index: 3;
     align-items: center;
     gap: 0.4rem;
