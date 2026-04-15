@@ -800,7 +800,7 @@ function renderLauncher() {
             <div class="slice-title">${SPINE_LABELS[mode]}</div>
             <div class="slice-info"><p>${SLICE_DESCRIPTIONS[mode]}</p></div>
             <div class="slice-action"><span>${hasSave ? 'Resume' : SPINE_ACTIONS[mode]}</span></div>
-            <div class="slice-status ${isCompleted ? 'status-completed' : hasSave ? 'status-saved' : 'status-new'}">${isCompleted ? `<svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm3.35 5.35a.5.5 0 0 0-.7-.7L7 8.29 5.35 6.65a.5.5 0 0 0-.7.7l2 2a.5.5 0 0 0 .7 0l4-4Z"/></svg>${entry?.bestElapsedMs ? ` <span class="slice-status-time">${formatDuration(entry.bestElapsedMs)}</span>` : ''}` : hasSave ? `<svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg> saved` : 'new'}</div>
+            <div class="slice-status ${isCompleted ? 'status-completed' : hasSave ? 'status-saved' : 'status-new'}">${isCompleted ? (entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '✓') : hasSave ? 'saved' : 'new'}</div>
             <div class="slice-bar">
               <span class="bar-title">${title}</span>
               <div class="bar-icon info-btn" title="More info">

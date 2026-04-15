@@ -1361,50 +1361,48 @@ h1 {
 
   /* Status indicator — below title on spine */
   .ls-default .slice-status {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
+    display: block;
     position: absolute;
     writing-mode: vertical-rl;
-    top: calc(1.5rem + 5.5em);
+    top: auto;
+    bottom: 3rem;
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
     z-index: 3;
-    font-size: 0.55rem;
+    font-size: 0.6rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     white-space: nowrap;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
     transition: opacity 0.3s;
   }
 
   .ls-default .slice-status.status-new {
-    color: #40d0f0;
-    opacity: 0.5;
+    color: rgba(120, 200, 230, 0.5);
   }
 
   .ls-default .slice-status.status-saved {
-    color: #f0c040;
-    opacity: 0.7;
+    color: rgba(240, 200, 80, 0.7);
   }
 
   .ls-default .slice-status.status-completed {
-    color: #50e8a0;
-    opacity: 0.7;
+    color: rgba(100, 230, 170, 0.7);
   }
 
   .ls-default .slice.active .slice-status {
+    writing-mode: horizontal-tb;
+    bottom: 0.85rem;
+    top: auto;
+    left: auto;
+    right: 1.5rem;
+    transform: none;
+    font-size: 0.65rem;
+    opacity: 0.8;
+  }
+
+  .ls-default .slice.active .slice-status.status-new {
     opacity: 0;
-  }
-
-  .ls-default .slice-status svg {
-    flex-shrink: 0;
-  }
-
-  .ls-default .slice-status-time {
-    font-family: ui-monospace, 'Fira Code', monospace;
-    font-size: 0.55rem;
-    opacity: 0.85;
   }
 
   /* Remove divider lines — gap handles separation */
@@ -1653,52 +1651,48 @@ h1 {
     opacity: 1;
   }
 
-  /* Status indicator — right of title, horizontally centered */
+  /* Status indicator — right of title, vertically centered */
   .ls-default .slice-status {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
+    display: block;
     position: absolute;
     writing-mode: horizontal-tb;
-    left: calc(1.5rem + 6em);
+    right: 4rem;
     top: 50%;
     transform: translateY(-50%);
     z-index: 3;
-    font-size: 0.55rem;
+    font-size: 0.6rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     white-space: nowrap;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
     transition: opacity 0.3s, top 0.4s var(--ease-expo);
   }
 
   .ls-default .slice-status.status-new {
-    color: #40d0f0;
-    opacity: 0.5;
+    color: rgba(120, 200, 230, 0.5);
   }
 
   .ls-default .slice-status.status-saved {
-    color: #f0c040;
-    opacity: 0.7;
+    color: rgba(240, 200, 80, 0.7);
   }
 
   .ls-default .slice-status.status-completed {
-    color: #50e8a0;
-    opacity: 0.7;
+    color: rgba(100, 230, 170, 0.7);
   }
 
   .ls-default .slice.active .slice-status {
+    top: auto;
+    bottom: 0.5rem;
+    right: 1.5rem;
+    left: auto;
+    transform: none;
+    font-size: 0.65rem;
+    opacity: 0.8;
+  }
+
+  .ls-default .slice.active .slice-status.status-new {
     opacity: 0;
-  }
-
-  .ls-default .slice-status svg {
-    flex-shrink: 0;
-  }
-
-  .ls-default .slice-status-time {
-    font-family: ui-monospace, 'Fira Code', monospace;
-    font-size: 0.55rem;
-    opacity: 0.85;
   }
 
   /* Remove divider lines — gap handles separation */

@@ -145,7 +145,7 @@ test.describe('landscape menu status indicators', () => {
     await expect(status).toContainText('02:05')
   })
 
-  test('status hides on active (expanded) slice in landscape', async ({ page }) => {
+  test('completed status visible on active (expanded) slice in landscape', async ({ page }) => {
     await setupPage(page, { completedRuns: COMPLETED_RUNS })
 
     const jigsawSlice = page.locator('.slice[data-mode="jigsaw"]')
@@ -156,6 +156,21 @@ test.describe('landscape menu status indicators', () => {
     }
 
     const status = jigsawSlice.locator('.slice-status')
+    await expect(status).toBeVisible()
+    await expect(status).toContainText('02:05')
+  })
+
+  test('new status hides on active (expanded) slice in landscape', async ({ page }) => {
+    await setupPage(page)
+
+    const swapSlice = page.locator('.slice[data-mode="swap"]')
+    const isActive = await swapSlice.evaluate((el) => el.classList.contains('active'))
+    if (!isActive) {
+      await swapSlice.click()
+      await page.waitForTimeout(400)
+    }
+
+    const status = swapSlice.locator('.slice-status')
     const opacity = await status.evaluate((el) => Number(window.getComputedStyle(el).opacity))
     expect(opacity).toBe(0)
   })
