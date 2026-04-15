@@ -1210,8 +1210,7 @@ h1 {
 .slice-title,
 .slice-info,
 .slice-action,
-.slice-accent,
-.slice-status { display: none; }
+.slice-accent { display: none; }
 
 /* Hide spine text during orientation recompute, fade back in */
 .slice-recompute .slice-title,
@@ -1324,7 +1323,7 @@ h1 {
     left: calc(var(--slice-center, 50%) + 22px);
     z-index: 3;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     opacity: 0;
     transition: opacity 0.3s;
     pointer-events: none;
@@ -1343,6 +1342,70 @@ h1 {
     white-space: nowrap;
   }
 
+  /* Collapsed spine: icon only, no text */
+  .ls-default .slice-action.action-completed,
+  .ls-default .slice-action.action-saved {
+    opacity: 1;
+    bottom: 3rem;
+    left: var(--slice-center, 50%);
+    transform: translateX(-50%);
+  }
+
+  .ls-default .slice-action.action-completed {
+    color: #50e8a0;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  }
+
+  .ls-default .slice-action.action-saved {
+    color: #f0c040;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  }
+
+  .ls-default .slice-action .action-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Hide text on collapsed spines — icon only */
+  .ls-default .slice-action.action-completed span,
+  .ls-default .slice-action.action-saved span {
+    display: none;
+  }
+
+  /* Active: show full pill with text */
+  .ls-default .slice.active .slice-action.action-completed,
+  .ls-default .slice.active .slice-action.action-saved {
+    bottom: 0.85rem;
+    left: calc(var(--slice-center, 50%) + 22px);
+    transform: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 10px;
+    filter: none;
+  }
+
+  .ls-default .slice.active .slice-action.action-completed {
+    background: rgba(20, 80, 50, 0.85);
+  }
+
+  .ls-default .slice.active .slice-action.action-saved {
+    background: rgba(80, 60, 10, 0.85);
+  }
+
+  .ls-default .slice.active .slice-action.action-completed span,
+  .ls-default .slice.active .slice-action.action-saved span {
+    display: inline;
+    color: inherit;
+    text-shadow: none;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+  }
+
+  .ls-default .slice.active .slice-action .action-icon {
+    width: 13px;
+    height: 13px;
+  }
+
   /* Accent bar on active spine */
   .ls-default .slice-accent {
     display: block;
@@ -1357,52 +1420,6 @@ h1 {
 
   .ls-default .slice.active .slice-accent {
     opacity: 1;
-  }
-
-  /* Status indicator — below title on spine */
-  .ls-default .slice-status {
-    display: block;
-    position: absolute;
-    writing-mode: vertical-rl;
-    top: auto;
-    bottom: 3rem;
-    left: var(--slice-center, 50%);
-    transform: translateX(-50%);
-    z-index: 3;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-    transition: opacity 0.3s;
-  }
-
-  .ls-default .slice-status.status-new {
-    color: rgba(120, 200, 230, 0.5);
-  }
-
-  .ls-default .slice-status.status-saved {
-    color: rgba(240, 200, 80, 0.7);
-  }
-
-  .ls-default .slice-status.status-completed {
-    color: rgba(100, 230, 170, 0.7);
-  }
-
-  .ls-default .slice.active .slice-status {
-    writing-mode: horizontal-tb;
-    bottom: 0.85rem;
-    top: auto;
-    left: auto;
-    right: 1.5rem;
-    transform: none;
-    font-size: 0.65rem;
-    opacity: 0.8;
-  }
-
-  .ls-default .slice.active .slice-status.status-new {
-    opacity: 0;
   }
 
   /* Remove divider lines — gap handles separation */
@@ -1616,7 +1633,7 @@ h1 {
     transform: translateY(-50%);
     z-index: 3;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     opacity: 0;
     transition: opacity 0.3s;
     pointer-events: none;
@@ -1635,6 +1652,66 @@ h1 {
     white-space: nowrap;
   }
 
+  /* Collapsed portrait: icon only, no text */
+  .ls-default .slice-action.action-completed,
+  .ls-default .slice-action.action-saved {
+    opacity: 1;
+    right: 1.5rem;
+  }
+
+  .ls-default .slice-action.action-completed {
+    color: #50e8a0;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  }
+
+  .ls-default .slice-action.action-saved {
+    color: #f0c040;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  }
+
+  .ls-default .slice-action .action-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Hide text on collapsed slices — icon only */
+  .ls-default .slice-action.action-completed span,
+  .ls-default .slice-action.action-saved span {
+    display: none;
+  }
+
+  /* Active: show full pill with text */
+  .ls-default .slice.active .slice-action.action-completed,
+  .ls-default .slice.active .slice-action.action-saved {
+    right: calc(1.5rem + 34px);
+    padding: 0.3rem 0.6rem;
+    border-radius: 10px;
+    filter: none;
+  }
+
+  .ls-default .slice.active .slice-action.action-completed {
+    background: rgba(20, 80, 50, 0.85);
+  }
+
+  .ls-default .slice.active .slice-action.action-saved {
+    background: rgba(80, 60, 10, 0.85);
+  }
+
+  .ls-default .slice.active .slice-action.action-completed span,
+  .ls-default .slice.active .slice-action.action-saved span {
+    display: inline;
+    color: inherit;
+    text-shadow: none;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+  }
+
+  .ls-default .slice.active .slice-action .action-icon {
+    width: 13px;
+    height: 13px;
+  }
+
   /* Accent bar — horizontal on top edge */
   .ls-default .slice-accent {
     display: block;
@@ -1649,50 +1726,6 @@ h1 {
 
   .ls-default .slice.active .slice-accent {
     opacity: 1;
-  }
-
-  /* Status indicator — right of title, vertically centered */
-  .ls-default .slice-status {
-    display: block;
-    position: absolute;
-    writing-mode: horizontal-tb;
-    right: 4rem;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 3;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-    transition: opacity 0.3s, top 0.4s var(--ease-expo);
-  }
-
-  .ls-default .slice-status.status-new {
-    color: rgba(120, 200, 230, 0.5);
-  }
-
-  .ls-default .slice-status.status-saved {
-    color: rgba(240, 200, 80, 0.7);
-  }
-
-  .ls-default .slice-status.status-completed {
-    color: rgba(100, 230, 170, 0.7);
-  }
-
-  .ls-default .slice.active .slice-status {
-    top: auto;
-    bottom: 0.5rem;
-    right: 1.5rem;
-    left: auto;
-    transform: none;
-    font-size: 0.65rem;
-    opacity: 0.8;
-  }
-
-  .ls-default .slice.active .slice-status.status-new {
-    opacity: 0;
   }
 
   /* Remove divider lines — gap handles separation */

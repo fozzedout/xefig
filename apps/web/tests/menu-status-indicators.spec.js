@@ -56,65 +56,87 @@ async function setupPage(page, { completedRuns, savedRun } = {}) {
   await page.locator('.slice[data-mode]').first().waitFor()
 }
 
-// ─── Portrait tests (iPhone 12 default is portrait) ───
+// ─── Portrait tests ───
 
 test.describe('portrait menu status indicators', () => {
-  test('shows "new" status on untouched puzzles', async ({ page }) => {
+  test('shows default action text on untouched puzzles', async ({ page }) => {
     await setupPage(page)
 
-    const status = page.locator('.slice[data-mode="swap"] .slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toHaveClass(/status-new/)
-    await expect(status).toHaveText('new')
+    const action = page.locator('.slice[data-mode="swap"] .slice-action')
+    await expect(action).toContainText('Swap now')
+    await expect(action).not.toHaveClass(/action-completed/)
+    await expect(action).not.toHaveClass(/action-saved/)
   })
 
-  test('shows completed status with time on finished puzzles', async ({ page }) => {
+  test('shows completed icon on collapsed finished puzzle', async ({ page }) => {
     await setupPage(page, { completedRuns: COMPLETED_RUNS })
 
-    const status = page.locator('.slice[data-mode="jigsaw"] .slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toHaveClass(/status-completed/)
-    // 125000ms = 02:05
-    await expect(status).toContainText('02:05')
-  })
-
-  test('shows saved status on in-progress puzzles', async ({ page }) => {
-    await setupPage(page, { savedRun: SAVED_RUN })
-
-    const status = page.locator('.slice[data-mode="sliding"] .slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toHaveClass(/status-saved/)
-    await expect(status).toContainText('saved')
-  })
-
-  test('status indicators visible on collapsed (non-active) slices', async ({ page }) => {
-    await setupPage(page, { completedRuns: COMPLETED_RUNS, savedRun: SAVED_RUN })
-
-    // Make sure we check a non-active slice
+    // Ensure jigsaw is collapsed
     const jigsawSlice = page.locator('.slice[data-mode="jigsaw"]')
     const isActive = await jigsawSlice.evaluate((el) => el.classList.contains('active'))
-
     if (isActive) {
-      // Click another slice to deactivate jigsaw
       await page.locator('.slice[data-mode="swap"]').click()
       await page.waitForTimeout(400)
     }
 
-    const status = page.locator('.slice[data-mode="jigsaw"] .slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toHaveClass(/status-completed/)
+    const action = page.locator('.slice[data-mode="jigsaw"] .slice-action')
+    await expect(action).toHaveClass(/action-completed/)
+    await expect(action).toBeVisible()
+    // Icon should be visible
+    await expect(action.locator('svg.action-icon')).toBeVisible()
+    // Text should be hidden on collapsed
+    const spanDisplay = await action.locator('span').evaluate((el) => window.getComputedStyle(el).display)
+    expect(spanDisplay).toBe('none')
   })
 
-  test('all three status types coexist in the menu', async ({ page }) => {
-    await setupPage(page, { completedRuns: COMPLETED_RUNS, savedRun: SAVED_RUN })
+  test('shows resume icon on collapsed saved puzzle', async ({ page }) => {
+    await setupPage(page, { savedRun: SAVED_RUN })
 
-    const completedStatus = page.locator('.slice[data-mode="jigsaw"] .slice-status.status-completed')
-    const savedStatus = page.locator('.slice[data-mode="sliding"] .slice-status.status-saved')
-    const newStatus = page.locator('.slice[data-mode="swap"] .slice-status.status-new')
+    // Ensure sliding is collapsed
+    const slidingSlice = page.locator('.slice[data-mode="sliding"]')
+    const isActive = await slidingSlice.evaluate((el) => el.classList.contains('active'))
+    if (isActive) {
+      await page.locator('.slice[data-mode="swap"]').click()
+      await page.waitForTimeout(400)
+    }
 
-    await expect(completedStatus).toBeVisible()
-    await expect(savedStatus).toBeVisible()
-    await expect(newStatus).toBeVisible()
+    const action = page.locator('.slice[data-mode="sliding"] .slice-action')
+    await expect(action).toHaveClass(/action-saved/)
+    await expect(action).toBeVisible()
+    await expect(action.locator('svg.action-icon')).toBeVisible()
+  })
+
+  test('active completed slice shows pill with time', async ({ page }) => {
+    await setupPage(page, { completedRuns: COMPLETED_RUNS })
+
+    const jigsawSlice = page.locator('.slice[data-mode="jigsaw"]')
+    const isActive = await jigsawSlice.evaluate((el) => el.classList.contains('active'))
+    if (!isActive) {
+      await jigsawSlice.click()
+      await page.waitForTimeout(400)
+    }
+
+    const action = jigsawSlice.locator('.slice-action')
+    await expect(action).toHaveClass(/action-completed/)
+    // Text should now be visible with time
+    await expect(action.locator('span')).toBeVisible()
+    await expect(action).toContainText('02:05')
+  })
+
+  test('active saved slice shows pill with Resume', async ({ page }) => {
+    await setupPage(page, { savedRun: SAVED_RUN })
+
+    const slidingSlice = page.locator('.slice[data-mode="sliding"]')
+    const isActive = await slidingSlice.evaluate((el) => el.classList.contains('active'))
+    if (!isActive) {
+      await slidingSlice.click()
+      await page.waitForTimeout(400)
+    }
+
+    const action = slidingSlice.locator('.slice-action')
+    await expect(action).toHaveClass(/action-saved/)
+    await expect(action.locator('span')).toBeVisible()
+    await expect(action).toContainText('Resume')
   })
 })
 
@@ -125,27 +147,19 @@ test.describe('landscape menu status indicators', () => {
     await page.setViewportSize({ width: 1200, height: 700 })
   })
 
-  test('shows status indicators on collapsed landscape slices', async ({ page }) => {
+  test('shows icons on collapsed landscape spines', async ({ page }) => {
     await setupPage(page, { completedRuns: COMPLETED_RUNS, savedRun: SAVED_RUN })
 
-    const completedStatus = page.locator('.slice[data-mode="jigsaw"] .slice-status.status-completed')
-    const savedStatus = page.locator('.slice[data-mode="sliding"] .slice-status.status-saved')
-    const newStatus = page.locator('.slice[data-mode="swap"] .slice-status.status-new')
+    const completedAction = page.locator('.slice[data-mode="jigsaw"] .slice-action.action-completed')
+    const savedAction = page.locator('.slice[data-mode="sliding"] .slice-action.action-saved')
 
-    await expect(completedStatus).toBeVisible()
-    await expect(savedStatus).toBeVisible()
-    await expect(newStatus).toBeVisible()
+    await expect(completedAction).toBeVisible()
+    await expect(savedAction).toBeVisible()
+    await expect(completedAction.locator('svg.action-icon')).toBeVisible()
+    await expect(savedAction.locator('svg.action-icon')).toBeVisible()
   })
 
-  test('completed status shows time in landscape', async ({ page }) => {
-    await setupPage(page, { completedRuns: COMPLETED_RUNS })
-
-    const status = page.locator('.slice[data-mode="jigsaw"] .slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toContainText('02:05')
-  })
-
-  test('completed status visible on active (expanded) slice in landscape', async ({ page }) => {
+  test('active completed slice shows pill with time in landscape', async ({ page }) => {
     await setupPage(page, { completedRuns: COMPLETED_RUNS })
 
     const jigsawSlice = page.locator('.slice[data-mode="jigsaw"]')
@@ -155,23 +169,8 @@ test.describe('landscape menu status indicators', () => {
       await page.waitForTimeout(400)
     }
 
-    const status = jigsawSlice.locator('.slice-status')
-    await expect(status).toBeVisible()
-    await expect(status).toContainText('02:05')
-  })
-
-  test('new status hides on active (expanded) slice in landscape', async ({ page }) => {
-    await setupPage(page)
-
-    const swapSlice = page.locator('.slice[data-mode="swap"]')
-    const isActive = await swapSlice.evaluate((el) => el.classList.contains('active'))
-    if (!isActive) {
-      await swapSlice.click()
-      await page.waitForTimeout(400)
-    }
-
-    const status = swapSlice.locator('.slice-status')
-    const opacity = await status.evaluate((el) => Number(window.getComputedStyle(el).opacity))
-    expect(opacity).toBe(0)
+    const action = jigsawSlice.locator('.slice-action')
+    await expect(action).toBeVisible()
+    await expect(action).toContainText('02:05')
   })
 })
