@@ -1342,11 +1342,11 @@ h1 {
     white-space: nowrap;
   }
 
-  /* Collapsed spine: icon only, no text */
+  /* Collapsed spine: icon only, above the spine icon */
   .ls-default .slice-action.action-completed,
   .ls-default .slice-action.action-saved {
     opacity: 1;
-    bottom: 3rem;
+    bottom: calc(0.8rem + 28px + 0.4rem);
     left: var(--slice-center, 50%);
     transform: translateX(-50%);
   }
@@ -1652,11 +1652,14 @@ h1 {
     white-space: nowrap;
   }
 
-  /* Collapsed portrait: icon only, no text */
+  /* Collapsed portrait: icon only, left of the spine icon */
   .ls-default .slice-action.action-completed,
   .ls-default .slice-action.action-saved {
     opacity: 1;
-    right: 1.5rem;
+    top: var(--slice-middle, 50%);
+    transform: translateY(-50%);
+    right: calc(1.5rem + 28px + 0.5rem);
+    left: auto;
   }
 
   .ls-default .slice-action.action-completed {
