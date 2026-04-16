@@ -3572,6 +3572,13 @@ h1 {
   background: #0a0a0f;
 }
 
+/* Reserve space for the bottom safe-area so the palette (portrait) and the
+   restart button (landscape) sit flush with the safe-area line rather than
+   extending past it. */
+.game-shell--diamond.game-shell--immersive {
+  padding-bottom: var(--sai-bottom);
+}
+
 .diamond-board-frame {
   position: relative;
   width: 100%;
@@ -3610,7 +3617,7 @@ h1 {
 .diamond-palette-bar {
   display: flex;
   gap: 6px;
-  padding: 8px 12px calc(8px + var(--sai-bottom));
+  padding: 8px 12px;
   overflow-x: auto;
   justify-content: center;
   align-items: center;
@@ -3705,7 +3712,9 @@ h1 {
     grid-template-rows: repeat(9, auto);
     grid-auto-flow: column;
     gap: 6px;
-    padding: calc(8px + var(--sai-top)) calc(8px + var(--sai-right)) calc(8px + var(--sai-bottom)) 8px;
+    /* Right-align to the screen edge (not the safe-area inset) and vertically
+       centre the two-column grid within the bar. */
+    padding: 8px 0 8px 8px;
     overflow-x: hidden;
     overflow-y: auto;
     align-content: center;
@@ -3724,14 +3733,13 @@ h1 {
   }
 }
 
-/* iPhone PWA (standalone): drop the buttons just below the notched
-   area in portrait (safe-area top is ~39px; 30px leaves the buttons
-   tucked against the notch without obscuring it). Landscape already
-   uses fixed 16px offsets that work in both web and PWA. */
+/* iPhone PWA (standalone): place the portrait buttons at the safe-area
+   line so they're below the notch and reliably tappable. Landscape uses
+   the fixed 16px offsets already defined above. */
 @media (display-mode: standalone) {
   .diamond-floating-btn--back,
   .diamond-floating-btn--restart {
-    top: 30px;
+    top: var(--sai-top);
   }
   @media (orientation: landscape) {
     .diamond-floating-btn--back {
