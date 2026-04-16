@@ -375,6 +375,28 @@ function hasActiveRun(puzzleDate, gameMode) {
   return getRunForMode(puzzleDate, gameMode) !== null
 }
 
+// Returns the most-recently-updated uncompleted run from an archived
+// date (i.e. not today). Used to surface a "Continue" shortcut on the
+// launcher's More slice so users don't have to scroll the archive.
+function getLatestActiveArchiveRun(todayDate = getIsoDate(new Date())) {
+  let best = null
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key || !key.startsWith('xefig:run:')) continue
+    const run = readJsonStorage(key)
+    if (!run || typeof run !== 'object') continue
+    if (run.completed) continue
+    if (!run.puzzleDate || !run.imageUrl || !run.difficulty) continue
+    if (run.puzzleDate === todayDate) continue
+    const updatedAt = Date.parse(run.updatedAt || run.startedAt || '')
+    if (!Number.isFinite(updatedAt)) continue
+    if (!best || updatedAt > best._updatedAtMs) {
+      best = { ...run, gameMode: normalizeGameMode(run.gameMode), _updatedAtMs: updatedAt }
+    }
+  }
+  return best
+}
+
 function saveRunForMode(run) {
   if (!run?.puzzleDate || !run?.gameMode) return
   const key = activeRunKey(run.puzzleDate, run.gameMode)
@@ -818,6 +840,20 @@ function renderLauncher() {
             <div class="slice-overlay"></div>
             <div class="slice-title">More</div>
             <div class="slice-more-cards">
+              ${(() => {
+                const resume = getLatestActiveArchiveRun(puzzleDate)
+                if (!resume) return ''
+                const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
+                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+                const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
+                return `
+              <button class="more-card more-card--continue" data-action="continue" data-mode="${resume.gameMode}" data-date="${resume.puzzleDate}" title="Continue ${modeLabel} from ${dateLabel}">
+                <div class="more-card-img">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                </div>
+                <span class="more-card-label">Continue · ${modeLabel} · ${dateLabel}</span>
+              </button>`
+              })()}
               <button class="more-card" data-page="archive">
                 <div class="more-card-img">
                   <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
@@ -947,6 +983,27 @@ function renderLauncher() {
         slice.querySelectorAll('.more-card').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
+            if (btn.dataset.action === 'continue') {
+              const resumeMode = btn.dataset.mode
+              const resumeDate = btn.dataset.date
+              if (resumeMode && resumeDate) {
+                // Resolve puzzle payload for the resumed run's date, then
+                // dispatch through handleSliceClick so the saved run is
+                // picked up and rendered.
+                ;(async () => {
+                  try {
+                    const payload = await fetchPuzzlePayload({ date: resumeDate })
+                    state.puzzle = payload
+                    handleSliceClick(resumeMode, resumeDate)
+                  } catch {
+                    // Fallback: dispatch without a fresh payload; handleSliceClick
+                    // will still resume using the saved imageUrl.
+                    handleSliceClick(resumeMode, resumeDate)
+                  }
+                })()
+              }
+              return
+            }
             window.switchToPage(btn.dataset.page)
           })
         })
