@@ -1802,6 +1802,18 @@ h1 {
     background: rgba(255,255,255,0.08);
   }
 
+  .ls-default .more-card--continue {
+    color: #e070a0;
+  }
+
+  .ls-default .slice-more.active .more-card--continue {
+    background: rgba(224, 112, 160, 0.12);
+  }
+
+  .ls-default .slice-more.active .more-card--continue:hover {
+    background: rgba(224, 112, 160, 0.2);
+  }
+
   /* Icon — centered in card */
   .ls-default .more-card-img {
     display: flex;
