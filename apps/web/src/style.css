@@ -3691,8 +3691,9 @@ h1 {
   color: #f06050;
 }
 
-/* Landscape: palette runs vertically on the right of the screen,
-   restart moves to the bottom-right corner. */
+/* Landscape: palette runs vertically on the right of the screen.
+   Back button sits at 16/16 top-left, restart at 16/16 bottom-left so
+   both float clear of the palette on the opposite side. */
 @media (orientation: landscape) {
   .diamond-root {
     grid-template-rows: minmax(0, 1fr);
@@ -3711,25 +3712,34 @@ h1 {
     justify-content: end;
     flex-wrap: unset;
   }
+  .diamond-floating-btn--back {
+    top: 16px;
+    left: 16px;
+  }
   .diamond-floating-btn--restart {
     top: auto;
-    bottom: calc(0.5rem + var(--sai-bottom));
-    right: calc(0.5rem + var(--sai-right));
+    bottom: 16px;
+    left: 16px;
+    right: auto;
   }
 }
 
-/* iPhone PWA (standalone) nudges the floating buttons up into the
-   notched area so the image has more room, and lets the palette extend
-   flush to the screen edges since the layout already fits the phone. */
+/* iPhone PWA (standalone): drop the buttons just below the notched
+   area in portrait (safe-area top is ~39px; 30px leaves the buttons
+   tucked against the notch without obscuring it). Landscape already
+   uses fixed 16px offsets that work in both web and PWA. */
 @media (display-mode: standalone) {
   .diamond-floating-btn--back,
   .diamond-floating-btn--restart {
-    top: 6px;
+    top: 30px;
   }
   @media (orientation: landscape) {
+    .diamond-floating-btn--back {
+      top: 16px;
+    }
     .diamond-floating-btn--restart {
       top: auto;
-      bottom: 6px;
+      bottom: 16px;
     }
   }
 }
