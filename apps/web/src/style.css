@@ -1757,7 +1757,8 @@ h1 {
     cursor: pointer;
   }
 
-  /* Cards — right-aligned row, rightmost icon aligns with game slice icons */
+  /* Cards — right-aligned row, top-aligned within the slice with
+     visible gaps so the icons don't feel crammed together. */
   .ls-default .slice-more-cards {
     right: 1.5rem;
     top: 0;
@@ -1766,10 +1767,10 @@ h1 {
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
-    align-items: center;
+    align-items: flex-start;
     z-index: 3;
-    padding: 0 0.4rem;
-    gap: 0;
+    padding: 0.8rem 0.4rem 0;
+    gap: 0.8rem;
   }
 
   .ls-default .more-card {
