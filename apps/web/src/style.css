@@ -3710,8 +3710,7 @@ h1 {
     grid-template-rows: repeat(9, auto);
     grid-auto-flow: column;
     gap: 6px;
-    /* Right-aligned to the actual screen edge — ignore safe-area-inset-right. */
-    padding: 8px 0 8px 8px;
+    padding: 8px 8px 8px 8px;
     overflow-x: hidden;
     overflow-y: auto;
     align-content: center;
