@@ -27,9 +27,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
 const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
 const MAX_SIDEBAR_BOARD_RATIO = 2.1
-// Landscape: iPhone's curved screen edge clips content flush against
-// the left edge, so push the canvas in by this much.
-const LANDSCAPE_LEFT_INSET = 20
 
 export class JigsawPuzzle {
   constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, boardColorIndex } = {}) {
@@ -271,15 +268,19 @@ export class JigsawPuzzle {
     const containerHeight = this.container.clientHeight || viewportHeight
     const saiTop = this.getSafeAreaInset('top')
     const saiBottom = this.getSafeAreaInset('bottom')
+    const saiLeft = this.getSafeAreaInset('left')
 
     if (usesSidebarTray) {
       // Landscape: tray on right, no column gap. Reserve the tray
-      // column width on the right and a 20px left margin so the
-      // canvas doesn't run into the iPhone's curved edge. Vertical
-      // direction: fill the full viewport (no safe-area-inset-bottom
-      // reservation — home indicator is semi-transparent).
+      // column width on the right and a left margin of half the
+      // safe-area-inset-left so the canvas stays clear of the
+      // iPhone's curved screen edge (scales with the device's own
+      // inset). Vertical direction: fill the full viewport (no
+      // safe-area-inset-bottom reservation — home indicator is
+      // semi-transparent).
       const sideTrayReserve = Math.max(118, viewportWidth * 0.105)
-      var availableWidth = Math.max(280, containerWidth - sideTrayReserve - LANDSCAPE_LEFT_INSET)
+      const leftInset = Math.round(saiLeft / 2)
+      var availableWidth = Math.max(280, containerWidth - sideTrayReserve - leftInset)
       var availableHeight = Math.max(220, containerHeight)
     } else {
       // Portrait: tray at top with sai-top padding PLUS the ~48px strip
@@ -1167,11 +1168,11 @@ export class JigsawPuzzle {
 
   getViewLayout() {
     if (this.usesSidebarTray()) {
-      // Landscape: inset the board from the left screen edge to clear
-      // the iPhone's curved corner (matches calculateBoardSize's
-      // LANDSCAPE_LEFT_INSET reserve so the board doesn't get clipped
-      // against the bezel).
-      return { baseZoom: 1, restX: LANDSCAPE_LEFT_INSET, restY: 0 }
+      // Landscape: inset the board's resting X by half the
+      // safe-area-inset-left so it clears the iPhone's curved screen
+      // edge. Matches the reserve in calculateBoardSize.
+      const leftInset = Math.round(this.getSafeAreaInset('left') / 2)
+      return { baseZoom: 1, restX: leftInset, restY: 0 }
     }
     // Portrait: board sits below the carousel. Use the carousel's
     // bottom edge in viewport coordinates so the jigsaw-root's
