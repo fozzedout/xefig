@@ -2484,7 +2484,8 @@ h1 {
 }
 
 .workspace--controls-hidden .floating-game-controls,
-.workspace--controls-hidden .jigsaw-tray-tools {
+.workspace--controls-hidden .jigsaw-tray-tools,
+.workspace--controls-hidden .diamond-floating-btn--back {
   opacity: 0.22;
   transform: none;
   pointer-events: auto;
@@ -2492,14 +2493,16 @@ h1 {
 
 @media (hover: hover) and (pointer: fine) {
   .workspace--controls-hidden .floating-game-controls,
-  .workspace--controls-hidden .jigsaw-tray-tools {
+  .workspace--controls-hidden .jigsaw-tray-tools,
+  .workspace--controls-hidden .diamond-floating-btn--back {
     opacity: 0.28;
     transform: none;
     pointer-events: auto;
   }
 
   .workspace--controls-hidden .floating-game-controls:hover,
-  .workspace--controls-hidden .jigsaw-tray-tools:hover {
+  .workspace--controls-hidden .jigsaw-tray-tools:hover,
+  .workspace--controls-hidden .diamond-floating-btn--back:hover {
     opacity: 1;
   }
 }

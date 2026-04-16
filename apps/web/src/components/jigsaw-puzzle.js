@@ -1162,12 +1162,19 @@ export class JigsawPuzzle {
     if (this.usesSidebarTray()) {
       return { baseZoom: 1, restX: 0, restY: 0 }
     }
-    // Portrait: board sits below the carousel
-    const carouselHeight = this.carousel ? this.carousel.getBoundingClientRect().height : 0
+    // Portrait: board sits below the carousel. Use the carousel's
+    // bottom edge in viewport coordinates so the jigsaw-root's
+    // padding-top (which now reserves space for the floating button
+    // strip) is included automatically — not just the carousel's own
+    // height, which would leave the top of the board hidden under
+    // the buttons and tray.
+    const carouselBottom = this.carousel
+      ? this.carousel.getBoundingClientRect().bottom
+      : 0
     return {
       baseZoom: 1,
       restX: Math.round((window.innerWidth - this.boardWidth) / 2),
-      restY: Math.round(carouselHeight),
+      restY: Math.round(carouselBottom),
     }
   }
 
