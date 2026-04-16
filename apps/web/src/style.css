@@ -2777,8 +2777,15 @@ h1 {
 }
 
 /* Portrait jigsaw: menu dropdown floats at the top-right, tray tools
-   at top-centre, back button at top-left (via diamond-floating-btn). */
+   at top-centre, back button at top-left (via diamond-floating-btn).
+   All three buttons share a 40x40 footprint for visual consistency. */
 @media (orientation: portrait) {
+  /* Reserve the top strip for the floating buttons so the tray sits
+     below them instead of overlapping the back button etc. */
+  .game-shell--jigsaw .jigsaw-root {
+    padding-top: calc(0.5rem + var(--sai-top) + 48px);
+  }
+
   .jigsaw-root > .floating-game-controls {
     position: absolute;
     grid-row: auto;
@@ -2791,14 +2798,21 @@ h1 {
     left: auto;
     z-index: 30;
   }
+  .jigsaw-root > .floating-game-controls .gt-icon-btn--floating {
+    width: 40px;
+    height: 40px;
+  }
+  .jigsaw-root > .floating-game-controls .gt-icon-btn--floating svg {
+    width: 16px;
+    height: 16px;
+  }
   /* Dropdown anchored to the right edge of the button. */
   .jigsaw-root > .floating-game-controls .gt-menu--floating {
     left: auto;
     right: 0;
   }
-  /* Tray tools float at top-centre of the screen so highlight/edges
-     sit inline with back (top-left) and menu (top-right) rather than
-     straddling the tray/canvas seam. */
+  /* Tray tools float at top-centre, sized to match the back + menu
+     buttons so the top row reads as one consistent strip. */
   .jigsaw-root > .jigsaw-tray-tools {
     position: absolute;
     grid-row: auto;
@@ -2809,8 +2823,34 @@ h1 {
     top: calc(0.5rem + var(--sai-top));
     left: 50%;
     transform: translateX(-50%);
+    gap: 0.6rem;
     z-index: 30;
   }
+  .jigsaw-root > .jigsaw-tray-tools .jigsaw-tray-tool {
+    width: 40px;
+    height: 40px;
+    background: rgba(10, 10, 15, 0.55);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  .jigsaw-root > .jigsaw-tray-tools .jigsaw-tray-tool svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Jigsaw's workspace background is mostly plain dark (no photo behind
+   the back button), so the diamond subtlety disappears. Bump contrast
+   on the back button when the active mode is jigsaw. */
+.game-shell--jigsaw .diamond-floating-btn--back {
+  opacity: 0.75;
+  background: rgba(30, 30, 40, 0.75);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.game-shell--jigsaw .diamond-floating-btn--back:hover,
+.game-shell--jigsaw .diamond-floating-btn--back:focus-visible,
+.game-shell--jigsaw .diamond-floating-btn--back:active {
+  opacity: 1;
+  background: rgba(40, 40, 50, 0.88);
 }
 
 /* iPhone PWA portrait: pin to the safe-area line to match the diamond
@@ -2819,6 +2859,9 @@ h1 {
   .jigsaw-root > .floating-game-controls,
   .jigsaw-root > .jigsaw-tray-tools {
     top: var(--sai-top);
+  }
+  .game-shell--jigsaw .jigsaw-root {
+    padding-top: calc(var(--sai-top) + 48px);
   }
 }
 
