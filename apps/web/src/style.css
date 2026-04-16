@@ -3564,25 +3564,17 @@ h1 {
 /* ── Diamond Painting ───────────────────────────────── */
 
 .diamond-root {
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
   background: #0a0a0f;
-}
-
-/* Reserve space for the bottom safe-area so the palette (portrait) and the
-   restart button (landscape) sit flush with the safe-area line rather than
-   extending past it. */
-.game-shell--diamond.game-shell--immersive {
-  padding-bottom: var(--sai-bottom);
+  overflow: hidden;
 }
 
 .diamond-board-frame {
-  position: relative;
-  width: 100%;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   background: #0a0a0f;
   touch-action: none;
@@ -3615,6 +3607,11 @@ h1 {
 }
 
 .diamond-palette-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--sai-bottom);
+  z-index: 20;
   display: flex;
   gap: 6px;
   padding: 8px 12px;
@@ -3622,7 +3619,7 @@ h1 {
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-  background: rgba(10, 10, 15, 0.85);
+  background: rgba(10, 10, 15, 0.55);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -3698,28 +3695,29 @@ h1 {
   color: #f06050;
 }
 
-/* Landscape: palette runs vertically on the right of the screen.
-   Back button sits at 16/16 top-left, restart at 16/16 bottom-left so
-   both float clear of the palette on the opposite side. */
+/* Landscape: palette hugs the right edge of the screen, vertically centred
+   so the canvas is visible above and below it. Back button sits at 16/16
+   top-left, restart at 16/16 bottom-left so both float clear of the palette
+   on the opposite side. */
 @media (orientation: landscape) {
-  .diamond-root {
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
   .diamond-palette-bar {
+    left: auto;
+    right: 0;
+    bottom: auto;
+    top: 50%;
+    transform: translateY(-50%);
     display: grid;
     grid-template-columns: auto auto;
     grid-template-rows: repeat(9, auto);
     grid-auto-flow: column;
     gap: 6px;
-    /* Right-align to the screen edge (not the safe-area inset) and vertically
-       centre the two-column grid within the bar. */
-    padding: 8px 0 8px 8px;
+    padding: 8px 8px 8px 8px;
     overflow-x: hidden;
     overflow-y: auto;
     align-content: center;
     justify-content: end;
     flex-wrap: unset;
+    max-height: 100%;
   }
   .diamond-floating-btn--back {
     top: 16px;
