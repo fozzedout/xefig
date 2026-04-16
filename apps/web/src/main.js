@@ -1657,6 +1657,10 @@ function renderGame({ resumeRun = null } = {}) {
     stopTimerDisplay()
     clearRunForMode(currentRun)
     currentRun = null
+    // Re-resolve the image URL from the current puzzle payload so a regenerated
+    // image is picked up instead of reusing the stale URL captured when the run began.
+    const freshImageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+    if (freshImageUrl) state.imageUrl = freshImageUrl
     renderGame()
   })
 

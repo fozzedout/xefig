@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v4'
+const CACHE_NAME = 'xefig-v5'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -64,19 +64,33 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // CDN images: stale-while-revalidate (serve cached immediately, refresh in background)
+  // CDN images: key by the full URL (including ?v=<timestamp>) so a regenerated
+  // image served at a new version is a cache miss and gets re-fetched, rather
+  // than being served forever from the first cached copy.
+  // Offline fallback: if the network fails and we have no exact-URL match,
+  // serve any previously cached version of the same path (ignoreSearch) so
+  // users on frail networks still see something they had before a regeneration.
   if (url.pathname.startsWith('/cdn')) {
-    const key = cacheKey(request)
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) =>
-        cache.match(key).then((cached) => {
-          const fetched = fetch(request).then((response) => {
-            if (response.ok) cache.put(key, response.clone())
-            return response
-          }).catch(() => cached)
-          return cached || fetched
-        })
-      )
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(request)
+        if (cached) {
+          // Refresh in background so a newer ?v= is picked up next time.
+          fetch(request).then((response) => {
+            if (response.ok) cache.put(request, response.clone())
+          }).catch(() => {})
+          return cached
+        }
+        try {
+          const response = await fetch(request)
+          if (response.ok) cache.put(request, response.clone())
+          return response
+        } catch (err) {
+          const stale = await cache.match(request, { ignoreSearch: true })
+          if (stale) return stale
+          throw err
+        }
+      })
     )
     return
   }
