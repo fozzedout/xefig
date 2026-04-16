@@ -3717,6 +3717,12 @@ h1 {
     justify-content: end;
     flex-wrap: unset;
   }
+  /* Right column only has 7 swatches (10–16). Start it at row 2 so it
+     sits centred against the 9-swatch inner column (rows 2–8) instead
+     of stacking to the top. */
+  .diamond-palette-bar .diamond-swatch:nth-child(10) {
+    grid-row: 2;
+  }
   .diamond-floating-btn--back {
     top: 16px;
     left: 16px;
