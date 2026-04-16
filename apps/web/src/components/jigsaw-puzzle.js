@@ -275,8 +275,10 @@ export class JigsawPuzzle {
       var availableWidth = Math.max(280, containerWidth - sideTrayReserve)
       var availableHeight = Math.max(220, containerHeight - saiBottom)
     } else {
-      // Portrait: tray at top with sai-top padding
-      const topTrayReserve = Math.round(13 + saiTop + 82)
+      // Portrait: tray at top with sai-top padding PLUS the ~48px strip
+      // reserved above the tray for the back/highlight/edges/menu buttons
+      // (see .game-shell--jigsaw .jigsaw-root padding-top in style.css).
+      const topTrayReserve = Math.round(13 + saiTop + 82 + 48)
       var availableWidth = Math.max(280, containerWidth)
       var availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
     }
