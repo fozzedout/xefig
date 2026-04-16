@@ -627,6 +627,199 @@ body {
   border-color: #f06050;
 }
 
+/* ── Batch queue grid + activity console ───────────────── */
+.batch-status-spacer {
+  flex: 1;
+}
+.batch-queue-count {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-2);
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.batch-last-refresh {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-job-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.batch-job-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.batch-job-card[data-head="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.batch-job-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.batch-job-date {
+  font-weight: 700;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.batch-job-phase {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-3);
+  margin-left: auto;
+}
+.batch-job-phase[data-phase="fetched"] {
+  color: var(--accent);
+  background: rgba(240, 192, 64, 0.12);
+}
+.batch-job-phase[data-phase="submitted"] {
+  color: #40d0f0;
+  background: rgba(64, 208, 240, 0.12);
+}
+.batch-job-age {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+.batch-job-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.batch-job-progress {
+  height: 4px;
+  background: var(--surface-1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.batch-job-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.batch-job-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+.batch-job-count {
+  font-variant-numeric: tabular-nums;
+}
+.batch-job-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+.batch-job-cancel:hover {
+  color: #f06050;
+  border-color: #f06050;
+}
+
+.batch-empty {
+  padding: 0.9rem 1rem;
+  color: var(--text-3);
+  font-size: 0.85rem;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  margin-top: 0.75rem;
+}
+
+.batch-console {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+.batch-console-header {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.batch-console-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.batch-console-clear {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.batch-console-clear:hover {
+  color: var(--text-1);
+}
+.batch-console-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 0.74rem;
+}
+.batch-console-line {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.28rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.batch-console-line:last-child {
+  border-bottom: none;
+}
+.batch-console-time {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.batch-console-msg {
+  color: var(--text-2);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.batch-console-line[data-level="warn"] .batch-console-msg {
+  color: #fbbf24;
+}
+.batch-console-line[data-level="success"] .batch-console-msg {
+  color: #4ade80;
+}
+
 /* ── Manual workflow actions ─────────────────────────── */
 .manual-actions {
   display: flex;

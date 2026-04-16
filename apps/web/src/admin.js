@@ -32,15 +32,14 @@ const submitLabel = document.getElementById('submit-label')
 const statusBar = document.getElementById('status')
 const statusText = document.getElementById('status-text')
 
-// Batch status panel elements
+// Batch status panel elements (queue grid + activity console).
 const batchStatusPanel = document.getElementById('batch-status')
-const batchPhaseEl = document.getElementById('batch-phase')
-const batchTargetEl = document.getElementById('batch-target')
-const batchSubmittedAtEl = document.getElementById('batch-submitted-at')
-const batchChipsEl = document.getElementById('batch-chips')
-const batchProgressFill = document.getElementById('batch-progress-fill')
-const batchQueuePanel = document.getElementById('batch-queue')
-const batchQueueListEl = document.getElementById('batch-queue-list')
+const batchJobGridEl = document.getElementById('batch-job-grid')
+const batchEmptyEl = document.getElementById('batch-empty')
+const batchQueueCountEl = document.getElementById('batch-queue-count')
+const batchLastRefreshEl = document.getElementById('batch-last-refresh')
+const batchConsoleLogEl = document.getElementById('batch-console-log')
+const batchConsoleClearBtn = document.getElementById('batch-console-clear')
 
 const promptFields = {
   jigsaw: document.getElementById('prompt-jigsaw'),
@@ -107,6 +106,12 @@ function setAuthState(authenticated) {
   // Auth gate
   authGate.hidden = authenticated
   appContent.dataset.locked = authenticated ? 'false' : 'true'
+
+  if (authenticated) {
+    startBatchAutoRefresh()
+  } else {
+    stopBatchAutoRefresh()
+  }
 }
 
 function requireAuth() {
@@ -127,6 +132,7 @@ async function readJsonResponse(response) {
 }
 
 async function adminFetch(path, init = {}) {
+  const method = (init.method || 'GET').toUpperCase()
   const response = await fetch(apiUrl(path), {
     credentials: 'include',
     ...init,
@@ -135,6 +141,16 @@ async function adminFetch(path, init = {}) {
 
   if (response.status === 401) {
     setAuthState(false)
+  }
+
+  // Route batch-related requests through the activity console so the user
+  // sees every submit/poll/cancel round-trip in the same place the queue
+  // is rendered.
+  if (typeof logBatch === 'function' && path.startsWith('/api/admin/generate-images')) {
+    const summary = summarizeBatchResponse(method, path, payload, response.status)
+    if (summary) {
+      logBatch(summary, response.ok ? 'info' : 'warn')
+    }
   }
 
   return { response, payload }
@@ -345,63 +361,188 @@ function initDropZones() {
 
 // ─── Batch Status ───
 
-function renderBatchStatus(status) {
-  if (!status || !status.active) {
-    batchStatusPanel.hidden = true
-    return
-  }
+// ─── Batch queue console ────────────────────────────────
+const BATCH_CONSOLE_MAX = 200
+const batchConsoleLines = []
 
+function logBatch(message, level = 'info') {
+  if (!message) return
+  batchConsoleLines.push({ time: new Date(), message, level })
+  if (batchConsoleLines.length > BATCH_CONSOLE_MAX) {
+    batchConsoleLines.splice(0, batchConsoleLines.length - BATCH_CONSOLE_MAX)
+  }
+  renderBatchConsole()
+}
+
+function renderBatchConsole() {
+  if (!batchConsoleLogEl) return
+  // Newest on top so recent events are immediately visible.
+  const html = batchConsoleLines
+    .slice()
+    .reverse()
+    .map((line) => {
+      const t = line.time.toLocaleTimeString(undefined, { hour12: false })
+      return `<li class="batch-console-line" data-level="${line.level}">
+        <span class="batch-console-time">${t}</span>
+        <span class="batch-console-msg">${escapeHtml(line.message)}</span>
+      </li>`
+    })
+    .join('')
+  batchConsoleLogEl.innerHTML = html
+}
+
+if (batchConsoleClearBtn) {
+  batchConsoleClearBtn.addEventListener('click', () => {
+    batchConsoleLines.length = 0
+    renderBatchConsole()
+  })
+}
+
+function summarizeBatchResponse(method, path, payload, status) {
+  if (path.endsWith('/status')) return null // too noisy; transitions are logged on diff
+
+  const action = path.split('/').slice(-1)[0]
+  const ok = status >= 200 && status < 300
+  const arrow = ok ? '→' : '✗'
+
+  if (action === 'poll') {
+    const state = payload?.state || 'idle'
+    const target = payload?.targetDate || ''
+    return `${arrow} poll${target ? ' ' + target : ''} (${state})${payload?.message ? ' — ' + payload.message : ''}`
+  }
+  if (action === 'generate-images' || action === 'single') {
+    if (payload?.submitted) {
+      return `${arrow} submitted batch for ${payload.targetDate}${payload.batchName ? ' (' + payload.batchName + ')' : ''}`
+    }
+    return `${arrow} submit refused: ${payload?.message || payload?.error || 'unknown'}`
+  }
+  if (action === 'cancel') {
+    return `${arrow} ${payload?.message || payload?.error || 'cancel request'}`
+  }
+  if (action === 'complete-category') {
+    return `${arrow} ${payload?.message || 'category finalised'}`
+  }
+  return null
+}
+
+// ─── Batch queue status panel ───────────────────────────
+let lastBatchJobs = null // snapshot for transition detection
+
+function formatRelativeAge(iso) {
+  if (!iso) return '—'
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return '—'
+  const delta = Math.max(0, Date.now() - then)
+  const mins = Math.round(delta / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours} h ago`
+  const days = Math.round(hours / 24)
+  return `${days} d ago`
+}
+
+function headJobFromLegacyStatus(status) {
+  return {
+    targetDate: status.targetDate,
+    phase: status.phase,
+    submittedAt: status.submittedAt,
+    processedCategories: status.processedCategories || [],
+    remainingCategories: status.remainingCategories || [],
+    themes: status.themes || {},
+  }
+}
+
+function resolveJobCategories(job) {
+  const processed = Array.isArray(job.processedCategories) ? job.processedCategories : []
+  const remaining = Array.isArray(job.remainingCategories) ? job.remainingCategories : []
+  const merged = [...processed]
+  for (const c of remaining) if (!merged.includes(c)) merged.push(c)
+  return merged.length ? merged : [...CATEGORIES]
+}
+
+function renderJobCard(job, isHead) {
+  const cats = resolveJobCategories(job)
+  const processed = job.processedCategories || []
+  const total = cats.length
+  const doneCount = processed.filter((c) => cats.includes(c)).length
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
+  const chips = cats
+    .map((cat) => {
+      const isDone = processed.includes(cat)
+      return `<span class="batch-chip" data-status="${isDone ? 'done' : 'pending'}">${escapeHtml(cat)}</span>`
+    })
+    .join('')
+  return `<article class="batch-job-card" data-date="${escapeHtml(job.targetDate || '')}" data-head="${isHead ? 'true' : 'false'}">
+    <header class="batch-job-card-header">
+      <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
+      <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
+    </header>
+    <div class="batch-job-age">${formatRelativeAge(job.submittedAt)}${isHead ? ' · active' : ''}</div>
+    <div class="batch-job-chips">${chips}</div>
+    <div class="batch-job-progress"><div class="batch-job-progress-fill" style="width:${pct}%"></div></div>
+    <div class="batch-job-footer">
+      <span class="batch-job-count">${doneCount}/${total} categories</span>
+      <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}">Cancel</button>
+    </div>
+  </article>`
+}
+
+function diffBatchJobs(prev, next) {
+  if (!prev) return // first snapshot — nothing to compare
+  const prevByDate = new Map(prev.map((j) => [j.targetDate, j]))
+  const nextByDate = new Map(next.map((j) => [j.targetDate, j]))
+  for (const p of prev) {
+    if (!nextByDate.has(p.targetDate)) {
+      logBatch(`${p.targetDate}: removed from queue`, 'success')
+    }
+  }
+  for (const n of next) {
+    const before = prevByDate.get(n.targetDate)
+    if (!before) {
+      logBatch(`${n.targetDate}: appeared in queue (${n.phase || 'idle'})`, 'info')
+      continue
+    }
+    if ((before.phase || '') !== (n.phase || '')) {
+      logBatch(`${n.targetDate}: ${before.phase || 'idle'} → ${n.phase || 'idle'}`, 'info')
+    }
+    const prevDone = new Set(before.processedCategories || [])
+    for (const cat of n.processedCategories || []) {
+      if (!prevDone.has(cat)) logBatch(`${n.targetDate}: processed ${cat}`, 'info')
+    }
+  }
+}
+
+function renderBatchStatus(status) {
+  if (!batchStatusPanel) return
   batchStatusPanel.hidden = false
 
-  const phase = status.phase || 'idle'
-  batchPhaseEl.textContent = phase
-  batchPhaseEl.dataset.phase = phase
-
-  batchTargetEl.textContent = status.targetDate || '\u2014'
-
-  if (status.submittedAt) {
-    const d = new Date(status.submittedAt)
-    batchSubmittedAtEl.textContent = d.toLocaleString()
-  } else {
-    batchSubmittedAtEl.textContent = '\u2014'
+  let jobs = Array.isArray(status?.queue) ? status.queue : []
+  // Back-compat: if the server only returned head-level fields, lift them.
+  if (jobs.length === 0 && status?.active && status.targetDate) {
+    jobs = [headJobFromLegacyStatus(status)]
   }
 
-  const processed = status.processedCategories || []
-  const remaining = status.remainingCategories || []
-  const total = processed.length + remaining.length || CATEGORIES.length
-  const doneCount = processed.length
+  diffBatchJobs(lastBatchJobs, jobs)
+  lastBatchJobs = jobs.map((j) => ({
+    targetDate: j.targetDate,
+    phase: j.phase,
+    processedCategories: [...(j.processedCategories || [])],
+  }))
 
-  batchChipsEl.innerHTML = CATEGORIES.map((cat) => {
-    const isDone = processed.includes(cat)
-    return `<span class="batch-chip" data-status="${isDone ? 'done' : 'pending'}">${cat}</span>`
-  }).join('')
+  if (batchQueueCountEl) batchQueueCountEl.textContent = String(jobs.length)
+  if (batchLastRefreshEl) {
+    batchLastRefreshEl.textContent = new Date().toLocaleTimeString(undefined, { hour12: false })
+  }
 
-  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  batchProgressFill.style.width = `${pct}%`
-
-  // Queue (jobs behind the head).
-  const queue = Array.isArray(status.queue) ? status.queue : []
-  const tail = queue.filter((j) => j.targetDate && j.targetDate !== status.targetDate)
-  if (batchQueuePanel && batchQueueListEl) {
-    if (tail.length === 0) {
-      batchQueuePanel.hidden = true
-      batchQueueListEl.innerHTML = ''
-    } else {
-      batchQueuePanel.hidden = false
-      batchQueueListEl.innerHTML = tail
-        .map((job) => {
-          const submitted = job.submittedAt
-            ? ` <span class="batch-queue-sub">submitted ${new Date(job.submittedAt).toLocaleString()}</span>`
-            : ''
-          return `<li class="batch-queue-item">
-            <span class="batch-queue-date">${job.targetDate}</span>
-            <span class="batch-queue-phase" data-phase="${job.phase || 'idle'}">${job.phase || 'idle'}</span>
-            ${submitted}
-            <button type="button" class="batch-queue-cancel" data-date="${job.targetDate}">Cancel</button>
-          </li>`
-        })
-        .join('')
-    }
+  if (jobs.length === 0) {
+    if (batchJobGridEl) batchJobGridEl.innerHTML = ''
+    if (batchEmptyEl) batchEmptyEl.hidden = false
+    return
+  }
+  if (batchEmptyEl) batchEmptyEl.hidden = true
+  if (batchJobGridEl) {
+    batchJobGridEl.innerHTML = jobs.map((job, i) => renderJobCard(job, i === 0)).join('')
   }
 }
 
@@ -425,9 +566,9 @@ async function cancelQueuedBatch(targetDate) {
   }
 }
 
-if (batchQueueListEl) {
-  batchQueueListEl.addEventListener('click', (event) => {
-    const btn = event.target.closest('.batch-queue-cancel')
+if (batchJobGridEl) {
+  batchJobGridEl.addEventListener('click', (event) => {
+    const btn = event.target.closest('.batch-job-cancel')
     if (btn && btn.dataset.date) {
       cancelQueuedBatch(btn.dataset.date)
     }
@@ -444,6 +585,23 @@ async function refreshBatchStatus() {
     }
   } catch {
     // Non-fatal
+  }
+}
+
+// Poll the status endpoint every 20s while authenticated so cron-driven
+// transitions (phase changes, category completions, queue removals) show
+// up in the activity log without needing a manual refresh.
+let batchAutoRefreshId = null
+function startBatchAutoRefresh() {
+  if (batchAutoRefreshId || !isAuthenticated) return
+  batchAutoRefreshId = setInterval(() => {
+    if (isAuthenticated) refreshBatchStatus()
+  }, 20_000)
+}
+function stopBatchAutoRefresh() {
+  if (batchAutoRefreshId) {
+    clearInterval(batchAutoRefreshId)
+    batchAutoRefreshId = null
   }
 }
 

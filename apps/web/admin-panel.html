@@ -125,33 +125,23 @@
               </button>
             </div>
 
-            <!-- BATCH STATUS -->
-            <div id="batch-status" class="batch-status" hidden>
+            <!-- BATCH STATUS — queue grid + activity console -->
+            <div id="batch-status" class="batch-status">
               <div class="batch-status-header">
-                <span class="batch-status-label">Batch Status</span>
-                <span id="batch-phase" class="batch-phase" data-phase="idle">idle</span>
+                <span class="batch-status-label">Batch Queue</span>
+                <span id="batch-queue-count" class="batch-queue-count">0</span>
+                <span class="batch-status-spacer"></span>
+                <span id="batch-last-refresh" class="batch-last-refresh" title="Last status refresh">&mdash;</span>
               </div>
-              <div class="batch-status-details">
-                <div class="batch-detail">
-                  <span class="batch-detail-label">Target</span>
-                  <span id="batch-target" class="batch-detail-value">&mdash;</span>
-                </div>
-                <div class="batch-detail">
-                  <span class="batch-detail-label">Submitted</span>
-                  <span id="batch-submitted-at" class="batch-detail-value">&mdash;</span>
-                </div>
-              </div>
-              <div class="batch-categories">
-                <span class="batch-detail-label">Categories</span>
-                <div id="batch-chips" class="batch-chips"></div>
-              </div>
-              <div class="batch-progress-bar">
-                <div id="batch-progress-fill" class="batch-progress-fill" style="width: 0%"></div>
-              </div>
-              <div id="batch-queue" class="batch-queue" hidden>
-                <span class="batch-detail-label">Queued behind this</span>
-                <ul id="batch-queue-list" class="batch-queue-list"></ul>
-              </div>
+              <div id="batch-job-grid" class="batch-job-grid"></div>
+              <div id="batch-empty" class="batch-empty" hidden>No batch jobs in flight.</div>
+              <section class="batch-console">
+                <header class="batch-console-header">
+                  <span class="batch-console-label">Activity</span>
+                  <button type="button" id="batch-console-clear" class="batch-console-clear">Clear</button>
+                </header>
+                <ul id="batch-console-log" class="batch-console-log"></ul>
+              </section>
             </div>
           </div>
         </section>
