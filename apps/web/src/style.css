@@ -2776,16 +2776,50 @@ h1 {
   margin-top: -14px;
 }
 
-/* When floating controls are adopted into the jigsaw grid (portrait) */
-.jigsaw-root > .floating-game-controls {
-  position: static;
-  grid-row: 2;
-  grid-column: 1;
-  align-self: start;
-  justify-self: start;
-  margin-top: -21px;
-  margin-left: calc(0.6rem + var(--sai-left));
-  z-index: 30;
+/* Portrait jigsaw: menu dropdown floats at the top-right, tray tools
+   at top-centre, back button at top-left (via diamond-floating-btn). */
+@media (orientation: portrait) {
+  .jigsaw-root > .floating-game-controls {
+    position: absolute;
+    grid-row: auto;
+    grid-column: auto;
+    align-self: auto;
+    justify-self: auto;
+    margin: 0;
+    top: calc(0.5rem + var(--sai-top));
+    right: calc(0.5rem + var(--sai-right));
+    left: auto;
+    z-index: 30;
+  }
+  /* Dropdown anchored to the right edge of the button. */
+  .jigsaw-root > .floating-game-controls .gt-menu--floating {
+    left: auto;
+    right: 0;
+  }
+  /* Tray tools float at top-centre of the screen so highlight/edges
+     sit inline with back (top-left) and menu (top-right) rather than
+     straddling the tray/canvas seam. */
+  .jigsaw-root > .jigsaw-tray-tools {
+    position: absolute;
+    grid-row: auto;
+    grid-column: auto;
+    align-self: auto;
+    justify-self: auto;
+    margin: 0;
+    top: calc(0.5rem + var(--sai-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+  }
+}
+
+/* iPhone PWA portrait: pin to the safe-area line to match the diamond
+   back button positioning. */
+@media (display-mode: standalone) and (orientation: portrait) {
+  .jigsaw-root > .floating-game-controls,
+  .jigsaw-root > .jigsaw-tray-tools {
+    top: var(--sai-top);
+  }
 }
 
 .jigsaw-tray-tool {
@@ -2899,6 +2933,10 @@ h1 {
     margin-top: 0.5rem;
   }
 
+  /* Landscape jigsaw: menu floats at the bottom-left (mirrors the
+     diamond restart placement) so the back button at the top-left,
+     tray tools in the carousel column, and menu in the opposite
+     corner each own a clear region. */
   .jigsaw-root > .floating-game-controls {
     position: absolute;
     grid-row: auto;
@@ -2907,8 +2945,18 @@ h1 {
     justify-self: auto;
     margin-top: 0;
     margin-left: 0;
-    top: calc(0.85rem + var(--sai-top));
-    left: calc(0.85rem + var(--sai-left));
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: auto;
+  }
+
+  /* Dropdown opens upward from the bottom-left button. */
+  .jigsaw-root > .floating-game-controls .gt-menu--floating {
+    top: auto;
+    bottom: calc(100% + 0.55rem);
+    left: 0;
+    right: auto;
   }
 }
 

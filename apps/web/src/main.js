@@ -1545,16 +1545,15 @@ function renderGame({ resumeRun = null } = {}) {
       <section class="workspace${useImmersiveChrome ? ' workspace--immersive' : ''}">
         <div id="puzzle-mount" class="puzzle-mount"></div>
         ${useImmersiveJigsawChrome ? `
+          <button id="back-btn" class="diamond-floating-btn diamond-floating-btn--back" type="button" aria-label="Back to puzzles" title="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
           <div class="floating-game-controls">
             <div class="gt-menu-wrap gt-menu-wrap--floating">
               <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating" type="button" aria-label="Puzzle menu" aria-expanded="false" title="Puzzle menu">
                 <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
-                <button id="back-btn" class="gt-menu-item" type="button">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-                  Back to puzzles
-                </button>
                 <button id="highlight-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
                   Highlight loose
