@@ -175,17 +175,32 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 
 const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   concept: [
-    'lighthouse', 'sailboat', 'hot air balloon', 'sunflower field', 'cottage',
-    'windmill', 'barn', 'bridge', 'castle', 'pagoda', 'mosque', 'church',
-    'tulip garden', 'cherry blossom tree', 'palm tree', 'cactus garden',
-    'flamingo', 'parrot', 'butterfly', 'koi pond', 'peacock', 'owl',
-    'cat portrait', 'dog portrait', 'horse', 'deer', 'fox',
-    'mountain lake', 'sunset beach', 'rolling hills', 'autumn tree',
-    'fruit bowl', 'vase of flowers', 'teapot', 'lantern',
-    'stained glass window', 'mosaic mural', 'quilt pattern', 'tile design',
-    'tropical fish', 'sea turtle', 'whale', 'jellyfish',
-    'hot spring', 'waterfall', 'volcano', 'glacier',
-    'carnival tent', 'ferris wheel', 'carousel', 'vintage car',
+    'ornate stained glass window with many leaded panels',
+    'elaborate rose window', 'intricate mandala', 'illuminated manuscript page',
+    'richly decorated mosaic mural', 'byzantine mosaic scene', 'detailed tile mural',
+    'folk-art tapestry', 'patchwork quilt design', 'embroidered sampler',
+    'art nouveau panel with many motifs', 'art deco frieze with layered patterns',
+    'talavera ceramic pattern', 'moorish tile pattern', 'azulejo tile panel',
+    'botanical spread with many flowers and leaves', 'densely packed floral bouquet',
+    'cottage garden in full bloom', 'tulip garden in many rows', 'sunflower field with birds',
+    'cherry blossom canopy', 'wildflower meadow crowded with blooms',
+    'koi pond with many fish and lily pads', 'tropical reef crowded with fish',
+    'aviary of many exotic birds', 'peacock with full display', 'butterfly conservatory',
+    'rainforest scene with toucans and macaws', 'busy hummingbird garden',
+    'hilltop village with many houses and rooflines', 'medieval walled town',
+    'mediterranean hillside town at sunset', 'terraced coastal village',
+    'santorini rooftops', 'venetian canal with many boats and buildings',
+    'amsterdam canal houses row', 'bustling night market with many stalls',
+    'spice market with many baskets and sacks', 'flower market in full bloom',
+    'harbour crowded with sailboats and buildings', 'fishing village with many piers',
+    'carnival midway with ferris wheel, carousel, and tents',
+    'harvest festival scene with many figures and stalls',
+    'lantern festival with many paper lanterns',
+    'autumn forest with many trees and leaves',
+    'advent town with many shop windows and decorations',
+    'circus tent with many performers and flags',
+    'castle courtyard with many figures', 'busy monastery scene',
+    'cathedral interior with many arches and columns',
   ],
 
   location: [
@@ -196,9 +211,10 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   ],
 
   state: [
-    'bold', 'vivid', 'vibrant', 'bright', 'saturated', 'flat-shaded',
-    'poster-like', 'graphic', 'simplified', 'blocky', 'clean-edged',
-    'high-contrast', 'colour-blocked', 'cel-shaded', 'posterised',
+    'intricate', 'ornate', 'elaborate', 'densely detailed', 'richly layered',
+    'densely packed', 'highly decorated', 'pattern-rich', 'motif-filled',
+    'vivid', 'vibrant', 'saturated', 'flat-shaded', 'poster-like', 'graphic',
+    'clean-edged', 'high-contrast', 'colour-blocked', 'cel-shaded', 'posterised',
   ],
 
   lighting: [
@@ -213,30 +229,42 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   ],
 
   style: [
-    'poster art style', 'stained glass rendering', 'mosaic tile style',
-    'gouache flat colour', 'screen print style', 'paper cut-out style',
-    'folk art illustration', 'retro travel poster', 'simplified illustration',
-    'bold graphic style', 'decorative art style', 'naive art style',
-    'woodblock print style',
+    'detailed stained glass rendering with many leaded panels',
+    'intricate mosaic tile style with many small tesserae',
+    'ornate folk art illustration with dense patterning',
+    'illuminated manuscript style with filigree and decorative borders',
+    'art nouveau style with flowing layered motifs',
+    'art deco style with stacked geometric detail',
+    'byzantine icon style with gilt patterning',
+    'talavera ceramic style with dense floral motifs',
+    'cloisonné enamel style with many fine cells',
+    'poster art style with many distinct regions',
+    'gouache flat colour with intricate linework',
+    'screen print style with many overlaid colour layers',
+    'paper cut-out style with layered papel-picado detail',
+    'woodblock print style with fine registered colour blocks',
+    'decorative tapestry style with dense figurative detail',
   ],
 
   palette: [
-    '8–12 distinct flat colours with no gradients',
-    'bold primary colours with strong contrast between regions',
-    'warm earth tones in large flat areas',
-    'cool ocean tones with clear colour boundaries',
-    'autumn colours with distinct red, orange, gold, and green zones',
-    'tropical palette with flat turquoise, coral, green, and sand regions',
-    'pastel palette with clearly separated soft colour blocks',
-    'jewel tones with rich saturated flat fills',
-    'sunset palette with flat bands of orange, pink, purple, and blue',
-    'forest palette with distinct green, brown, gold, and sky blue areas',
+    'around 16 well-spaced flat colours, each reused across many small separated regions',
+    'a tight palette of roughly 16 flat colours — no gradients — reused to build many little shapes',
+    'jewel tones from a limited flat palette, the same colours reappearing in many small pockets',
+    'stained-glass palette of ~16 saturated flat panels separated by dark leading',
+    'folk-art palette: a small set of flat primaries, earth tones and accents, each repeated across many motifs',
+    'mosaic palette: a limited set of flat tesserae colours reused in many small tiles across the frame',
+    'illuminated manuscript palette — gold, lapis, vermilion, emerald, rose, ivory — flat and reused across detail',
+    'tropical flat palette: turquoise, coral, green, sand, magenta, citrus — each reused across many small regions',
+    'autumn flat palette: red, orange, gold, ochre, brown, plum, green — each reused across many leaves and shapes',
+    'botanical flat palette: a handful of greens and petal colours, each recurring across many flowers and leaves',
   ],
 
   camera: [
-    'straight-on frontal view', 'slightly elevated angle',
-    'centered symmetrical framing', 'simple medium shot',
-    'wide view with clear subject', 'close-up with bold shapes',
+    'straight-on frontal view filling the frame with subject detail',
+    'slightly elevated angle showing the full intricate composition',
+    'centered symmetrical framing that reveals pattern across the whole image',
+    'wide view packed with interlocking detail edge to edge',
+    'medium shot where every region carries distinct pattern and colour',
   ],
 }
 
@@ -298,9 +326,9 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'Depict a scene with bold, clearly defined colour regions and strong contrast between areas. Favour subjects with distinct colour blocks: landscapes with sky/water/land separation, bold florals, stained glass, mosaics, or graphic illustrations. Avoid subtle gradients and monochromatic areas.',
+      'Depict an intricate, densely detailed scene built from many clearly defined flat-colour regions. Favour subjects with inherent visual complexity: ornate stained glass windows with dozens of leaded panels, elaborate mandalas, richly decorated mosaic murals, illuminated manuscript pages, bustling village or market scenes with many figures and objects, detailed botanical spreads with many flowers and leaves, folk-art tapestries, or layered cityscapes with many buildings, windows, and rooflines. The image should reward careful looking — a lot to discover across the whole frame — while still resolving into crisp, nameable colour regions rather than gradients.',
     qualityTarget:
-      'Prioritise large uniform colour regions with clean edges between them. Each region should be a distinct, nameable colour. Maintain at least 8–12 clearly different colour zones. Avoid fine noise, speckle, or photographic grain. The image should quantize well to a limited palette while remaining recognisable.',
+      'CRITICAL: the final image will be quantized to exactly 16 flat colours. Do not try to use more — instead, reuse those ~16 colours to build a large NUMBER of distinct, separated regions across the entire frame. Prioritise an abundance of small and medium region shapes packed together alongside larger anchoring ones; the same colour can reappear in many small unconnected pockets. The composition should feel rich, layered, and intricate — never empty, plain, or simplified. Absolutely avoid large uniform expanses (no huge empty skies, plain walls, or blank backgrounds) — break big areas up with pattern, interior detail, clouds, foliage, windows, tiles, or smaller sub-regions so they become many pieces rather than one. Use flat colour fills with crisp edges and no gradients, blends, speckle, noise, or photographic grain, so the 16-colour quantization preserves every region cleanly.',
   },
 }
 
@@ -343,9 +371,9 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
-  'Output: one landscape 4:3 image with bold, flat colour areas and minimal gradients. Use a poster-like or stained-glass aesthetic with clearly separated colour zones. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image . Use broad, flat colour fills with strong edges between regions — think mosaic or poster art. Avoid smooth gradients and fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
-  'Single 4:3 landscape image  only. Emphasise large, distinct colour blocks with crisp boundaries — minimal blending between regions. The scene should be recognisable even when reduced to 16 colours. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+  'Output: one landscape 4:3 image built from a limited palette of about 16 flat colours, reused to form many intricate separated regions across the whole frame — think ornate stained glass or a dense mosaic where the same handful of colours reappear in many small shapes. Every part of the image should carry interlocking detail with many small and medium regions alongside larger ones. No gradients, no soft blends, no large empty uniform areas. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
+  'Deliver a single landscape 4:3 image using only ~16 flat colours, each reused to build many distinct regions. Density must come from the NUMBER of separated shapes, not the number of colours — pack the frame with small and medium regions with crisp edges. The scene should feel ornate and densely patterned, never simplified or sparse; avoid any large plain expanses. No smooth gradients, no soft blending, no fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Single 4:3 landscape image only, designed to quantize cleanly to 16 flat colours. Fill every part of the frame with intricate interlocking flat-colour shapes — crisp boundaries, no blending — and let those 16 colours reappear many times across many small and medium regions. Prioritise region count and density, like an elaborate mosaic or rose window. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
