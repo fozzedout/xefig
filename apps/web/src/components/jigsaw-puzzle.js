@@ -270,8 +270,10 @@ export class JigsawPuzzle {
     const saiBottom = this.getSafeAreaInset('bottom')
 
     if (usesSidebarTray) {
-      // Landscape: tray on right
-      const sideTrayReserve = Math.max(118, viewportWidth * 0.105) + 9
+      // Landscape: tray on right, no column gap — reserve only the
+      // tray column width itself so the canvas fills the remaining
+      // viewport edge-to-edge.
+      const sideTrayReserve = Math.max(118, viewportWidth * 0.105)
       var availableWidth = Math.max(280, containerWidth - sideTrayReserve)
       var availableHeight = Math.max(220, containerHeight - saiBottom)
     } else {

@@ -2949,14 +2949,20 @@ h1 {
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
     align-items: stretch;
-    gap: 0.55rem;
+    /* No gap between canvas and tray — the tray should butt straight
+       up against the canvas, and its right-most edge against the
+       viewport edge. */
+    gap: 0;
   }
 
   .jigsaw-carousel {
     grid-row: 1;
     grid-column: 2;
     border-bottom: 0;
-    padding: 0.45rem calc(0.15rem + var(--sai-right)) 0.45rem 0.45rem;
+    /* Hug the actual screen right edge (ignore safe-area-inset-right)
+       so the pieces sit flush with the viewport. Small inner padding
+       on the other sides only. */
+    padding: 0.45rem 0 0.45rem 0.45rem;
     height: 100%;
     min-height: 0;
     overflow-x: hidden;
