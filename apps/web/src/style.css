@@ -3703,9 +3703,8 @@ h1 {
   .diamond-palette-bar {
     left: auto;
     right: 0;
-    bottom: auto;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 0;
+    bottom: 0;
     display: grid;
     grid-template-columns: auto auto;
     grid-template-rows: repeat(9, auto);
@@ -3717,7 +3716,6 @@ h1 {
     align-content: center;
     justify-content: end;
     flex-wrap: unset;
-    max-height: 100%;
   }
   .diamond-floating-btn--back {
     top: 16px;
