@@ -1659,8 +1659,12 @@ function renderGame({ resumeRun = null } = {}) {
     currentRun = null
     // Re-resolve the image URL from the current puzzle payload so a regenerated
     // image is picked up instead of reusing the stale URL captured when the run began.
-    const freshImageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
-    if (freshImageUrl) state.imageUrl = freshImageUrl
+    // Only update when the payload actually has a category imageUrl — otherwise
+    // resolveAssetUrl would fall back to the hero sample image.
+    const categoryKey = GAME_MODE_TO_PUZZLE_CATEGORY[state.gameMode] || 'jigsaw'
+    const rawImageUrl = state.puzzle?.categories?.[categoryKey]?.imageUrl
+      || state.puzzle?.categories?.jigsaw?.imageUrl
+    if (rawImageUrl) state.imageUrl = resolveAssetUrl(rawImageUrl)
     renderGame()
   })
 
@@ -1726,8 +1730,11 @@ function renderGame({ resumeRun = null } = {}) {
         state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)
         state.difficulty = resumeRun.difficulty || state.difficulty
         state.imageUrl = resolveAssetUrl(resumeRun.imageUrl || state.imageUrl)
-        state.puzzle = {
-          date: resumeRun.puzzleDate,
+        // Keep the full puzzle payload (categories etc.) that the caller set
+        // so Restart can re-resolve the current image URL from it. Only
+        // replace it when it's missing or for a different date.
+        if (!state.puzzle?.categories || state.puzzle.date !== resumeRun.puzzleDate) {
+          state.puzzle = { date: resumeRun.puzzleDate }
         }
         currentRun = {
           ...resumeRun,
