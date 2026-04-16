@@ -565,6 +565,68 @@ body {
   transition: width 0.3s ease;
 }
 
+.batch-queue {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.batch-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.batch-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.batch-queue-date {
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.batch-queue-phase {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.batch-queue-phase[data-phase="fetched"] {
+  color: var(--accent);
+}
+.batch-queue-sub {
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+.batch-queue-cancel {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.batch-queue-cancel:hover {
+  color: #f06050;
+  border-color: #f06050;
+}
+
 /* ── Manual workflow actions ─────────────────────────── */
 .manual-actions {
   display: flex;

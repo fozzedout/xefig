@@ -22,9 +22,10 @@ export async function findNextUnscheduledDate(
   db: D1Database,
   fromDate: string,
   maxDaysToScan: number,
+  extraUnavailableDates?: ReadonlySet<string>,
 ): Promise<string | null> {
   await ensurePuzzleTables(db)
-  return findNextUnscheduledDateD1(db, fromDate, maxDaysToScan)
+  return findNextUnscheduledDateD1(db, fromDate, maxDaysToScan, extraUnavailableDates)
 }
 
 export function isValidDateKey(value: string): boolean {

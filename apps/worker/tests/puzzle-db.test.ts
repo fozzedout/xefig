@@ -472,7 +472,7 @@ test('saveBatchJob with requestedCategories round-trips', async () => {
   assert.deepEqual(retrieved?.requestedCategories, ['jigsaw'])
 })
 
-test('saveBatchJob overwrites existing job (singleton)', async () => {
+test('saveBatchJob overwrites existing job for the same target date', async () => {
   const mod = await loadPuzzleDb()
   const db = createMockDB()
   await mod.ensurePuzzleTables(db)
@@ -496,29 +496,70 @@ test('saveBatchJob overwrites existing job (singleton)', async () => {
   assert.deepEqual(updated?.processedCategories, ['jigsaw'])
 })
 
-test('deleteBatchJob removes the job', async () => {
+test('saveBatchJob supports multiple jobs for different dates (queue)', async () => {
   const mod = await loadPuzzleDb()
   const db = createMockDB()
   await mod.ensurePuzzleTables(db)
 
   await mod.saveBatchJob(db, {
-    batchName: 'test-batch',
+    batchName: 'first',
     targetDate: '2026-04-10',
     categories: {} as any,
     submittedAt: '2026-04-06T00:00:00Z',
     phase: 'submitted' as const,
     processedCategories: [] as any[],
   })
+  await mod.saveBatchJob(db, {
+    batchName: 'second',
+    targetDate: '2026-04-11',
+    categories: {} as any,
+    submittedAt: '2026-04-06T01:00:00Z',
+    phase: 'submitted' as const,
+    processedCategories: [] as any[],
+  })
 
-  await mod.deleteBatchJob(db)
-  assert.equal(await mod.getBatchJob(db), null)
+  const queue = await mod.getAllPendingBatchJobs(db)
+  assert.equal(queue.length, 2)
+  const dates = queue.map((j) => j.targetDate).sort()
+  assert.deepEqual(dates, ['2026-04-10', '2026-04-11'])
+
+  const byDate = await mod.getBatchJobByTargetDate(db, '2026-04-11')
+  assert.equal(byDate?.batchName, 'second')
+})
+
+test('deleteBatchJob removes a specific job by target date', async () => {
+  const mod = await loadPuzzleDb()
+  const db = createMockDB()
+  await mod.ensurePuzzleTables(db)
+
+  await mod.saveBatchJob(db, {
+    batchName: 'keep',
+    targetDate: '2026-04-10',
+    categories: {} as any,
+    submittedAt: '2026-04-06T00:00:00Z',
+    phase: 'submitted' as const,
+    processedCategories: [] as any[],
+  })
+  await mod.saveBatchJob(db, {
+    batchName: 'drop',
+    targetDate: '2026-04-11',
+    categories: {} as any,
+    submittedAt: '2026-04-06T01:00:00Z',
+    phase: 'submitted' as const,
+    processedCategories: [] as any[],
+  })
+
+  await mod.deleteBatchJob(db, '2026-04-11')
+  const remaining = await mod.getAllPendingBatchJobs(db)
+  assert.equal(remaining.length, 1)
+  assert.equal(remaining[0]?.targetDate, '2026-04-10')
 })
 
 test('deleteBatchJob is safe when no job exists', async () => {
   const mod = await loadPuzzleDb()
   const db = createMockDB()
   await mod.ensurePuzzleTables(db)
-  await mod.deleteBatchJob(db) // should not throw
+  await mod.deleteBatchJob(db, '2026-04-10') // should not throw
 })
 
 // ===========================

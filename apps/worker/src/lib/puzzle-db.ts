@@ -32,12 +32,37 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
     db.prepare(
       `CREATE TABLE IF NOT EXISTS prompt_history (id INTEGER PRIMARY KEY AUTOINCREMENT, descriptors TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ),
+    // New queue schema: AUTOINCREMENT id + UNIQUE target_date so multiple
+    // submissions can be queued (one per date).
     db.prepare(
-      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY CHECK (id = 1), batch_name TEXT NOT NULL, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
+      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL, target_date TEXT NOT NULL UNIQUE, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
     ),
   ])
 
-  // Add validation_failures column if missing (migration for existing tables)
+  // Migration: earlier schema used CHECK (id = 1) so only one row could
+  // ever exist. Detect that and rebuild the table with the queue schema,
+  // preserving any in-flight row.
+  try {
+    const row = await db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='batch_jobs'`)
+      .first<{ sql: string }>()
+    if (row?.sql && row.sql.includes('CHECK (id = 1)')) {
+      await db.batch([
+        db.prepare(`ALTER TABLE batch_jobs RENAME TO batch_jobs_legacy_singleton`),
+        db.prepare(
+          `CREATE TABLE batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL, target_date TEXT NOT NULL UNIQUE, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
+        ),
+        db.prepare(
+          `INSERT INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) SELECT id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs_legacy_singleton`,
+        ),
+        db.prepare(`DROP TABLE batch_jobs_legacy_singleton`),
+      ])
+    }
+  } catch {
+    // Migration best-effort; if it fails we'll retry on next cold start.
+  }
+
+  // Add validation_failures column if missing (pre-migration fallback).
   try {
     await db.prepare(`ALTER TABLE batch_jobs ADD COLUMN validation_failures TEXT`).run()
   } catch {
@@ -116,6 +141,7 @@ export async function findNextUnscheduledDateD1(
   db: D1Database,
   fromDate: string,
   maxDaysToScan: number,
+  extraUnavailableDates?: ReadonlySet<string>,
 ): Promise<string | null> {
   // Fetch all scheduled dates from fromDate onwards (ordered)
   const rows = await db
@@ -125,10 +151,13 @@ export async function findNextUnscheduledDateD1(
 
   const dateSet = new Set((rows.results || []).map((r) => r.date))
 
-  // Walk from fromDate looking for first missing day
+  // Walk from fromDate looking for first missing day that isn't already
+  // queued for batch generation either.
   let current = fromDate
   for (let i = 0; i < maxDaysToScan; i++) {
-    if (!dateSet.has(current)) return current
+    if (!dateSet.has(current) && !extraUnavailableDates?.has(current)) {
+      return current
+    }
     const base = Date.parse(`${current}T00:00:00.000Z`)
     current = new Date(base + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   }
@@ -178,28 +207,22 @@ export async function appendPromptHistory(db: D1Database, item: PromptHistoryIte
 }
 
 // ---------------------------------------------------------------------------
-// Batch jobs
+// Batch jobs (queue)
 // ---------------------------------------------------------------------------
 
-export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | null> {
-  const row = await db
-    .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE id = ?',
-    )
-    .bind(1)
-    .first<{
-      batch_name: string
-      target_date: string
-      categories: string
-      submitted_at: string
-      phase: string
-      processed_categories: string
-      requested_categories: string | null
-      validation_failures: string | null
-    }>()
+type BatchJobRow = {
+  batch_name: string
+  target_date: string
+  categories: string
+  submitted_at: string
+  phase: string
+  processed_categories: string
+  requested_categories: string | null
+  validation_failures: string | null
+}
 
+function rowToJob(row: BatchJobRow | null): PendingBatchJob | null {
   if (!row) return null
-
   try {
     return {
       batchName: row.batch_name,
@@ -216,15 +239,56 @@ export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | nul
   }
 }
 
+// Oldest job in the queue (FIFO by id). Back-compat name: callers that
+// previously expected the singleton still work — they now get the head
+// of the queue.
+export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | null> {
+  const row = await db
+    .prepare(
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs ORDER BY id ASC LIMIT 1',
+    )
+    .first<BatchJobRow>()
+  return rowToJob(row ?? null)
+}
+
+export async function getBatchJobByTargetDate(
+  db: D1Database,
+  targetDate: string,
+): Promise<PendingBatchJob | null> {
+  const row = await db
+    .prepare(
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ?',
+    )
+    .bind(targetDate)
+    .first<BatchJobRow>()
+  return rowToJob(row ?? null)
+}
+
+export async function getAllPendingBatchJobs(db: D1Database): Promise<PendingBatchJob[]> {
+  const rows = await db
+    .prepare(
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs ORDER BY id ASC',
+    )
+    .all<BatchJobRow>()
+  const results: PendingBatchJob[] = []
+  for (const r of rows.results || []) {
+    const job = rowToJob(r)
+    if (job) results.push(job)
+  }
+  return results
+}
+
 export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promise<void> {
+  // target_date has a UNIQUE index, so INSERT OR REPLACE updates in place
+  // when a row already exists for the date and inserts otherwise. A new
+  // row gets an auto-incremented id.
   await db
     .prepare(
-      'INSERT OR REPLACE INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO batch_jobs (target_date, batch_name, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
-      1,
-      job.batchName,
       job.targetDate,
+      job.batchName,
       JSON.stringify(job.categories),
       job.submittedAt,
       job.phase,
@@ -235,6 +299,6 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
     .run()
 }
 
-export async function deleteBatchJob(db: D1Database): Promise<void> {
-  await db.prepare('DELETE FROM batch_jobs WHERE id = ?').bind(1).run()
+export async function deleteBatchJob(db: D1Database, targetDate: string): Promise<void> {
+  await db.prepare('DELETE FROM batch_jobs WHERE target_date = ?').bind(targetDate).run()
 }

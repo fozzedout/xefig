@@ -31,7 +31,14 @@ import {
 } from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
 import { ensurePuzzleTables, getScheduledDatesInRange } from './lib/puzzle-db'
-import { handleBatchSubmit, handleSingleBatchSubmit, handleBatchPoll, getBatchJobStatus, completeBatchCategory } from './lib/scheduled'
+import {
+  handleBatchSubmit,
+  handleSingleBatchSubmit,
+  handleBatchPoll,
+  getBatchJobStatus,
+  completeBatchCategory,
+  cancelBatchJob,
+} from './lib/scheduled'
 import {
   CATEGORIES,
   type Bindings,
@@ -569,6 +576,7 @@ export function createApp() {
     try {
       const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
       const category = getStringField(body.category)?.trim() as PuzzleCategory
+      const targetDate = getStringField(body.targetDate)?.trim() || getStringField(body.date)?.trim()
 
       if (!CATEGORIES.includes(category)) {
         return c.json({ error: 'Invalid category.' }, 400)
@@ -589,12 +597,35 @@ export function createApp() {
         category,
         await imageFile.arrayBuffer(),
         await thumbFile.arrayBuffer(),
+        targetDate && isValidDateKey(targetDate) ? targetDate : undefined,
       )
 
       return c.json(result)
     } catch (error) {
       console.error('Complete category failed', error)
       const message = error instanceof Error ? error.message : 'Failed to complete category.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  app.post('/api/admin/generate-images/cancel', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    try {
+      const body = (await c.req.json()) as { targetDate?: string; date?: string }
+      const targetDate = (body.targetDate || body.date || '').trim()
+      if (!targetDate || !isValidDateKey(targetDate)) {
+        return c.json({ error: 'Valid targetDate is required (YYYY-MM-DD).' }, 400)
+      }
+      const result = await cancelBatchJob(c.env, targetDate)
+      return c.json(result, result.ok ? 200 : 404)
+    } catch (error) {
+      console.error('Cancel batch job failed', error)
+      const message = error instanceof Error ? error.message : 'Failed to cancel batch job.'
       return c.json({ error: message }, 500)
     }
   })

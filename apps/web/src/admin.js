@@ -39,6 +39,8 @@ const batchTargetEl = document.getElementById('batch-target')
 const batchSubmittedAtEl = document.getElementById('batch-submitted-at')
 const batchChipsEl = document.getElementById('batch-chips')
 const batchProgressFill = document.getElementById('batch-progress-fill')
+const batchQueuePanel = document.getElementById('batch-queue')
+const batchQueueListEl = document.getElementById('batch-queue-list')
 
 const promptFields = {
   jigsaw: document.getElementById('prompt-jigsaw'),
@@ -376,6 +378,60 @@ function renderBatchStatus(status) {
 
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
   batchProgressFill.style.width = `${pct}%`
+
+  // Queue (jobs behind the head).
+  const queue = Array.isArray(status.queue) ? status.queue : []
+  const tail = queue.filter((j) => j.targetDate && j.targetDate !== status.targetDate)
+  if (batchQueuePanel && batchQueueListEl) {
+    if (tail.length === 0) {
+      batchQueuePanel.hidden = true
+      batchQueueListEl.innerHTML = ''
+    } else {
+      batchQueuePanel.hidden = false
+      batchQueueListEl.innerHTML = tail
+        .map((job) => {
+          const submitted = job.submittedAt
+            ? ` <span class="batch-queue-sub">submitted ${new Date(job.submittedAt).toLocaleString()}</span>`
+            : ''
+          return `<li class="batch-queue-item">
+            <span class="batch-queue-date">${job.targetDate}</span>
+            <span class="batch-queue-phase" data-phase="${job.phase || 'idle'}">${job.phase || 'idle'}</span>
+            ${submitted}
+            <button type="button" class="batch-queue-cancel" data-date="${job.targetDate}">Cancel</button>
+          </li>`
+        })
+        .join('')
+    }
+  }
+}
+
+async function cancelQueuedBatch(targetDate) {
+  if (!targetDate) return
+  if (!confirm(`Cancel queued batch for ${targetDate}?`)) return
+  try {
+    const { response, payload } = await adminFetch('/api/admin/generate-images/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetDate }),
+    })
+    if (response.ok) {
+      setStatus(payload.message || `Cancelled ${targetDate}.`, 'note')
+      await refreshBatchStatus()
+    } else {
+      setStatus(payload.error || payload.message || 'Cancel failed.', 'error')
+    }
+  } catch (err) {
+    setStatus(err?.message || 'Cancel failed.', 'error')
+  }
+}
+
+if (batchQueueListEl) {
+  batchQueueListEl.addEventListener('click', (event) => {
+    const btn = event.target.closest('.batch-queue-cancel')
+    if (btn && btn.dataset.date) {
+      cancelQueuedBatch(btn.dataset.date)
+    }
+  })
 }
 
 async function refreshBatchStatus() {

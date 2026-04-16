@@ -3,7 +3,15 @@ import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
 import { processPngImage } from './image'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
-import { ensurePuzzleTables, getBatchJob, saveBatchJob, deleteBatchJob, type PendingBatchJob } from './puzzle-db'
+import {
+  ensurePuzzleTables,
+  getBatchJob,
+  getBatchJobByTargetDate,
+  getAllPendingBatchJobs,
+  saveBatchJob,
+  deleteBatchJob,
+  type PendingBatchJob,
+} from './puzzle-db'
 
 export type BatchSubmitResult = {
   submitted: boolean
@@ -45,15 +53,8 @@ export async function handleBatchSubmit(
   }
 
   await ensurePuzzleTables(env.DB)
-  const existingJob = await getBatchJob(env.DB)
-  if (existingJob) {
-    return {
-      submitted: false,
-      message: `Batch job already pending for ${existingJob.targetDate ?? 'unknown date'}.`,
-      batchName: existingJob.batchName,
-      targetDate: existingJob.targetDate,
-    }
-  }
+  const queuedJobs = await getAllPendingBatchJobs(env.DB)
+  const queuedDates = new Set(queuedJobs.map((j) => j.targetDate))
 
   let targetDate: string | null
   if (opts.date) {
@@ -61,6 +62,18 @@ export async function handleBatchSubmit(
       return { submitted: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
     }
     targetDate = opts.date
+
+    // Reject if this specific date is already in the queue — submitting
+    // again for the same date would overwrite the in-flight job.
+    if (queuedDates.has(targetDate)) {
+      const existing = queuedJobs.find((j) => j.targetDate === targetDate)!
+      return {
+        submitted: false,
+        message: `A batch job is already queued for ${targetDate}. Cancel it first or pick a different date.`,
+        batchName: existing.batchName,
+        targetDate,
+      }
+    }
 
     // Check if images already exist for this date
     const existingPuzzle = await getPuzzleByDate(env.DB, targetDate)
@@ -74,9 +87,12 @@ export async function handleBatchSubmit(
     }
   } else {
     const today = getUtcDateKey()
-    targetDate = await findNextUnscheduledDate(env.DB, today, 14)
+    targetDate = await findNextUnscheduledDate(env.DB, today, 14, queuedDates)
     if (!targetDate) {
-      return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
+      return {
+        submitted: false,
+        message: 'No unscheduled (or unqueued) dates found in the next 14 days.',
+      }
     }
   }
 
@@ -148,15 +164,8 @@ export async function handleSingleBatchSubmit(
   }
 
   await ensurePuzzleTables(env.DB)
-  const existingJob = await getBatchJob(env.DB)
-  if (existingJob) {
-    return {
-      submitted: false,
-      message: `Batch job already pending for ${existingJob.targetDate ?? 'unknown date'}. Wait for it to complete or clear it first.`,
-      batchName: existingJob.batchName,
-      targetDate: existingJob.targetDate,
-    }
-  }
+  const queuedJobs = await getAllPendingBatchJobs(env.DB)
+  const queuedDates = new Set(queuedJobs.map((j) => j.targetDate))
 
   let targetDate: string | null
   if (opts.date) {
@@ -164,11 +173,23 @@ export async function handleSingleBatchSubmit(
       return { submitted: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
     }
     targetDate = opts.date
+    if (queuedDates.has(targetDate)) {
+      const existing = queuedJobs.find((j) => j.targetDate === targetDate)!
+      return {
+        submitted: false,
+        message: `A batch job is already queued for ${targetDate}. Cancel it first or pick a different date.`,
+        batchName: existing.batchName,
+        targetDate,
+      }
+    }
   } else {
     const today = getUtcDateKey()
-    targetDate = await findNextUnscheduledDate(env.DB, today, 14)
+    targetDate = await findNextUnscheduledDate(env.DB, today, 14, queuedDates)
     if (!targetDate) {
-      return { submitted: false, message: 'No unscheduled dates found in the next 14 days.' }
+      return {
+        submitted: false,
+        message: 'No unscheduled (or unqueued) dates found in the next 14 days.',
+      }
     }
   }
 
@@ -225,98 +246,102 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   }
 
   await ensurePuzzleTables(env.DB)
-  const job = await getBatchJob(env.DB)
-  if (!job) {
+  const jobs = await getAllPendingBatchJobs(env.DB)
+  if (jobs.length === 0) {
     return { found: false, message: 'No pending batch job.' }
   }
 
-  const { batchName, targetDate, submittedAt } = job
-
-  // --- Phase: fetched → process one category per tick ---
-  if (job.phase === 'fetched') {
-    return await processNextCategory(env, job)
+  // Prefer CPU-bound work on a job whose images are already fetched —
+  // that moves the oldest ready job one category closer to done.
+  const fetchedJob = jobs.find((j) => j.phase === 'fetched')
+  if (fetchedJob) {
+    return await processNextCategory(env, fetchedJob)
   }
 
-  // --- Phase: submitted → poll Gemini, fetch raw images when done ---
-  const result = await pollImageBatch(env.GOOGLE_AI_API_KEY, batchName)
+  // Otherwise poll Gemini for every submitted job in FIFO order so
+  // multiple batches can progress in parallel at the provider. Return
+  // as soon as one completes — we fetch its images and let the next
+  // tick advance from the 'fetched' state.
+  const submittedJobs = jobs.filter((j) => j.phase === 'submitted')
+  const pollMessages: string[] = []
 
-  if (result.state === 'pending' || result.state === 'running') {
-    const stats = result.stats
-    const statsMsg = stats
-      ? ` [${stats.succeededRequestCount ?? stats.successfulRequestCount ?? 0}/${stats.requestCount ?? '?'} done, ${stats.pendingRequestCount ?? 0} pending]`
-      : ''
+  for (const job of submittedJobs) {
+    const result = await pollImageBatch(env.GOOGLE_AI_API_KEY, job.batchName)
+
+    if (result.state === 'pending' || result.state === 'running') {
+      const stats = result.stats
+      const statsMsg = stats
+        ? ` [${stats.succeededRequestCount ?? stats.successfulRequestCount ?? 0}/${stats.requestCount ?? '?'} done, ${stats.pendingRequestCount ?? 0} pending]`
+        : ''
+      pollMessages.push(`${job.targetDate}: ${result.state}${statsMsg}`)
+      continue
+    }
+
+    if (result.state === 'failed') {
+      await deleteBatchJob(env.DB, job.targetDate)
+      return {
+        found: true,
+        message: `Batch job for ${job.targetDate} failed: ${result.error}`,
+        batchName: job.batchName,
+        targetDate: job.targetDate,
+        state: 'failed',
+        submittedAt: job.submittedAt,
+        error: result.error,
+        rawResponse: result.rawResponse,
+      }
+    }
+
+    if (result.state === 'unknown') {
+      pollMessages.push(`${job.targetDate}: unknown (will retry)`)
+      continue
+    }
+
+    // Batch succeeded — save raw images to R2 temp (base64 decode, lightweight)
+    let saved = 0
+    for (const image of result.images) {
+      const tempKey = `temp/${job.targetDate}/${image.category}.png`
+      await env.assets.put(tempKey, image.imageBytes, {
+        httpMetadata: { contentType: image.mimeType || 'image/png' },
+      })
+      saved++
+    }
+
+    if (saved === 0) {
+      return {
+        found: true,
+        message: `Batch for ${job.targetDate} completed but no images found. Job kept for retry.`,
+        batchName: job.batchName,
+        targetDate: job.targetDate,
+        state: 'incomplete',
+        submittedAt: job.submittedAt,
+        imagesProcessed: 0,
+        rawResponse: result.rawResponse,
+      }
+    }
+
+    job.phase = 'fetched'
+    await saveBatchJob(env.DB, job)
+
     return {
       found: true,
-      message: `Batch job for ${targetDate} is still ${result.state}${statsMsg} (submitted ${submittedAt}).`,
-      batchName,
-      targetDate,
-      state: result.state,
-      submittedAt,
+      message: `Batch for ${job.targetDate} completed. ${saved} raw images saved. Processing will begin on next tick.`,
+      batchName: job.batchName,
+      targetDate: job.targetDate,
+      state: 'fetched',
+      submittedAt: job.submittedAt,
+      imagesProcessed: job.processedCategories.length,
     }
   }
 
-  if (result.state === 'failed') {
-    await deleteBatchJob(env.DB)
-    return {
-      found: true,
-      message: `Batch job for ${targetDate} failed: ${result.error}`,
-      batchName,
-      targetDate,
-      state: 'failed',
-      submittedAt,
-      error: result.error,
-      rawResponse: result.rawResponse,
-    }
-  }
-
-  if (result.state === 'unknown') {
-    return {
-      found: true,
-      message: `Batch job for ${targetDate} returned unknown state. Job kept for retry.`,
-      batchName,
-      targetDate,
-      state: 'unknown',
-      submittedAt,
-      error: result.error,
-      rawResponse: result.rawResponse,
-    }
-  }
-
-  // Batch succeeded — save raw images to R2 temp (just base64 decode, lightweight)
-  let saved = 0
-  for (const image of result.images) {
-    const tempKey = `temp/${targetDate}/${image.category}.png`
-    await env.assets.put(tempKey, image.imageBytes, {
-      httpMetadata: { contentType: image.mimeType || 'image/png' },
-    })
-    saved++
-  }
-
-  if (saved === 0) {
-    return {
-      found: true,
-      message: `Batch completed but no images found. Job kept for retry.`,
-      batchName,
-      targetDate,
-      state: 'incomplete',
-      submittedAt,
-      imagesProcessed: 0,
-      rawResponse: result.rawResponse,
-    }
-  }
-
-  // Transition to 'fetched' phase
-  job.phase = 'fetched'
-  await saveBatchJob(env.DB, job)
-
+  // All submitted jobs still waiting at Gemini.
+  const head = submittedJobs[0] ?? jobs[0]
   return {
     found: true,
-    message: `Batch completed. ${saved} raw images saved. Processing will begin on next tick.`,
-    batchName,
-    targetDate,
-    state: 'fetched',
-    submittedAt,
-    imagesProcessed: job.processedCategories.length,
+    message: `${submittedJobs.length} batch job(s) still waiting at Gemini (${pollMessages.join('; ')}).`,
+    batchName: head.batchName,
+    targetDate: head.targetDate,
+    state: 'pending',
+    submittedAt: head.submittedAt,
   }
 }
 
@@ -455,7 +480,7 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
   }
 
   await savePuzzleRecord(env.DB, record)
-  await deleteBatchJob(env.DB)
+  await deleteBatchJob(env.DB, targetDate)
 
   const catLabel = jobCategories.length === 1 ? jobCategories[0] : `${jobCategories.length} categories`
 
@@ -476,6 +501,8 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
 // ---------------------------------------------------------------------------
 
 export type BatchJobStatus = {
+  // True when the head-of-queue job is active — preserved so the old
+  // client behaviour (polling a single job) still works.
   active: boolean
   phase?: string
   batchName?: string
@@ -485,27 +512,22 @@ export type BatchJobStatus = {
   remainingCategories?: PuzzleCategory[]
   themes?: Record<string, string>
   tempUrls?: Record<string, string>
+  // Full queue (oldest first). Includes the head job above.
+  queue?: BatchJobStatus[]
+  queueLength?: number
 }
 
-export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> {
-  await ensurePuzzleTables(env.DB)
-  const job = await getBatchJob(env.DB)
-  if (!job) {
-    return { active: false }
-  }
-
+function describeJob(job: PendingBatchJob): BatchJobStatus {
   const jobCategories = job.requestedCategories ?? CATEGORIES
   const remaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
   const themes: Record<string, string> = {}
   const tempUrls: Record<string, string> = {}
-
   for (const category of jobCategories) {
     themes[category] = job.categories[category]?.theme ?? ''
     if (job.phase === 'fetched' && !job.processedCategories.includes(category)) {
       tempUrls[category] = toCdnUrl(`temp/${job.targetDate}/${category}.png`)
     }
   }
-
   return {
     active: true,
     phase: job.phase,
@@ -517,6 +539,36 @@ export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> 
     themes,
     tempUrls,
   }
+}
+
+export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> {
+  await ensurePuzzleTables(env.DB)
+  const jobs = await getAllPendingBatchJobs(env.DB)
+  if (jobs.length === 0) {
+    return { active: false, queue: [], queueLength: 0 }
+  }
+
+  const head = describeJob(jobs[0])
+  const queue = jobs.map(describeJob)
+  return { ...head, queue, queueLength: queue.length }
+}
+
+export async function cancelBatchJob(env: Bindings, targetDate: string): Promise<{ ok: boolean; message: string }> {
+  await ensurePuzzleTables(env.DB)
+  const existing = await getBatchJobByTargetDate(env.DB, targetDate)
+  if (!existing) {
+    return { ok: false, message: `No batch job queued for ${targetDate}.` }
+  }
+  await deleteBatchJob(env.DB, targetDate)
+  // Best-effort temp file cleanup (non-fatal if bucket/file missing).
+  for (const category of existing.requestedCategories ?? CATEGORIES) {
+    try {
+      await env.assets.delete(`temp/${targetDate}/${category}.png`)
+    } catch {
+      // ignore
+    }
+  }
+  return { ok: true, message: `Cancelled batch job for ${targetDate}.` }
 }
 
 // ---------------------------------------------------------------------------
@@ -535,11 +587,20 @@ export async function completeBatchCategory(
   category: PuzzleCategory,
   imageData: ArrayBuffer,
   thumbnailData: ArrayBuffer,
+  targetDate?: string,
 ): Promise<CompleteCategoryResult> {
   await ensurePuzzleTables(env.DB)
-  const job = await getBatchJob(env.DB)
+  const job = targetDate
+    ? await getBatchJobByTargetDate(env.DB, targetDate)
+    : await getBatchJob(env.DB)
   if (!job) {
-    return { ok: false, message: 'No pending batch job.', allDone: false }
+    return {
+      ok: false,
+      message: targetDate
+        ? `No queued batch job for ${targetDate}.`
+        : 'No pending batch job.',
+      allDone: false,
+    }
   }
 
   if (job.phase !== 'fetched') {
@@ -550,9 +611,9 @@ export async function completeBatchCategory(
     return { ok: true, message: `${category} already processed.`, allDone: false }
   }
 
-  const { targetDate } = job
-  const imageKey = `puzzles/${targetDate}/${category}.jpg`
-  const thumbKey = `puzzles/${targetDate}/${category}_thumb.jpg`
+  const jobTargetDate = job.targetDate
+  const imageKey = `puzzles/${jobTargetDate}/${category}.jpg`
+  const thumbKey = `puzzles/${jobTargetDate}/${category}_thumb.jpg`
 
   await env.assets.put(imageKey, imageData, {
     httpMetadata: { contentType: 'image/jpeg' },
@@ -562,7 +623,7 @@ export async function completeBatchCategory(
   })
 
   // Clean up temp file
-  await env.assets.delete(`temp/${targetDate}/${category}.png`)
+  await env.assets.delete(`temp/${jobTargetDate}/${category}.png`)
 
   // Update job state
   job.processedCategories = [...job.processedCategories, category]
