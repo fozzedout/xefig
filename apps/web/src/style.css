@@ -960,6 +960,7 @@ h1 {
   height: 100%;
   object-fit: cover;
   filter: saturate(1.15) contrast(1.05);
+  transition: filter 0.6s var(--ease-expo);
 }
 
 .slice-overlay {
@@ -973,8 +974,17 @@ h1 {
   background: rgba(10, 10, 15, 0.08);
 }
 
-.slice:not(.active):hover .slice-overlay {
-  background: rgba(10, 10, 15, 0.15);
+/* Hover affordance without brightening the overlay (which was a hard flip
+   because ls-default uses linear-gradient overlays that can't interpolate
+   to rgba). Subtly lift the image filter, and reveal the accent bar at
+   half strength — only on devices that actually hover. */
+@media (hover: hover) and (pointer: fine) {
+  .slice:not(.active):hover .slice-image {
+    filter: saturate(1.2) contrast(1.08) brightness(1.05);
+  }
+  .ls-default .slice:not(.active):hover .slice-accent {
+    opacity: 0.5;
+  }
 }
 
 .slice-icon {
