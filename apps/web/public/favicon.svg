@@ -1,48 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
-  <defs>
-    <clipPath id="bg3">
-      <rect width="48" height="48"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#bg3)">
-    <rect width="48" height="48" fill="#1a1a2e"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- 8 trapezoid facets, shrunk 90% toward centroid for larger gaps -->
+  <polygon points="275.9,236.2 236.2,275.9 270.8,358.4 358.4,270.8" fill="#40d0f0" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="124.1,163.8 163.8,124.1 129.2,41.6 41.6,129.2"   fill="#40d0f0" stroke="#0d1f33" stroke-width="3"/>
 
-    <!-- Mosaic bloom — irregular shards forming a circle -->
+  <polygon points="227.5,278.9 172.5,278.9 138.0,362.1 262.0,362.1" fill="#f06050" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="172.5,121.1 227.5,121.1 262.0,37.9 138.0,37.9"   fill="#f06050" stroke="#0d1f33" stroke-width="3"/>
 
-    <!-- Center shard — fractured into 2 pieces -->
-    <polygon points="27,18 34,24 30,31 22,26 19,18" fill="#5de8a0"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
-    <polygon points="30,31 20,31 14,24 19,18 22,26" fill="#5de8a0"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
+  <polygon points="163.8,275.9 124.1,236.2 41.6,270.8 129.2,358.4"  fill="#a060f0" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="236.2,124.1 275.9,163.8 358.4,129.2 270.8,41.6"  fill="#a060f0" stroke="#0d1f33" stroke-width="3"/>
 
-    <!-- Shard 1: top-right triangle -->
-    <polygon points="24,6 35,10 27,18" fill="#ff6b8a"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
+  <polygon points="121.1,227.5 121.1,172.5 37.9,138.0 37.9,262.0"   fill="#f0c040" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="278.9,172.5 278.9,227.5 362.1,262.0 362.1,138.0" fill="#f0c040" stroke="#0d1f33" stroke-width="3"/>
 
-    <!-- Shard 2: right quad -->
-    <polygon points="35,10 42,22 34,24 27,18" fill="#47bfff"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
-
-    <!-- Shard 3: lower-right — slightly drifting -->
-    <polygon points="42,22 37,36 30,31 34,24" fill="#ffb347"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"
-             transform="translate(1,1) rotate(-13 37 29)" />
-
-    <!-- Shard 4: bottom quad -->
-    <polygon points="37,36 24,42 20,31 30,31" fill="#ff6b8a"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
-
-    <!-- Shard 5: lower-left quad -->
-    <polygon points="24,42 11,36 14,24 20,31" fill="#47bfff"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
-
-    <!-- Shard 6: left quad -->
-    <polygon points="11,36 6,22 19,18 14,24" fill="#ff6b8a"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"/>
-
-    <!-- Shard 7: upper-left pentagon — floating, about to settle -->
-    <polygon points="6,22 13,10 24,6 27,18 19,18" fill="#ffb347"
-             stroke="#1a1a2e" stroke-width="1.2" stroke-linejoin="round"
-             transform="rotate(185 5 5) translate(-22,-18)" />
-  </g>
+  <!-- Central table facet -->
+  <polygon points="266.3,227.4 227.4,266.3 172.6,266.3 133.7,227.4 133.7,172.6 172.6,133.7 227.4,133.7 266.3,172.6"
+           fill="#e070a0" stroke="#0d1f33" stroke-width="3"/>
 </svg>
