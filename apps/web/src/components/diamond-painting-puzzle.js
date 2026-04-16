@@ -490,7 +490,8 @@ export class DiamondPaintingPuzzle {
       }
       this.redrawGridLines()
       i++
-      this._fillTimer = setTimeout(step, 100)
+      const delay = Math.max(0, 100 - i * 10)
+      this._fillTimer = setTimeout(step, delay)
     }
 
     step()
