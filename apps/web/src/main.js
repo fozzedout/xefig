@@ -878,7 +878,7 @@ function renderLauncher() {
           </div>`
   }
 
-  const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0', diamond: '#e070a0' }
+  const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#50d070', polygram: '#a060f0', diamond: '#e070a0' }
 
   const pageEl = document.querySelector('#page-play')
   pageEl.innerHTML = `
@@ -918,7 +918,7 @@ function renderLauncher() {
     renderGame()
   }
 
-  const ACCENT_MAP = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#f06050', polygram: '#a060f0', diamond: '#e070a0' }
+  const ACCENT_MAP = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#50d070', polygram: '#a060f0', diamond: '#e070a0' }
 
   const buildInfoPanel = (panel, mode, index) => {
     const title = MODE_LABELS[mode]
@@ -1084,7 +1084,7 @@ const ARCHIVE_START_DATE = '2026-03-17'
 const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_JIGSAW]: '#f0c040',
   [GAME_MODE_SLIDING]: '#40d0f0',
-  [GAME_MODE_SWAP]: '#f06050',
+  [GAME_MODE_SWAP]: '#50d070',
   [GAME_MODE_POLYGRAM]: '#a060f0',
   [GAME_MODE_DIAMOND]: '#e070a0',
 }
@@ -1474,7 +1474,7 @@ function renderGame({ resumeRun = null } = {}) {
   const gameEl = document.querySelector('#page-game')
   const accentColor = gameMode === GAME_MODE_JIGSAW ? '#f0c040'
     : gameMode === GAME_MODE_SLIDING ? '#40d0f0'
-    : gameMode === GAME_MODE_SWAP ? '#f06050'
+    : gameMode === GAME_MODE_SWAP ? '#50d070'
     : gameMode === GAME_MODE_DIAMOND ? '#e070a0'
     : '#a060f0'
   const dateLabel = state.puzzle?.date

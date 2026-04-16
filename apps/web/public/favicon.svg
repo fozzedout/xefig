@@ -3,8 +3,8 @@
   <polygon points="275.9,236.2 236.2,275.9 270.8,358.4 358.4,270.8" fill="#40d0f0" stroke="#0d1f33" stroke-width="3"/>
   <polygon points="124.1,163.8 163.8,124.1 129.2,41.6 41.6,129.2"   fill="#40d0f0" stroke="#0d1f33" stroke-width="3"/>
 
-  <polygon points="227.5,278.9 172.5,278.9 138.0,362.1 262.0,362.1" fill="#f06050" stroke="#0d1f33" stroke-width="3"/>
-  <polygon points="172.5,121.1 227.5,121.1 262.0,37.9 138.0,37.9"   fill="#f06050" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="227.5,278.9 172.5,278.9 138.0,362.1 262.0,362.1" fill="#50d070" stroke="#0d1f33" stroke-width="3"/>
+  <polygon points="172.5,121.1 227.5,121.1 262.0,37.9 138.0,37.9"   fill="#50d070" stroke="#0d1f33" stroke-width="3"/>
 
   <polygon points="163.8,275.9 124.1,236.2 41.6,270.8 129.2,358.4"  fill="#a060f0" stroke="#0d1f33" stroke-width="3"/>
   <polygon points="236.2,124.1 275.9,163.8 358.4,129.2 270.8,41.6"  fill="#a060f0" stroke="#0d1f33" stroke-width="3"/>
