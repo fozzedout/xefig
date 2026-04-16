@@ -833,12 +833,15 @@ let pullIntervalId = null
 
 export function startSyncTimer() {
   if (syncIntervalId || !syncEnabled) return
-  // Only push when there are pending changes
+  // Only push when there are pending changes. 5 minutes instead of 1 —
+  // the main.js activity handler also flushes on exit, tab hide, and
+  // focus loss via onGameExit/sendBeacon, so the interval is just a
+  // background safety net rather than the primary sync path.
   syncIntervalId = setInterval(() => {
     if (!isJournalEmpty()) {
       syncNow()
     }
-  }, 60_000)
+  }, 300_000)
   // Pull-only check every 5 minutes to pick up remote changes
   if (!pullIntervalId) {
     pullIntervalId = setInterval(() => {

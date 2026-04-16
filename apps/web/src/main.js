@@ -466,6 +466,11 @@ function bindGameActivity(onAutosave) {
     } else {
       pauseActiveTimer()
       onAutosave()
+      // Tab hidden, window blurred, or focus lost — flush pending
+      // server changes immediately (fire-and-forget via sendBeacon)
+      // so we don't lose up to 5 minutes of progress if the user
+      // never returns or the app is force-quit.
+      syncOnGameExit()
     }
   }
 
