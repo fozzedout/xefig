@@ -272,10 +272,13 @@ export class JigsawPuzzle {
     if (usesSidebarTray) {
       // Landscape: tray on right, no column gap — reserve only the
       // tray column width itself so the canvas fills the remaining
-      // viewport edge-to-edge.
+      // viewport edge-to-edge AND edge-to-edge vertically (no
+      // safe-area-inset-bottom reservation; the home indicator area
+      // is semi-transparent and the canvas looks best filling to the
+      // bottom of the viewport).
       const sideTrayReserve = Math.max(118, viewportWidth * 0.105)
       var availableWidth = Math.max(280, containerWidth - sideTrayReserve)
-      var availableHeight = Math.max(220, containerHeight - saiBottom)
+      var availableHeight = Math.max(220, containerHeight)
     } else {
       // Portrait: tray at top with sai-top padding PLUS the ~48px strip
       // reserved above the tray for the back/highlight/edges/menu buttons
