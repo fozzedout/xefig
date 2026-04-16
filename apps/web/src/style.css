@@ -2860,6 +2860,22 @@ h1 {
   background: rgba(40, 40, 50, 0.88);
 }
 
+/* When the jigsaw workspace enters the idle "controls-hidden" state,
+   the back button should dim like the tray tools and menu dots.
+   This needs higher specificity than the .game-shell--jigsaw rule
+   above, otherwise the opacity: 0.75 override would win. */
+.game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back {
+  opacity: 0.22;
+}
+@media (hover: hover) and (pointer: fine) {
+  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back {
+    opacity: 0.28;
+  }
+  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back:hover {
+    opacity: 1;
+  }
+}
+
 /* iPhone PWA portrait: pin to the safe-area line to match the diamond
    back button positioning. */
 @media (display-mode: standalone) and (orientation: portrait) {
