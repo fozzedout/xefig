@@ -3569,6 +3569,7 @@ h1 {
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  background: #0a0a0f;
 }
 
 .diamond-board-frame {
@@ -3576,9 +3577,7 @@ h1 {
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 0.8rem;
-  background: var(--surface-2);
+  background: #0a0a0f;
   touch-action: none;
 }
 
@@ -3611,11 +3610,14 @@ h1 {
 .diamond-palette-bar {
   display: flex;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px 12px calc(8px + var(--sai-bottom));
   overflow-x: auto;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .diamond-swatch {
@@ -3640,4 +3642,94 @@ h1 {
 
 .diamond-swatch:hover:not(.selected) {
   border-color: var(--muted);
+}
+
+/* ── Diamond immersive chrome ────────────────────────── */
+/* Back + restart buttons float over the canvas at low opacity
+   so they don't distract from the image. */
+
+.diamond-floating-btn {
+  position: absolute;
+  z-index: 30;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(10, 10, 15, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e8e6e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  opacity: 0.35;
+  transition: opacity 180ms ease, background 180ms ease, transform 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.diamond-floating-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.diamond-floating-btn:hover,
+.diamond-floating-btn:focus-visible,
+.diamond-floating-btn:active {
+  opacity: 1;
+  background: rgba(10, 10, 15, 0.8);
+}
+
+.diamond-floating-btn--back {
+  top: calc(0.5rem + var(--sai-top));
+  left: calc(0.5rem + var(--sai-left));
+}
+
+.diamond-floating-btn--restart {
+  top: calc(0.5rem + var(--sai-top));
+  right: calc(0.5rem + var(--sai-right));
+  color: #f06050;
+}
+
+/* Landscape: palette runs vertically on the right of the screen,
+   restart moves to the bottom-right corner. */
+@media (orientation: landscape) {
+  .diamond-root {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .diamond-palette-bar {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-rows: repeat(9, auto);
+    grid-auto-flow: column;
+    gap: 6px;
+    padding: calc(8px + var(--sai-top)) calc(8px + var(--sai-right)) calc(8px + var(--sai-bottom)) 8px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    align-content: center;
+    justify-content: end;
+    flex-wrap: unset;
+  }
+  .diamond-floating-btn--restart {
+    top: auto;
+    bottom: calc(0.5rem + var(--sai-bottom));
+    right: calc(0.5rem + var(--sai-right));
+  }
+}
+
+/* iPhone PWA (standalone) nudges the floating buttons up into the
+   notched area so the image has more room, and lets the palette extend
+   flush to the screen edges since the layout already fits the phone. */
+@media (display-mode: standalone) {
+  .diamond-floating-btn--back,
+  .diamond-floating-btn--restart {
+    top: 6px;
+  }
+  @media (orientation: landscape) {
+    .diamond-floating-btn--restart {
+      top: auto;
+      bottom: 6px;
+    }
+  }
 }

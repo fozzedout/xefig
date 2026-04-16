@@ -1427,6 +1427,8 @@ function renderGame({ resumeRun = null } = {}) {
   const titleLabel = `${compactModeLabel}${dateLabel ? ` <span style="color:${accentColor}">\u00b7</span> ${dateLabel}` : ''}`
   const showPieceCount = gameMode !== GAME_MODE_DIAMOND
   const useImmersiveJigsawChrome = gameMode === GAME_MODE_JIGSAW
+  const useImmersiveDiamondChrome = gameMode === GAME_MODE_DIAMOND
+  const useImmersiveChrome = useImmersiveJigsawChrome || useImmersiveDiamondChrome
   const viewButtonMarkup = gameMode !== GAME_MODE_DIAMOND
     ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
@@ -1439,8 +1441,8 @@ function renderGame({ resumeRun = null } = {}) {
     </button>`
 
   gameEl.innerHTML = `
-    <main class="game-shell game-shell--${gameMode}${useImmersiveJigsawChrome ? ' game-shell--immersive' : ''}">
-      ${useImmersiveJigsawChrome ? '' : `
+    <main class="game-shell game-shell--${gameMode}${useImmersiveChrome ? ' game-shell--immersive' : ''}">
+      ${useImmersiveChrome ? '' : `
       <header class="game-toolbar game-toolbar--${gameMode}">
         <button id="back-btn" class="gt-icon-btn" type="button" aria-label="Back to launcher" title="Back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -1483,7 +1485,7 @@ function renderGame({ resumeRun = null } = {}) {
       </header>
       `}
 
-      <section class="workspace${useImmersiveJigsawChrome ? ' workspace--immersive' : ''}">
+      <section class="workspace${useImmersiveChrome ? ' workspace--immersive' : ''}">
         <div id="puzzle-mount" class="puzzle-mount"></div>
         ${useImmersiveJigsawChrome ? `
           <div class="floating-game-controls">
@@ -1509,6 +1511,15 @@ function renderGame({ resumeRun = null } = {}) {
               </div>
             </div>
           </div>
+          <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
+        ` : ''}
+        ${useImmersiveDiamondChrome ? `
+          <button id="back-btn" class="diamond-floating-btn diamond-floating-btn--back" type="button" aria-label="Back to puzzles" title="Back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button id="restart-btn" class="diamond-floating-btn diamond-floating-btn--restart" type="button" aria-label="Restart puzzle" title="Restart">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
+          </button>
           <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
         ` : ''}
       </section>
@@ -1556,10 +1567,10 @@ function renderGame({ resumeRun = null } = {}) {
 
   let timerRaf = null
   const updateTimer = () => {
-    timerEl.textContent = formatDuration(getActiveElapsedMs())
+    if (timerEl) timerEl.textContent = formatDuration(getActiveElapsedMs())
     timerRaf = requestAnimationFrame(updateTimer)
   }
-  const startTimerDisplay = () => { if (!timerRaf) timerRaf = requestAnimationFrame(updateTimer) }
+  const startTimerDisplay = () => { if (!timerEl) return; if (!timerRaf) timerRaf = requestAnimationFrame(updateTimer) }
   const stopTimerDisplay = () => { if (timerRaf) { cancelAnimationFrame(timerRaf); timerRaf = null } }
 
   const updatePieceCount = () => {
@@ -1605,6 +1616,7 @@ function renderGame({ resumeRun = null } = {}) {
   const menuBtn = gameEl.querySelector('#menu-btn')
   const menuPanel = gameEl.querySelector('#gt-menu')
   const toggleMenu = (open) => {
+    if (!menuPanel || !menuBtn) return
     const show = open ?? menuPanel.hidden
     menuPanel.hidden = !show
     menuBtn.setAttribute('aria-expanded', show ? 'true' : 'false')
@@ -1612,10 +1624,10 @@ function renderGame({ resumeRun = null } = {}) {
       setImmersiveControlsVisible(true, { persist: show })
     }
   }
-  menuBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu() })
+  if (menuBtn) menuBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu() })
   const closeMenu = () => toggleMenu(false)
   document.addEventListener('click', closeMenu)
-  menuPanel.addEventListener('click', closeMenu)
+  if (menuPanel) menuPanel.addEventListener('click', closeMenu)
 
   let immersiveControlsHideTimer = null
   const clearImmersiveControlsTimer = () => {
@@ -1630,7 +1642,7 @@ function renderGame({ resumeRun = null } = {}) {
     clearImmersiveControlsTimer()
     if (visible && !persist) {
       immersiveControlsHideTimer = window.setTimeout(() => {
-        if (!menuPanel.hidden) return
+        if (menuPanel && !menuPanel.hidden) return
         workspaceEl.classList.add('workspace--controls-hidden')
       }, 2600)
     }
