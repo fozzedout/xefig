@@ -1436,8 +1436,11 @@ autoGenerateBtn.addEventListener('click', async () => {
   setStatus('Submitting batch image generation job...', 'working')
   try {
     const submitBatch = async (force = false) => {
+      // Trigger page is date-agnostic: let the worker pick the next
+      // unscheduled date that isn't already queued. The per-tile
+      // Submit buttons in Review keep the date-specific flow for
+      // regenerating individual categories on a chosen day.
       const body = {}
-      if (selectedDate) body.date = selectedDate
       if (force) body.force = true
       if (clientPrompts) body.prompts = clientPrompts
       return adminFetch('/api/admin/generate-images', {
