@@ -148,6 +148,32 @@ export class DiamondPaintingPuzzle {
     return Math.min(MIN_ZOOM, this.getFitZoom(vp))
   }
 
+  // Returns the inset (in root-relative px) occupied by the palette on
+  // whichever side it hugs. Used by clampPan so that, when zoomed in,
+  // the user can pan cells that are under the palette into the open
+  // interactive area above/beside it.
+  getPaletteInsets() {
+    const insets = { top: 0, right: 0, bottom: 0, left: 0 }
+    if (!this.paletteBar || !this.root) return insets
+    const rootRect = this.root.getBoundingClientRect()
+    const palRect = this.paletteBar.getBoundingClientRect()
+    if (palRect.width === 0 || palRect.height === 0) return insets
+    const distTop = Math.abs(palRect.top - rootRect.top)
+    const distBottom = Math.abs(rootRect.bottom - palRect.bottom)
+    const distLeft = Math.abs(palRect.left - rootRect.left)
+    const distRight = Math.abs(rootRect.right - palRect.right)
+    if (palRect.width >= rootRect.width - 2) {
+      // Palette spans full width — it's on top or bottom.
+      if (distTop < distBottom) insets.top = palRect.height
+      else insets.bottom = palRect.height
+    } else if (palRect.height >= rootRect.height - 2) {
+      // Palette spans full height — left or right column.
+      if (distLeft < distRight) insets.left = palRect.width
+      else insets.right = palRect.width
+    }
+    return insets
+  }
+
   createLayout() {
     this.root = document.createElement('section')
     this.root.className = 'diamond-root'
@@ -196,18 +222,21 @@ export class DiamondPaintingPuzzle {
 
   clampPan() {
     const vp = this.getViewport()
+    const ins = this.getPaletteInsets()
     const fullW = this.cols * CELL_PX * this.zoom
     const fullH = this.rows * CELL_PX * this.zoom
 
     if (fullW <= vp.w) {
       this.panX = (vp.w - fullW) / 2
     } else {
-      this.panX = clamp(this.panX, vp.w - fullW, 0)
+      // Extend toward whichever side the palette hugs so cells hidden
+      // beneath it can be panned into the open region.
+      this.panX = clamp(this.panX, vp.w - fullW - ins.right, 0 + ins.left)
     }
     if (fullH <= vp.h) {
       this.panY = (vp.h - fullH) / 2
     } else {
-      this.panY = clamp(this.panY, vp.h - fullH, 0)
+      this.panY = clamp(this.panY, vp.h - fullH - ins.bottom, 0 + ins.top)
     }
   }
 
