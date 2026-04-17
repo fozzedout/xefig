@@ -647,95 +647,111 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Queue is a dense table-like list so many jobs fit without scrolling
+   the page, and the activity console below stays in view. */
 .batch-job-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-}
-.batch-job-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.75rem;
-  background: var(--surface-2);
+  margin-top: 0.5rem;
+  max-height: 240px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
 }
-.batch-job-card[data-head="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-.batch-job-card-header {
-  display: flex;
+.batch-job-row {
+  display: grid;
+  grid-template-columns: minmax(78px, auto) minmax(64px, auto) auto 1fr auto auto auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  padding: 0.42rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+.batch-job-row:last-child {
+  border-bottom: none;
+}
+.batch-job-row[data-head="true"] {
+  background: rgba(240, 192, 64, 0.08);
+  border-left: 3px solid var(--accent);
+  padding-left: calc(0.6rem - 3px);
 }
 .batch-job-date {
-  font-weight: 700;
   font-family: ui-monospace, 'Fira Code', monospace;
+  font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
 }
 .batch-job-phase {
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 0.15rem 0.5rem;
+  padding: 0.12rem 0.45rem;
   border-radius: 999px;
   background: var(--surface-1);
   color: var(--text-3);
-  margin-left: auto;
+  justify-self: start;
 }
 .batch-job-phase[data-phase="fetched"] {
   color: var(--accent);
-  background: rgba(240, 192, 64, 0.12);
+  background: rgba(240, 192, 64, 0.14);
 }
 .batch-job-phase[data-phase="submitted"] {
   color: #40d0f0;
-  background: rgba(64, 208, 240, 0.12);
+  background: rgba(64, 208, 240, 0.14);
 }
-.batch-job-age {
-  font-size: 0.75rem;
-  color: var(--text-3);
+.batch-job-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
 }
-.batch-job-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+.batch-job-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.batch-job-dot[data-done="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .batch-job-progress {
-  height: 4px;
+  height: 5px;
   background: var(--surface-1);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
+  min-width: 48px;
 }
 .batch-job-progress-fill {
   height: 100%;
   background: var(--accent);
   transition: width 0.3s ease;
 }
-.batch-job-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-content: space-between;
-  font-size: 0.78rem;
-  color: var(--text-3);
-}
 .batch-job-count {
   font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.batch-job-age {
+  color: var(--text-3);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .batch-job-cancel {
+  width: 22px;
+  height: 22px;
+  padding: 0;
   background: none;
   border: 1px solid var(--border);
-  color: var(--text-2);
-  padding: 0.25rem 0.6rem;
   border-radius: 4px;
-  cursor: pointer;
+  color: var(--text-3);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
 .batch-job-cancel:hover {
@@ -750,23 +766,27 @@ body {
   text-align: center;
   border: 1px dashed var(--border);
   border-radius: 8px;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
+/* Activity console is always visible with its own scrollable body. */
 .batch-console {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-1);
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
 }
 .batch-console-header {
   display: flex;
   align-items: center;
-  padding: 0.4rem 0.75rem;
+  padding: 0.35rem 0.7rem;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .batch-console-label {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-3);
@@ -790,15 +810,24 @@ body {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 220px;
+  min-height: 110px;
+  max-height: 200px;
   overflow-y: auto;
   font-family: ui-monospace, 'Fira Code', monospace;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
+}
+.batch-console-log:empty::after {
+  content: 'No activity yet — submit or poll a batch to see events here.';
+  display: block;
+  padding: 0.6rem 0.75rem;
+  color: var(--text-3);
+  font-size: 0.72rem;
+  font-style: italic;
 }
 .batch-console-line {
   display: flex;
   gap: 0.6rem;
-  padding: 0.28rem 0.75rem;
+  padding: 0.22rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .batch-console-line:last-child {

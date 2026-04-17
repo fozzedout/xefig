@@ -461,31 +461,28 @@ function resolveJobCategories(job) {
   return merged.length ? merged : [...CATEGORIES]
 }
 
-function renderJobCard(job, isHead) {
+function renderJobRow(job, isHead) {
   const cats = resolveJobCategories(job)
   const processed = job.processedCategories || []
   const total = cats.length
   const doneCount = processed.filter((c) => cats.includes(c)).length
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  const chips = cats
+  const dots = cats
     .map((cat) => {
       const isDone = processed.includes(cat)
-      return `<span class="batch-chip" data-status="${isDone ? 'done' : 'pending'}">${escapeHtml(cat)}</span>`
+      return `<span class="batch-job-dot" data-done="${isDone ? 'true' : 'false'}" title="${escapeHtml(cat)}${isDone ? ' ✓' : ''}"></span>`
     })
     .join('')
-  return `<article class="batch-job-card" data-date="${escapeHtml(job.targetDate || '')}" data-head="${isHead ? 'true' : 'false'}">
-    <header class="batch-job-card-header">
-      <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
-      <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
-    </header>
-    <div class="batch-job-age">${formatRelativeAge(job.submittedAt)}${isHead ? ' · active' : ''}</div>
-    <div class="batch-job-chips">${chips}</div>
+  const age = formatRelativeAge(job.submittedAt)
+  return `<div class="batch-job-row" data-date="${escapeHtml(job.targetDate || '')}" data-head="${isHead ? 'true' : 'false'}" title="${escapeHtml(cats.map((c) => `${c}${processed.includes(c) ? ' ✓' : ''}`).join(', '))}">
+    <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
+    <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
+    <span class="batch-job-dots">${dots}</span>
     <div class="batch-job-progress"><div class="batch-job-progress-fill" style="width:${pct}%"></div></div>
-    <div class="batch-job-footer">
-      <span class="batch-job-count">${doneCount}/${total} categories</span>
-      <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}">Cancel</button>
-    </div>
-  </article>`
+    <span class="batch-job-count">${doneCount}/${total}</span>
+    <span class="batch-job-age">${age}</span>
+    <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}" aria-label="Cancel">×</button>
+  </div>`
 }
 
 function diffBatchJobs(prev, next) {
@@ -542,7 +539,7 @@ function renderBatchStatus(status) {
   }
   if (batchEmptyEl) batchEmptyEl.hidden = true
   if (batchJobGridEl) {
-    batchJobGridEl.innerHTML = jobs.map((job, i) => renderJobCard(job, i === 0)).join('')
+    batchJobGridEl.innerHTML = jobs.map((job, i) => renderJobRow(job, i === 0)).join('')
   }
 }
 
