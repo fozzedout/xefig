@@ -37,6 +37,7 @@ const batchStatusPanel = document.getElementById('batch-status')
 const batchJobGridEl = document.getElementById('batch-job-grid')
 const batchEmptyEl = document.getElementById('batch-empty')
 const batchQueueCountEl = document.getElementById('batch-queue-count')
+const batchSummaryEl = document.getElementById('batch-summary')
 const batchLastRefreshEl = document.getElementById('batch-last-refresh')
 const batchConsoleLogEl = document.getElementById('batch-console-log')
 const batchConsoleClearBtn = document.getElementById('batch-console-clear')
@@ -461,28 +462,43 @@ function resolveJobCategories(job) {
   return merged.length ? merged : [...CATEGORIES]
 }
 
-function renderJobRow(job, isHead) {
+function renderJobCard(job, isHead) {
   const cats = resolveJobCategories(job)
   const processed = job.processedCategories || []
   const total = cats.length
   const doneCount = processed.filter((c) => cats.includes(c)).length
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  const dots = cats
+  const chips = cats
     .map((cat) => {
       const isDone = processed.includes(cat)
-      return `<span class="batch-job-dot" data-done="${isDone ? 'true' : 'false'}" title="${escapeHtml(cat)}${isDone ? ' ✓' : ''}"></span>`
+      return `<span class="batch-chip" data-status="${isDone ? 'done' : 'pending'}">${escapeHtml(cat)}</span>`
     })
     .join('')
   const age = formatRelativeAge(job.submittedAt)
-  return `<div class="batch-job-row" data-date="${escapeHtml(job.targetDate || '')}" data-head="${isHead ? 'true' : 'false'}" title="${escapeHtml(cats.map((c) => `${c}${processed.includes(c) ? ' ✓' : ''}`).join(', '))}">
-    <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
-    <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
-    <span class="batch-job-dots">${dots}</span>
-    <div class="batch-job-progress"><div class="batch-job-progress-fill" style="width:${pct}%"></div></div>
-    <span class="batch-job-count">${doneCount}/${total}</span>
-    <span class="batch-job-age">${age}</span>
-    <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}" aria-label="Cancel">×</button>
-  </div>`
+  const themeSummary = (() => {
+    const themes = job.themes || {}
+    const vals = Object.values(themes).filter(Boolean)
+    if (vals.length === 0) return ''
+    const first = vals[0]
+    return vals.length === 1 ? first : `${first} +${vals.length - 1}`
+  })()
+  return `<article class="batch-job-card" data-date="${escapeHtml(job.targetDate || '')}" data-head="${isHead ? 'true' : 'false'}">
+    <header class="batch-job-card-header">
+      <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
+      <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
+      <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}" title="Cancel this job" aria-label="Cancel">×</button>
+    </header>
+    <div class="batch-job-meta">
+      <span class="batch-job-age">${age}</span>
+      ${isHead ? '<span class="batch-job-active-tag">active</span>' : ''}
+      ${themeSummary ? `<span class="batch-job-theme" title="${escapeHtml(Object.values(job.themes || {}).filter(Boolean).join(' · '))}">${escapeHtml(themeSummary)}</span>` : ''}
+    </div>
+    <div class="batch-job-chips">${chips}</div>
+    <div class="batch-job-progress-row">
+      <div class="batch-job-progress"><div class="batch-job-progress-fill" style="width:${pct}%"></div></div>
+      <span class="batch-job-count">${doneCount}/${total}</span>
+    </div>
+  </article>`
 }
 
 function diffBatchJobs(prev, next) {
@@ -531,6 +547,20 @@ function renderBatchStatus(status) {
   if (batchLastRefreshEl) {
     batchLastRefreshEl.textContent = new Date().toLocaleTimeString(undefined, { hour12: false })
   }
+  if (batchSummaryEl) {
+    if (jobs.length === 0) {
+      batchSummaryEl.textContent = 'No jobs in flight'
+    } else {
+      const running = jobs.filter((j) => j.phase === 'fetched').length
+      const queued = jobs.length - running
+      const oldest = jobs[0]?.submittedAt ? formatRelativeAge(jobs[0].submittedAt) : null
+      const parts = []
+      if (queued > 0) parts.push(`${queued} queued`)
+      if (running > 0) parts.push(`${running} processing`)
+      if (oldest) parts.push(`oldest ${oldest}`)
+      batchSummaryEl.textContent = parts.join(' · ')
+    }
+  }
 
   if (jobs.length === 0) {
     if (batchJobGridEl) batchJobGridEl.innerHTML = ''
@@ -539,7 +569,7 @@ function renderBatchStatus(status) {
   }
   if (batchEmptyEl) batchEmptyEl.hidden = true
   if (batchJobGridEl) {
-    batchJobGridEl.innerHTML = jobs.map((job, i) => renderJobRow(job, i === 0)).join('')
+    batchJobGridEl.innerHTML = jobs.map((job, i) => renderJobCard(job, i === 0)).join('')
   }
 }
 
