@@ -527,7 +527,7 @@ function renderJobCard(job, isHead) {
     <header class="batch-job-card-header">
       <span class="batch-job-date">${escapeHtml(job.targetDate || '—')}</span>
       <span class="batch-job-phase" data-phase="${escapeHtml(job.phase || 'idle')}">${escapeHtml(job.phase || 'idle')}</span>
-      <button type="button" class="batch-job-cancel" data-date="${escapeHtml(job.targetDate || '')}" title="Cancel this job" aria-label="Cancel">×</button>
+      <button type="button" class="batch-job-cancel" data-batch-name="${escapeHtml(job.batchName || '')}" data-date="${escapeHtml(job.targetDate || '')}" title="Cancel this job" aria-label="Cancel">×</button>
     </header>
     <div class="batch-job-meta">
       <span class="batch-job-age">${age}</span>
@@ -640,17 +640,21 @@ function renderBatchStatus(status) {
   }
 }
 
-async function cancelQueuedBatch(targetDate) {
-  if (!targetDate) return
-  if (!confirm(`Cancel queued batch for ${targetDate}?`)) return
+async function cancelQueuedBatch(batchName, targetDate) {
+  if (!batchName && !targetDate) return
+  const label = targetDate || batchName
+  if (!confirm(`Cancel queued batch for ${label}?`)) return
   try {
+    const body = {}
+    if (batchName) body.batchName = batchName
+    if (targetDate) body.targetDate = targetDate
     const { response, payload } = await adminFetch('/api/admin/generate-images/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetDate }),
+      body: JSON.stringify(body),
     })
     if (response.ok) {
-      setStatus(payload.message || `Cancelled ${targetDate}.`, 'note')
+      setStatus(payload.message || `Cancelled ${label}.`, 'note')
       await refreshBatchStatus()
     } else {
       setStatus(payload.error || payload.message || 'Cancel failed.', 'error')
@@ -663,9 +667,8 @@ async function cancelQueuedBatch(targetDate) {
 if (batchJobGridEl) {
   batchJobGridEl.addEventListener('click', (event) => {
     const btn = event.target.closest('.batch-job-cancel')
-    if (btn && btn.dataset.date) {
-      cancelQueuedBatch(btn.dataset.date)
-    }
+    if (!btn) return
+    cancelQueuedBatch(btn.dataset.batchName, btn.dataset.date)
   })
 }
 

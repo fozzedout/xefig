@@ -527,7 +527,7 @@ test('saveBatchJob supports multiple jobs for different dates (queue)', async ()
   assert.equal(byDate?.batchName, 'second')
 })
 
-test('deleteBatchJob removes a specific job by target date', async () => {
+test('deleteBatchJob removes a specific job by batch name', async () => {
   const mod = await loadPuzzleDb()
   const db = createMockDB()
   await mod.ensurePuzzleTables(db)
@@ -549,17 +549,47 @@ test('deleteBatchJob removes a specific job by target date', async () => {
     processedCategories: [] as any[],
   })
 
-  await mod.deleteBatchJob(db, '2026-04-11')
+  await mod.deleteBatchJob(db, 'drop')
   const remaining = await mod.getAllPendingBatchJobs(db)
   assert.equal(remaining.length, 1)
-  assert.equal(remaining[0]?.targetDate, '2026-04-10')
+  assert.equal(remaining[0]?.batchName, 'keep')
+})
+
+test('multiple single-category jobs can share a target date', async () => {
+  const mod = await loadPuzzleDb()
+  const db = createMockDB()
+  await mod.ensurePuzzleTables(db)
+
+  await mod.saveBatchJob(db, {
+    batchName: 'jigsaw-redo',
+    targetDate: '2026-04-20',
+    categories: {} as any,
+    submittedAt: '2026-04-06T00:00:00Z',
+    phase: 'submitted' as const,
+    processedCategories: [] as any[],
+    requestedCategories: ['jigsaw'] as any[],
+  })
+  await mod.saveBatchJob(db, {
+    batchName: 'diamond-redo',
+    targetDate: '2026-04-20',
+    categories: {} as any,
+    submittedAt: '2026-04-06T00:01:00Z',
+    phase: 'submitted' as const,
+    processedCategories: [] as any[],
+    requestedCategories: ['diamond'] as any[],
+  })
+
+  const sameDate = await mod.getBatchJobsByTargetDate(db, '2026-04-20')
+  assert.equal(sameDate.length, 2)
+  const cats = sameDate.map((j) => j.requestedCategories?.[0]).sort()
+  assert.deepEqual(cats, ['diamond', 'jigsaw'])
 })
 
 test('deleteBatchJob is safe when no job exists', async () => {
   const mod = await loadPuzzleDb()
   const db = createMockDB()
   await mod.ensurePuzzleTables(db)
-  await mod.deleteBatchJob(db, '2026-04-10') // should not throw
+  await mod.deleteBatchJob(db, 'missing-batch') // should not throw
 })
 
 // ===========================

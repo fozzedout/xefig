@@ -32,30 +32,39 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
     db.prepare(
       `CREATE TABLE IF NOT EXISTS prompt_history (id INTEGER PRIMARY KEY AUTOINCREMENT, descriptors TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ),
-    // New queue schema: AUTOINCREMENT id + UNIQUE target_date so multiple
-    // submissions can be queued (one per date).
+    // Queue schema: AUTOINCREMENT id + UNIQUE batch_name (each Gemini
+    // batch is unique). target_date is non-unique so multiple jobs can
+    // target the same date — needed for stacking single-category
+    // resubmits (e.g. retry jigsaw for 2026-04-20 while also re-submitting
+    // diamond for the same date).
     db.prepare(
-      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL, target_date TEXT NOT NULL UNIQUE, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
+      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
     ),
   ])
 
-  // Migration: earlier schema used CHECK (id = 1) so only one row could
-  // ever exist. Detect that and rebuild the table with the queue schema,
-  // preserving any in-flight row.
+  // Migration path — covers two older schemas:
+  //  1. CHECK (id = 1) singleton — rebuild to current schema.
+  //  2. UNIQUE target_date (short-lived queue attempt) — rebuild to
+  //     drop the constraint since it blocks single-category stacking.
   try {
     const row = await db
       .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='batch_jobs'`)
       .first<{ sql: string }>()
-    if (row?.sql && row.sql.includes('CHECK (id = 1)')) {
+    const needsRebuild =
+      row?.sql &&
+      (row.sql.includes('CHECK (id = 1)') ||
+        /target_date\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(row.sql) ||
+        !/batch_name\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(row.sql))
+    if (needsRebuild) {
       await db.batch([
-        db.prepare(`ALTER TABLE batch_jobs RENAME TO batch_jobs_legacy_singleton`),
+        db.prepare(`ALTER TABLE batch_jobs RENAME TO batch_jobs_legacy`),
         db.prepare(
-          `CREATE TABLE batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL, target_date TEXT NOT NULL UNIQUE, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
+          `CREATE TABLE batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
         ),
         db.prepare(
-          `INSERT INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) SELECT id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs_legacy_singleton`,
+          `INSERT INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) SELECT id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs_legacy`,
         ),
-        db.prepare(`DROP TABLE batch_jobs_legacy_singleton`),
+        db.prepare(`DROP TABLE batch_jobs_legacy`),
       ])
     }
   } catch {
@@ -255,11 +264,45 @@ export async function getBatchJobByTargetDate(
   db: D1Database,
   targetDate: string,
 ): Promise<PendingBatchJob | null> {
+  // Multiple jobs may share a target_date (e.g. two single-category
+  // resubmits for the same day). Return the oldest so callers that
+  // want "is there anything for this date" still work.
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ?',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC LIMIT 1',
     )
     .bind(targetDate)
+    .first<BatchJobRow>()
+  return rowToJob(row ?? null)
+}
+
+export async function getBatchJobsByTargetDate(
+  db: D1Database,
+  targetDate: string,
+): Promise<PendingBatchJob[]> {
+  const rows = await db
+    .prepare(
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC',
+    )
+    .bind(targetDate)
+    .all<BatchJobRow>()
+  const out: PendingBatchJob[] = []
+  for (const r of rows.results || []) {
+    const job = rowToJob(r)
+    if (job) out.push(job)
+  }
+  return out
+}
+
+export async function getBatchJobByBatchName(
+  db: D1Database,
+  batchName: string,
+): Promise<PendingBatchJob | null> {
+  const row = await db
+    .prepare(
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE batch_name = ?',
+    )
+    .bind(batchName)
     .first<BatchJobRow>()
   return rowToJob(row ?? null)
 }
@@ -279,16 +322,17 @@ export async function getAllPendingBatchJobs(db: D1Database): Promise<PendingBat
 }
 
 export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promise<void> {
-  // target_date has a UNIQUE index, so INSERT OR REPLACE updates in place
-  // when a row already exists for the date and inserts otherwise. A new
-  // row gets an auto-incremented id.
+  // batch_name has a UNIQUE index (each Gemini batch id is unique), so
+  // INSERT OR REPLACE updates the row in place when the same batch is
+  // saved again and inserts otherwise. target_date is non-unique so
+  // multiple jobs can target the same date.
   await db
     .prepare(
-      'INSERT OR REPLACE INTO batch_jobs (target_date, batch_name, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO batch_jobs (batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
-      job.targetDate,
       job.batchName,
+      job.targetDate,
       JSON.stringify(job.categories),
       job.submittedAt,
       job.phase,
@@ -299,6 +343,6 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
     .run()
 }
 
-export async function deleteBatchJob(db: D1Database, targetDate: string): Promise<void> {
-  await db.prepare('DELETE FROM batch_jobs WHERE target_date = ?').bind(targetDate).run()
+export async function deleteBatchJob(db: D1Database, batchName: string): Promise<void> {
+  await db.prepare('DELETE FROM batch_jobs WHERE batch_name = ?').bind(batchName).run()
 }

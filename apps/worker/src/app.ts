@@ -616,12 +616,21 @@ export function createApp() {
     }
 
     try {
-      const body = (await c.req.json()) as { targetDate?: string; date?: string }
-      const targetDate = (body.targetDate || body.date || '').trim()
-      if (!targetDate || !isValidDateKey(targetDate)) {
-        return c.json({ error: 'Valid targetDate is required (YYYY-MM-DD).' }, 400)
+      const body = (await c.req.json()) as {
+        batchName?: string
+        targetDate?: string
+        date?: string
       }
-      const result = await cancelBatchJob(c.env, targetDate)
+      const batchName = typeof body.batchName === 'string' ? body.batchName.trim() : ''
+      const rawDate = (body.targetDate || body.date || '').trim()
+      const targetDate = isValidDateKey(rawDate) ? rawDate : ''
+      if (!batchName && !targetDate) {
+        return c.json({ error: 'Provide batchName (preferred) or targetDate.' }, 400)
+      }
+      const result = await cancelBatchJob(c.env, {
+        batchName: batchName || undefined,
+        targetDate: targetDate || undefined,
+      })
       return c.json(result, result.ok ? 200 : 404)
     } catch (error) {
       console.error('Cancel batch job failed', error)

@@ -7,6 +7,8 @@ import {
   ensurePuzzleTables,
   getBatchJob,
   getBatchJobByTargetDate,
+  getBatchJobsByTargetDate,
+  getBatchJobByBatchName,
   getAllPendingBatchJobs,
   saveBatchJob,
   deleteBatchJob,
@@ -54,7 +56,11 @@ export async function handleBatchSubmit(
 
   await ensurePuzzleTables(env.DB)
   const queuedJobs = await getAllPendingBatchJobs(env.DB)
-  const queuedDates = new Set(queuedJobs.map((j) => j.targetDate))
+  // A full-pack submit covers every category, so it only collides with
+  // a date if any job for that date exists — single-category rows
+  // included (you don't want to queue a 5-category pack on top of a
+  // pending jigsaw-only regen).
+  const fullPackBlockedDates = new Set(queuedJobs.map((j) => j.targetDate))
 
   let targetDate: string | null
   if (opts.date) {
@@ -63,13 +69,17 @@ export async function handleBatchSubmit(
     }
     targetDate = opts.date
 
-    // Reject if this specific date is already in the queue — submitting
-    // again for the same date would overwrite the in-flight job.
-    if (queuedDates.has(targetDate)) {
+    // Reject if any job already queued for this date — a fresh full
+    // pack would either collide with queued categories or be merged
+    // unpredictably.
+    if (fullPackBlockedDates.has(targetDate)) {
       const existing = queuedJobs.find((j) => j.targetDate === targetDate)!
+      const categoriesNote = existing.requestedCategories && existing.requestedCategories.length < CATEGORIES.length
+        ? ` (pending: ${existing.requestedCategories.join(', ')})`
+        : ''
       return {
         submitted: false,
-        message: `A batch job is already queued for ${targetDate}. Cancel it first or pick a different date.`,
+        message: `A batch job is already queued for ${targetDate}${categoriesNote}. Cancel it first or pick a different date.`,
         batchName: existing.batchName,
         targetDate,
       }
@@ -87,7 +97,7 @@ export async function handleBatchSubmit(
     }
   } else {
     const today = getUtcDateKey()
-    targetDate = await findNextUnscheduledDate(env.DB, today, 14, queuedDates)
+    targetDate = await findNextUnscheduledDate(env.DB, today, 14, fullPackBlockedDates)
     if (!targetDate) {
       return {
         submitted: false,
@@ -165,7 +175,6 @@ export async function handleSingleBatchSubmit(
 
   await ensurePuzzleTables(env.DB)
   const queuedJobs = await getAllPendingBatchJobs(env.DB)
-  const queuedDates = new Set(queuedJobs.map((j) => j.targetDate))
 
   let targetDate: string | null
   if (opts.date) {
@@ -173,16 +182,30 @@ export async function handleSingleBatchSubmit(
       return { submitted: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
     }
     targetDate = opts.date
-    if (queuedDates.has(targetDate)) {
-      const existing = queuedJobs.find((j) => j.targetDate === targetDate)!
+
+    // Reject only if THIS category is already queued for this date.
+    // Stacking different single-category jobs on the same day is
+    // allowed (e.g. re-run jigsaw and diamond independently for
+    // 2026-04-20).
+    const sameDateJobs = queuedJobs.filter((j) => j.targetDate === targetDate)
+    const collision = sameDateJobs.find((j) => {
+      const cats = j.requestedCategories ?? CATEGORIES
+      return cats.includes(opts.category)
+    })
+    if (collision) {
       return {
         submitted: false,
-        message: `A batch job is already queued for ${targetDate}. Cancel it first or pick a different date.`,
-        batchName: existing.batchName,
+        message: `A ${opts.category} batch is already queued for ${targetDate}. Cancel it first or pick a different date.`,
+        batchName: collision.batchName,
         targetDate,
       }
     }
   } else {
+    // For an auto-picked date, only skip dates that already have a
+    // full-pack or same-category job queued. Since this path has no
+    // pre-chosen category, use the union of all queued dates as a
+    // conservative exclude.
+    const queuedDates = new Set(queuedJobs.map((j) => j.targetDate))
     const today = getUtcDateKey()
     targetDate = await findNextUnscheduledDate(env.DB, today, 14, queuedDates)
     if (!targetDate) {
@@ -278,7 +301,7 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
     }
 
     if (result.state === 'failed') {
-      await deleteBatchJob(env.DB, job.targetDate)
+      await deleteBatchJob(env.DB, job.batchName)
       return {
         found: true,
         message: `Batch job for ${job.targetDate} failed: ${result.error}`,
@@ -480,7 +503,7 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
   }
 
   await savePuzzleRecord(env.DB, record)
-  await deleteBatchJob(env.DB, targetDate)
+  await deleteBatchJob(env.DB, batchName)
 
   const catLabel = jobCategories.length === 1 ? jobCategories[0] : `${jobCategories.length} categories`
 
@@ -553,22 +576,53 @@ export async function getBatchJobStatus(env: Bindings): Promise<BatchJobStatus> 
   return { ...head, queue, queueLength: queue.length }
 }
 
-export async function cancelBatchJob(env: Bindings, targetDate: string): Promise<{ ok: boolean; message: string }> {
+export async function cancelBatchJob(
+  env: Bindings,
+  opts: { batchName?: string; targetDate?: string },
+): Promise<{ ok: boolean; message: string }> {
   await ensurePuzzleTables(env.DB)
-  const existing = await getBatchJobByTargetDate(env.DB, targetDate)
-  if (!existing) {
-    return { ok: false, message: `No batch job queued for ${targetDate}.` }
+  // Prefer cancelling by batch_name since it's unique — a date may
+  // host multiple queued jobs (e.g. jigsaw resubmit + diamond resubmit).
+  // Fall back to "cancel everything for this date" when only a date is
+  // provided, for backwards compatibility.
+  if (opts.batchName) {
+    const existing = await getBatchJobByBatchName(env.DB, opts.batchName)
+    if (!existing) {
+      return { ok: false, message: `No batch job found with id ${opts.batchName}.` }
+    }
+    await deleteBatchJob(env.DB, opts.batchName)
+    for (const category of existing.requestedCategories ?? CATEGORIES) {
+      try {
+        await env.assets.delete(`temp/${existing.targetDate}/${category}.png`)
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: true, message: `Cancelled batch job for ${existing.targetDate}.` }
   }
-  await deleteBatchJob(env.DB, targetDate)
-  // Best-effort temp file cleanup (non-fatal if bucket/file missing).
-  for (const category of existing.requestedCategories ?? CATEGORIES) {
-    try {
-      await env.assets.delete(`temp/${targetDate}/${category}.png`)
-    } catch {
-      // ignore
+
+  if (opts.targetDate) {
+    const existingJobs = await getBatchJobsByTargetDate(env.DB, opts.targetDate)
+    if (existingJobs.length === 0) {
+      return { ok: false, message: `No batch job queued for ${opts.targetDate}.` }
+    }
+    for (const job of existingJobs) {
+      await deleteBatchJob(env.DB, job.batchName)
+      for (const category of job.requestedCategories ?? CATEGORIES) {
+        try {
+          await env.assets.delete(`temp/${opts.targetDate}/${category}.png`)
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return {
+      ok: true,
+      message: `Cancelled ${existingJobs.length} batch job(s) for ${opts.targetDate}.`,
     }
   }
-  return { ok: true, message: `Cancelled batch job for ${targetDate}.` }
+
+  return { ok: false, message: 'Provide either batchName or targetDate to cancel.' }
 }
 
 // ---------------------------------------------------------------------------
