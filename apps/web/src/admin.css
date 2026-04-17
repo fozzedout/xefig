@@ -294,12 +294,10 @@ body {
 }
 
 /* ── Dashboard grid ─────────────────────────────────── */
-/* Date navigation is editor-only. Hide the picker on Batch / Messages
-   pages since selecting a date there would be meaningless. */
-body[data-admin-page="batch"] .date-nav,
-body[data-admin-page="messages"] .date-nav,
-body[data-admin-page="batch"] .record-badge,
-body[data-admin-page="messages"] .record-badge {
+/* Date navigation is editor-only. Hide the picker on pages where
+   selecting a date would be meaningless. */
+body:not([data-admin-page="editor"]) .date-nav,
+body:not([data-admin-page="editor"]) .record-badge {
   display: none;
 }
 
@@ -384,27 +382,192 @@ body[data-admin-page="messages"] .record-badge {
   display: none;
 }
 
-/* Editor page */
-.admin-page--editor {
-  padding: 1rem 1.25rem 1.25rem;
-  overflow-y: auto;
-  gap: 1rem;
+/* ── Shared page header ─────────────────────────────── */
+.page-header {
+  padding: 1.1rem 1.25rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  flex-shrink: 0;
 }
-.admin-page--editor #admin-form {
-  display: contents;
+.page-header-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 0.2rem;
+  color: var(--text-1);
+}
+.page-header-sub {
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin: 0;
+  max-width: 72ch;
+  line-height: 1.45;
 }
 
-/* Batch page */
-.admin-page--batch {
+/* Editor page */
+.admin-page--editor {
   overflow: hidden;
 }
-.batch-page-layout {
+.admin-page--editor #admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.25rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.admin-page--editor .page-header {
+  border-bottom: 1px solid var(--border);
+}
+.admin-page--editor .center-active-ribbon {
+  margin: 1rem 1.25rem 0;
+}
+
+/* Trigger page */
+.admin-page--trigger {
+  overflow-y: auto;
+}
+.trigger-page-layout {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 1.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.trigger-page-layout .page-header {
+  background: none;
+  border-bottom: none;
+  padding: 1.25rem 0 0.25rem;
+}
+.trigger-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.trigger-card--primary {
+  border-color: rgba(240, 192, 64, 0.35);
+  background: linear-gradient(180deg, rgba(240, 192, 64, 0.04), transparent 40%), var(--surface-1);
+}
+.trigger-card-header {
+  padding: 0.9rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  list-style: none;
+  cursor: default;
+}
+.trigger-card-header::-webkit-details-marker { display: none; }
+details.trigger-card[open] .trigger-card-header,
+details.trigger-card > summary.trigger-card-header {
+  cursor: pointer;
+}
+details.trigger-card > summary.trigger-card-header::after {
+  content: '▾';
+  float: right;
+  color: var(--text-3);
+  transition: transform 0.2s;
+}
+details.trigger-card[open] > summary.trigger-card-header::after {
+  transform: rotate(180deg);
+}
+.trigger-card-header h2 {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  color: var(--text-1);
+}
+.trigger-card-header p {
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin: 0;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+.trigger-card-actions {
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.trigger-card-actions .batch-action-btn {
+  flex: 1 1 auto;
+  min-width: 180px;
+  justify-content: center;
+}
+.trigger-card--primary .cron-hint {
+  margin: 0 1rem 1rem;
+}
+.trigger-card-reword {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+}
+.trigger-card-reword .rewrite-tools-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+
+/* Queue page */
+.admin-page--queue {
+  overflow: hidden;
+}
+.queue-page-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.queue-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.queue-page-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  flex-shrink: 0;
+  padding-top: 0.25rem;
+}
+.queue-page-summary {
+  color: var(--text-2);
+}
+.queue-page-sep {
+  opacity: 0.4;
+}
+.queue-page-refresh {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.05rem;
+}
+.queue-page-refresh-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.queue-page-body {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 0;
   flex: 1;
   min-height: 0;
-  height: 100%;
+}
+@media (max-width: 1100px) {
+  .queue-page-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 240px;
+  }
 }
 .batch-controls-col {
   border-right: 1px solid var(--border);

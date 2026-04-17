@@ -50,7 +50,7 @@ const ribbonCountEl = document.getElementById('ribbon-count')
 // ─── Admin page switching (Editor / Batch / Messages) ──
 const pageNavButtons = document.querySelectorAll('.page-nav-btn')
 const adminPages = document.querySelectorAll('.admin-page')
-const VALID_PAGES = new Set(['editor', 'batch', 'messages'])
+const VALID_PAGES = new Set(['editor', 'trigger', 'queue', 'messages'])
 
 function switchAdminPage(name) {
   const target = VALID_PAGES.has(name) ? name : 'editor'
@@ -1474,6 +1474,7 @@ autoGenerateBtn.addEventListener('click', async () => {
 
     setStatus(payload.message || 'Batch job submitted. Use Poll to check progress.', 'ok')
     refreshBatchStatus()
+    if (payload.submitted || payload.ok) switchAdminPage('queue')
   } catch {
     setStatus('Network error during batch submit.', 'error')
   } finally {
@@ -1544,8 +1545,10 @@ cronSubmitBtn.addEventListener('click', async () => {
       return
     }
     setStatus(payload.message || 'Cron submit completed.', 'ok')
-    await loadDateDetails()
     refreshBatchStatus()
+    // After a successful submit, jump to the Queue page so the user
+    // immediately sees the job they just kicked off.
+    if (payload.submitted) switchAdminPage('queue')
   } catch {
     setStatus('Network error during cron submit.', 'error')
   } finally {
