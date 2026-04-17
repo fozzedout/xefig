@@ -174,47 +174,53 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 // ---------------------------------------------------------------------------
 
 const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
+  // Concepts that have natural medium-scale shapes (~20-60 paintable
+  // regions), not microscopic texture. Avoid subjects that imply
+  // "hundreds of tiny things" — those collapse to noise at 16 colours
+  // and are miserable to paint.
   concept: [
-    'ornate stained glass window with many leaded panels',
-    'elaborate rose window', 'intricate mandala', 'illuminated manuscript page',
-    'richly decorated mosaic mural', 'byzantine mosaic scene', 'detailed tile mural',
-    'folk-art tapestry', 'patchwork quilt design', 'embroidered sampler',
-    'art nouveau panel with many motifs', 'art deco frieze with layered patterns',
-    'talavera ceramic pattern', 'moorish tile pattern', 'azulejo tile panel',
-    'botanical spread with many flowers and leaves', 'densely packed floral bouquet',
-    'cottage garden in full bloom', 'tulip garden in many rows', 'sunflower field with birds',
-    'cherry blossom canopy', 'wildflower meadow crowded with blooms',
-    'koi pond with many fish and lily pads', 'tropical reef crowded with fish',
-    'aviary of many exotic birds', 'peacock with full display', 'butterfly conservatory',
-    'rainforest scene with toucans and macaws', 'busy hummingbird garden',
-    'hilltop village with many houses and rooflines', 'medieval walled town',
-    'mediterranean hillside town at sunset', 'terraced coastal village',
-    'santorini rooftops', 'venetian canal with many boats and buildings',
-    'amsterdam canal houses row', 'bustling night market with many stalls',
-    'spice market with many baskets and sacks', 'flower market in full bloom',
-    'harbour crowded with sailboats and buildings', 'fishing village with many piers',
-    'carnival midway with ferris wheel, carousel, and tents',
-    'harvest festival scene with many figures and stalls',
-    'lantern festival with many paper lanterns',
-    'autumn forest with many trees and leaves',
-    'advent town with many shop windows and decorations',
-    'circus tent with many performers and flags',
-    'castle courtyard with many figures', 'busy monastery scene',
-    'cathedral interior with many arches and columns',
+    // bold single subjects in styled settings
+    'lighthouse on a cliff', 'sailboat on calm water', 'hot air balloon over hills',
+    'lone windmill in a field', 'cottage with garden path',
+    'stone bridge over a river', 'small chapel on a hill',
+    'pagoda in a quiet garden', 'lone palm tree on a beach',
+    'cherry blossom tree by a river', 'autumn tree on a lawn',
+    'mountain reflected in a still lake', 'barn under a starry sky',
+    // iconic animals (single or paired)
+    'fox in snow', 'owl on a branch', 'stag in a meadow',
+    'hummingbird at a flower', 'cat on a windowsill', 'parrot on a perch',
+    'peacock with tail fan', 'deer at a forest edge', 'whale breaching',
+    'koi pair in a pond', 'flamingo wading', 'polar bear on ice',
+    // simple decorative subjects with bold shapes
+    'vase of sunflowers on a table', 'bowl of fruit on a cloth',
+    'teapot and cup still life', 'lantern on a porch',
+    'bicycle against a wall with flowers in the basket',
+    'rocking chair on a wooden porch',
+    // landscapes with big shapes, not overloaded
+    'rolling hills at sunset', 'lavender field at dawn',
+    'tulip field in rows', 'small sunflower field under blue sky',
+    'vineyard terrace at dusk', 'quiet harbour with a few sailboats',
+    'beach umbrella by the sea', 'snowy pine tree under aurora',
+    // simple folk-art / mosaic subjects (uncluttered)
+    'stained glass flower panel', 'simple mandala with 8-fold symmetry',
+    'folk-art tree of life', 'talavera plate pattern with central motif',
+    'paper-cut bird and flower motif', 'quilted heart block',
+    // architectural (single structure, not a whole town)
+    'little red barn in snow', 'windmill at sunset',
+    'lonely lighthouse at night with moon', 'simple church steeple against sky',
   ],
 
   location: [
     'garden', 'meadow', 'hillside', 'lakeside', 'seaside', 'riverside',
-    'village', 'rooftop', 'balcony', 'courtyard', 'field', 'orchard',
-    'desert', 'tropical island', 'snowy peak', 'forest clearing',
-    'harbour', 'pier', 'market square', 'cobblestone street',
+    'rooftop', 'balcony', 'courtyard', 'field', 'orchard',
+    'tropical island', 'snowy peak', 'forest clearing',
+    'harbour', 'pier',
   ],
 
   state: [
-    'intricate', 'ornate', 'elaborate', 'densely detailed', 'richly layered',
-    'densely packed', 'highly decorated', 'pattern-rich', 'motif-filled',
-    'vivid', 'vibrant', 'saturated', 'flat-shaded', 'poster-like', 'graphic',
-    'clean-edged', 'high-contrast', 'colour-blocked', 'cel-shaded', 'posterised',
+    'bold', 'clean', 'vivid', 'vibrant', 'saturated', 'flat-shaded',
+    'poster-like', 'graphic', 'high-contrast', 'colour-blocked', 'cel-shaded',
+    'posterised', 'simplified', 'stylised', 'decorative',
   ],
 
   lighting: [
@@ -228,43 +234,42 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'playful and colourful', 'bold and graphic', 'nostalgic and cozy',
   ],
 
+  // Styles that produce clean, paintable regions — no "intricate /
+  // dense / filigree / many tesserae" anywhere.
   style: [
-    'detailed stained glass rendering with many leaded panels',
-    'intricate mosaic tile style with many small tesserae',
-    'ornate folk art illustration with dense patterning',
-    'illuminated manuscript style with filigree and decorative borders',
-    'art nouveau style with flowing layered motifs',
-    'art deco style with stacked geometric detail',
-    'byzantine icon style with gilt patterning',
-    'talavera ceramic style with dense floral motifs',
-    'cloisonné enamel style with many fine cells',
-    'poster art style with many distinct regions',
-    'gouache flat colour with intricate linework',
-    'screen print style with many overlaid colour layers',
-    'paper cut-out style with layered papel-picado detail',
-    'woodblock print style with fine registered colour blocks',
-    'decorative tapestry style with dense figurative detail',
+    'poster art style with bold flat regions',
+    'stained glass rendering with clear leaded panels',
+    'folk art illustration with clean shapes',
+    'gouache flat colour with confident brush strokes',
+    'screen print style with limited layers',
+    'paper cut-out style with bold silhouettes',
+    'woodblock print style with a few colour blocks',
+    'naive art style with simple forms',
+    'storybook illustration with clean outlines',
+    'mid-century modern illustration with flat shapes',
+    'travel poster style with strong silhouettes',
+    'cel-shaded animation style',
   ],
 
   palette: [
-    'around 16 well-spaced flat colours, each reused across many small separated regions',
-    'a tight palette of roughly 16 flat colours — no gradients — reused to build many little shapes',
-    'jewel tones from a limited flat palette, the same colours reappearing in many small pockets',
-    'stained-glass palette of ~16 saturated flat panels separated by dark leading',
-    'folk-art palette: a small set of flat primaries, earth tones and accents, each repeated across many motifs',
-    'mosaic palette: a limited set of flat tesserae colours reused in many small tiles across the frame',
-    'illuminated manuscript palette — gold, lapis, vermilion, emerald, rose, ivory — flat and reused across detail',
-    'tropical flat palette: turquoise, coral, green, sand, magenta, citrus — each reused across many small regions',
-    'autumn flat palette: red, orange, gold, ochre, brown, plum, green — each reused across many leaves and shapes',
-    'botanical flat palette: a handful of greens and petal colours, each recurring across many flowers and leaves',
+    'around 16 well-spaced flat colours filling broad, clearly separated regions',
+    'a tight palette of 10–16 flat colours — no gradients — in big confident shapes',
+    'jewel tones laid down in large flat panels with clean boundaries',
+    'stained-glass palette: a dozen saturated flat panels separated by bold dark leading',
+    'folk-art palette: primaries, earth tones and one accent in simple, bold shapes',
+    'mid-century poster palette: a limited set of flat colours in strong silhouettes',
+    'tropical flat palette: turquoise, coral, green, sand, magenta — each as broad zones',
+    'autumn flat palette: red, orange, gold, ochre, brown — each as substantial shapes',
+    'botanical flat palette: a few greens plus one or two petal colours as solid fills',
+    'muted Scandinavian palette: pale sky, warm wood, soft red, cream — flat and spacious',
   ],
 
   camera: [
-    'straight-on frontal view filling the frame with subject detail',
-    'slightly elevated angle showing the full intricate composition',
-    'centered symmetrical framing that reveals pattern across the whole image',
-    'wide view packed with interlocking detail edge to edge',
-    'medium shot where every region carries distinct pattern and colour',
+    'straight-on frontal view with the subject clearly centred',
+    'slightly elevated angle with a calm foreground',
+    'centered symmetrical framing with generous negative space',
+    'medium shot with one hero subject and a simple backdrop',
+    'wide landscape framing with a clear horizon line',
   ],
 }
 
@@ -326,9 +331,9 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'Depict an intricate, densely detailed scene built from many clearly defined flat-colour regions. Favour subjects with inherent visual complexity: ornate stained glass windows with dozens of leaded panels, elaborate mandalas, richly decorated mosaic murals, illuminated manuscript pages, bustling village or market scenes with many figures and objects, detailed botanical spreads with many flowers and leaves, folk-art tapestries, or layered cityscapes with many buildings, windows, and rooflines. The image should reward careful looking — a lot to discover across the whole frame — while still resolving into crisp, nameable colour regions rather than gradients.',
+      'Depict a bold, uncluttered scene built from big, confident flat-colour shapes. Favour a single strong subject (a lighthouse, a stag, a vase of flowers, a sailboat, a simple stained-glass panel) centred against a supporting backdrop. Think of a good paint-by-numbers kit or a mid-century travel poster: clean silhouettes, obvious foreground / midground / sky, maybe one or two accent elements. Shapes should be medium-sized and clearly nameable — a whole mountain, a whole flower head, a whole bird, a whole roof — not micro-detail that dissolves into noise.',
     qualityTarget:
-      'CRITICAL: the final image will be quantized to exactly 16 flat colours. Do not try to use more — instead, reuse those ~16 colours to build a large NUMBER of distinct, separated regions across the entire frame. Prioritise an abundance of small and medium region shapes packed together alongside larger anchoring ones; the same colour can reappear in many small unconnected pockets. The composition should feel rich, layered, and intricate — never empty, plain, or simplified. Absolutely avoid large uniform expanses (no huge empty skies, plain walls, or blank backgrounds) — break big areas up with pattern, interior detail, clouds, foliage, windows, tiles, or smaller sub-regions so they become many pieces rather than one. Use flat colour fills with crisp edges and no gradients, blends, speckle, noise, or photographic grain, so the 16-colour quantization preserves every region cleanly.',
+      'CRITICAL: the final image will be quantized to exactly 16 flat colours and painted by hand cell-by-cell. Aim for roughly 30–60 distinct, hand-paintable regions total, not hundreds. Most regions should be medium-sized (takes several dozen cells each); a handful of small accent shapes are fine, but no fields of micro-detail, no tiny repeated patterns, no dense filigree, no busy backgrounds crowded with small elements. Think of the image as a paint-by-numbers template an adult could complete in an hour, not a hyperdetailed illuminated manuscript. Flat colour fills with crisp edges, no gradients, no speckle, no photographic grain. Leave generous "breathing room" in skies, water, walls, or foliage — broad calm areas make the busier focal points land.',
   },
 }
 
@@ -371,9 +376,9 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
-  'Output: one landscape 4:3 image built from a limited palette of about 16 flat colours, reused to form many intricate separated regions across the whole frame — think ornate stained glass or a dense mosaic where the same handful of colours reappear in many small shapes. Every part of the image should carry interlocking detail with many small and medium regions alongside larger ones. No gradients, no soft blends, no large empty uniform areas. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image using only ~16 flat colours, each reused to build many distinct regions. Density must come from the NUMBER of separated shapes, not the number of colours — pack the frame with small and medium regions with crisp edges. The scene should feel ornate and densely patterned, never simplified or sparse; avoid any large plain expanses. No smooth gradients, no soft blending, no fine noise. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
-  'Single 4:3 landscape image only, designed to quantize cleanly to 16 flat colours. Fill every part of the frame with intricate interlocking flat-colour shapes — crisp boundaries, no blending — and let those 16 colours reappear many times across many small and medium regions. Prioritise region count and density, like an elaborate mosaic or rose window. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+  'Output: one landscape 4:3 image built from a handful of bold, confident flat-colour shapes — think mid-century travel poster or a classic paint-by-numbers kit. Each region must be large enough to stay readable after the image is downsampled to a ~100×75 cell grid at 16 flat colours. Do NOT pack the frame with fine detail, micro-patterns, filigree, or many tiny elements — those pixelate into unreadable mush. Keep skies, water, walls, and foliage broad and calm; let the hero subject read clearly. No gradients, no soft blends, no noise. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
+  'Deliver a single landscape 4:3 image that reads clearly at low resolution. Use roughly 30–60 flat-colour regions total, most of them medium to large — a whole mountain, a whole roof, a whole flower head — not crowds of tiny motifs. Fine detail will be dropped by the 16-colour quantization and ~100×75 cell grid, so anything smaller than a cell or two just becomes speckle. Shapes should be nameable at a glance. No smooth gradients, no soft blending, no fine noise or photographic grain. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
+  'Single 4:3 landscape image only, designed to survive pixelation. Favour a small number of big, clean flat-colour shapes with crisp edges — imagine the result rendered as ~7500 painted cells at 16 colours and make every shape big enough that each cell belongs obviously to one region. Avoid busy backgrounds, intricate patterning, and small repeated elements. No gradients, no blending, no noise. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
