@@ -294,56 +294,270 @@ body {
 }
 
 /* ── Dashboard grid ─────────────────────────────────── */
+/* Date navigation is editor-only. Hide the picker on Batch / Messages
+   pages since selecting a date there would be meaningless. */
+body[data-admin-page="batch"] .date-nav,
+body[data-admin-page="messages"] .date-nav,
+body[data-admin-page="batch"] .record-badge,
+body[data-admin-page="messages"] .record-badge {
+  display: none;
+}
+
+/* ── Page nav strip ─────────────────────────────────── */
+.page-nav {
+  display: flex;
+  gap: 0;
+  padding: 0 1.25rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.page-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.page-nav-btn:hover {
+  color: var(--text-1);
+}
+.page-nav-btn[aria-selected="true"] {
+  color: var(--text-1);
+  border-bottom-color: var(--accent);
+}
+.page-nav-btn svg {
+  opacity: 0.8;
+}
+.page-nav-btn[aria-selected="true"] svg {
+  color: var(--accent);
+  opacity: 1;
+}
+.page-nav-badge {
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #0a0a0f;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.page-nav-badge--muted {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.page-nav-badge:empty {
+  display: none;
+}
+.page-nav-btn[data-page="batch"] .page-nav-badge[data-empty="true"],
+.page-nav-btn[data-page="messages"] .page-nav-badge[data-empty="true"] {
+  display: none;
+}
+
+/* ── Pages ──────────────────────────────────────────── */
 .dashboard {
-  display: grid;
-  grid-template-rows: 1fr;
-  gap: 0;
-  height: calc(100dvh - var(--topbar-h));
+  flex: 1;
   min-height: 0;
+  display: flex;
+  overflow: hidden;
 }
-
-.dashboard-main {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 360px;
-  gap: 0;
+.admin-page {
+  flex: 1;
+  min-width: 0;
   min-height: 0;
-  height: 100%;
-  transition: grid-template-columns 0.2s ease;
-}
-.dashboard-main[data-drawer-collapsed="true"] {
-  grid-template-columns: 300px minmax(0, 1fr) 0;
-}
-
-.col-left {
-  border-right: 1px solid var(--border);
-  padding: 1rem 1rem 1.25rem;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  overflow-y: auto;
-  background: var(--surface-1);
+}
+.admin-page[hidden] {
+  display: none;
 }
 
-.col-center {
+/* Editor page */
+.admin-page--editor {
   padding: 1rem 1.25rem 1.25rem;
   overflow-y: auto;
+  gap: 1rem;
+}
+.admin-page--editor #admin-form {
+  display: contents;
+}
+
+/* Batch page */
+.admin-page--batch {
+  overflow: hidden;
+}
+.batch-page-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 380px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.batch-controls-col {
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  background: var(--surface-1);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
-
-.col-right {
-  border-left: 1px solid var(--border);
-  background: var(--surface-1);
-  overflow: hidden;
-  min-width: 0;
+.batch-queue-col {
   display: flex;
   flex-direction: column;
-  transition: opacity 0.2s ease;
+  min-height: 0;
+  min-width: 0;
 }
-.dashboard-main[data-drawer-collapsed="true"] .col-right {
-  opacity: 0;
-  pointer-events: none;
+.batch-activity-col {
+  border-left: 1px solid var(--border);
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.batch-col-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface-1);
+}
+.batch-activity-col .batch-col-header {
+  background: rgba(10, 10, 15, 0.85);
+}
+.batch-col-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.batch-col-title h3 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  color: var(--text-1);
+}
+.batch-col-sub {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+.batch-col-header .btn-micro,
+.batch-col-header .batch-last-refresh {
+  margin-left: auto;
+}
+.batch-last-refresh {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'Fira Code', monospace;
+}
+
+/* Cards inside the controls column */
+.batch-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.batch-card-header {
+  padding: 0.7rem 0.85rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.batch-card-header h3 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin: 0 0 0.15rem;
+  color: var(--text-1);
+}
+.batch-card-sub {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  margin: 0;
+  line-height: 1.35;
+}
+.batch-card-body {
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.batch-action-btn {
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Messages page */
+.admin-page--messages {
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+}
+.messages-page-layout {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.messages-page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.messages-page-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 0.2rem;
+}
+.messages-page-sub {
+  font-size: 0.8rem;
+  color: var(--text-3);
+  margin: 0;
+}
+.admin-page--messages #messages-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+/* Narrow screens — stack batch columns vertically */
+@media (max-width: 1100px) {
+  .batch-page-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) 240px;
+  }
+  .batch-controls-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 260px;
+  }
+  .batch-activity-col {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
 }
 
 /* ── Panel ──────────────────────────────────────────── */
@@ -1124,7 +1338,8 @@ body {
   color: var(--text-1);
 }
 
-/* Activity console — fills drawer-pane--activity body */
+/* Activity log — fills its column (batch page) */
+.batch-activity-col .batch-console-log,
 .drawer-pane--activity .batch-console-log {
   list-style: none;
   margin: 0;

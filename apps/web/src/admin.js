@@ -41,44 +41,47 @@ const batchSummaryEl = document.getElementById('batch-summary')
 const batchLastRefreshEl = document.getElementById('batch-last-refresh')
 const batchConsoleLogEl = document.getElementById('batch-console-log')
 const batchConsoleClearBtn = document.getElementById('batch-console-clear')
-const utilityDrawer = document.getElementById('utility-drawer')
-const dashboardMainEl = document.querySelector('.dashboard-main')
-const drawerCollapseBtn = document.getElementById('drawer-collapse-btn')
-const drawerExpandBtn = document.getElementById('drawer-expand-btn')
-const drawerExpandCountEl = document.getElementById('drawer-expand-count')
-const drawerTabButtons = document.querySelectorAll('.drawer-tab')
-const drawerPanes = document.querySelectorAll('.drawer-pane')
 const ribbonEl = document.getElementById('center-active-ribbon')
 const ribbonDateEl = document.getElementById('ribbon-date')
 const ribbonPhaseEl = document.getElementById('ribbon-phase')
 const ribbonProgressFillEl = document.getElementById('ribbon-progress-fill')
 const ribbonCountEl = document.getElementById('ribbon-count')
 
-// ─── Drawer tab switching + collapse ─────────────────────
-function activateDrawerTab(name) {
-  drawerTabButtons.forEach((btn) => {
-    const selected = btn.dataset.tab === name
+// ─── Admin page switching (Editor / Batch / Messages) ──
+const pageNavButtons = document.querySelectorAll('.page-nav-btn')
+const adminPages = document.querySelectorAll('.admin-page')
+const VALID_PAGES = new Set(['editor', 'batch', 'messages'])
+
+function switchAdminPage(name) {
+  const target = VALID_PAGES.has(name) ? name : 'editor'
+  pageNavButtons.forEach((btn) => {
+    const selected = btn.dataset.page === target
     btn.setAttribute('aria-selected', selected ? 'true' : 'false')
   })
-  drawerPanes.forEach((pane) => {
-    pane.hidden = pane.dataset.tab !== name
+  adminPages.forEach((pg) => {
+    pg.hidden = pg.dataset.page !== target
   })
+  document.body.dataset.adminPage = target
+  try {
+    if (location.hash !== `#${target}` && target !== 'editor') {
+      history.replaceState(null, '', `#${target}`)
+    } else if (target === 'editor' && location.hash) {
+      history.replaceState(null, '', ' ')
+    }
+  } catch {
+    // non-fatal
+  }
 }
-drawerTabButtons.forEach((btn) => {
-  btn.addEventListener('click', () => activateDrawerTab(btn.dataset.tab))
+pageNavButtons.forEach((btn) => {
+  btn.addEventListener('click', () => switchAdminPage(btn.dataset.page))
 })
-
-function setDrawerCollapsed(collapsed) {
-  if (!dashboardMainEl) return
-  dashboardMainEl.dataset.drawerCollapsed = collapsed ? 'true' : 'false'
-  if (drawerExpandBtn) drawerExpandBtn.hidden = !collapsed
-}
-if (drawerCollapseBtn) {
-  drawerCollapseBtn.addEventListener('click', () => setDrawerCollapsed(true))
-}
-if (drawerExpandBtn) {
-  drawerExpandBtn.addEventListener('click', () => setDrawerCollapsed(false))
-}
+// Honour hash deep-links on load (#batch, #messages).
+const initialHash = (location.hash || '').replace('#', '')
+switchAdminPage(initialHash || 'editor')
+window.addEventListener('hashchange', () => {
+  const next = (location.hash || '').replace('#', '') || 'editor'
+  switchAdminPage(next)
+})
 
 const promptFields = {
   jigsaw: document.getElementById('prompt-jigsaw'),
@@ -581,9 +584,10 @@ function renderBatchStatus(status) {
     processedCategories: [...(j.processedCategories || [])],
   }))
 
-  if (batchQueueCountEl) batchQueueCountEl.textContent = String(jobs.length)
-  if (drawerExpandCountEl) drawerExpandCountEl.textContent = String(jobs.length)
-  if (drawerExpandBtn) drawerExpandBtn.dataset.count = String(jobs.length)
+  if (batchQueueCountEl) {
+    batchQueueCountEl.textContent = String(jobs.length)
+    batchQueueCountEl.dataset.empty = jobs.length === 0 ? 'true' : 'false'
+  }
   if (batchLastRefreshEl) {
     batchLastRefreshEl.textContent = new Date().toLocaleTimeString(undefined, { hour12: false })
   }

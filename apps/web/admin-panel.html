@@ -89,48 +89,39 @@
       </div>
     </nav>
 
+    <!-- ─── PAGE NAV ─── -->
+    <nav class="page-nav" role="tablist" aria-label="Admin sections">
+      <button type="button" class="page-nav-btn" data-page="editor" role="tab" aria-selected="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="8" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="2" y="8" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+          <rect x="8" y="8" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        <span>Editor</span>
+      </button>
+      <button type="button" class="page-nav-btn" data-page="batch" role="tab" aria-selected="false">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2 3h10M2 7h10M2 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <span>Batch</span>
+        <span class="page-nav-badge" id="batch-queue-count">0</span>
+      </button>
+      <button type="button" class="page-nav-btn" data-page="messages" role="tab" aria-selected="false">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2 4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4Z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2.5 4l4.5 3.5L11.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Messages</span>
+        <span class="page-nav-badge page-nav-badge--muted" id="msg-count"></span>
+      </button>
+    </nav>
+
     <!-- ─── DASHBOARD ─── -->
     <div class="dashboard">
-      <div class="dashboard-main">
 
-      <!-- ═══ LEFT SIDEBAR — Input / Manual Workflow ═══ -->
-      <aside class="col-left">
-        <section class="panel flat-panel">
-          <header class="flat-panel-header">
-            <h2>Manual Workflow</h2>
-          </header>
-          <div class="flat-panel-body">
-            <div class="manual-actions">
-              <button type="button" id="generate-prompt-btn" class="btn-primary">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                  <path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.93 2.93l1.41 1.41M9.66 9.66l1.41 1.41M2.93 11.07l1.41-1.41M9.66 4.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                Generate Prompts
-              </button>
-              <button type="button" id="auto-generate-btn" class="btn-outline">Submit Batch</button>
-              <button type="button" id="batch-poll-btn" class="btn-outline">Poll Batch</button>
-              <button type="button" id="copy-pack-btn" class="btn-outline" disabled>Copy Prompts</button>
-            </div>
-            <details class="sub-section">
-              <summary>Reword Model</summary>
-              <div class="rewrite-tools">
-                <select id="rewrite-model-select" class="rewrite-model-select">
-                  <option value="">Worker default (openrouter/free)</option>
-                </select>
-                <button type="button" id="refresh-models-btn" class="btn-micro">Refresh models</button>
-              </div>
-            </details>
-            <div class="cron-hint">
-              <span class="cron-hint-label">Cron schedule</span>
-              <span>Daily 00:00 · submit batch</span>
-              <span>Hourly :15 · poll &amp; process</span>
-            </div>
-          </div>
-        </section>
-      </aside>
-
-      <!-- ═══ CENTER COLUMN — date inspector / category tiles ═══ -->
-      <main class="col-center">
+      <!-- ═══ EDITOR PAGE ═══ -->
+      <section class="admin-page admin-page--editor" id="page-editor" data-page="editor" role="tabpanel">
         <div class="center-active-ribbon" id="center-active-ribbon" hidden>
           <span class="ribbon-label">Active batch</span>
           <span class="ribbon-date" id="ribbon-date">—</span>
@@ -404,84 +395,118 @@
           </div>
 
         </form>
-      </main>
+      </section>
 
-      <!-- ═══ RIGHT UTILITY DRAWER — Queue / Activity / Messages ═══ -->
-      <aside class="col-right utility-drawer" id="utility-drawer" data-collapsed="false">
-        <button type="button" id="drawer-collapse-btn" class="drawer-collapse" title="Collapse drawer" aria-label="Collapse drawer">
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 3l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="drawer-tabs" role="tablist">
-          <button type="button" class="drawer-tab" data-tab="queue" role="tab" aria-selected="true">
-            <span>Queue</span>
-            <span id="batch-queue-count" class="tab-badge">0</span>
-          </button>
-          <button type="button" class="drawer-tab" data-tab="activity" role="tab" aria-selected="false">
-            <span>Activity</span>
-          </button>
-          <button type="button" class="drawer-tab" data-tab="messages" role="tab" aria-selected="false">
-            <span>Messages</span>
-            <span id="msg-count" class="tab-badge tab-badge--muted"></span>
-          </button>
+      <!-- ═══ BATCH PAGE ═══ -->
+      <section class="admin-page admin-page--batch" id="page-batch" data-page="batch" role="tabpanel" hidden>
+        <div class="batch-page-layout">
+
+          <!-- LEFT: controls -->
+          <aside class="batch-controls-col">
+            <div class="batch-card">
+              <header class="batch-card-header">
+                <h3>Cron Actions</h3>
+                <p class="batch-card-sub">Fires the same flow the scheduler runs.</p>
+              </header>
+              <div class="batch-card-body">
+                <button type="button" id="cron-submit-btn" class="btn-primary batch-action-btn">
+                  <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/>
+                    <path d="M9 5v4.5l3 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Submit new batch
+                </button>
+                <button type="button" id="cron-poll-btn" class="btn-outline batch-action-btn">
+                  <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path d="M2 9a7 7 0 0 1 13.5-2.5M16 9a7 7 0 0 1-13.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    <path d="M15.5 3v3.5h-3.5M2.5 15V11.5H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Poll &amp; process
+                </button>
+              </div>
+            </div>
+
+            <div class="batch-card">
+              <header class="batch-card-header">
+                <h3>Manual Workflow</h3>
+                <p class="batch-card-sub">Preview prompts, edit, then submit.</p>
+              </header>
+              <div class="batch-card-body">
+                <button type="button" id="generate-prompt-btn" class="btn-outline batch-action-btn">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.93 2.93l1.41 1.41M9.66 9.66l1.41 1.41M2.93 11.07l1.41-1.41M9.66 4.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  Generate prompts
+                </button>
+                <button type="button" id="auto-generate-btn" class="btn-outline batch-action-btn">Submit with current prompts</button>
+                <button type="button" id="batch-poll-btn" class="btn-outline batch-action-btn">Poll &amp; process</button>
+                <button type="button" id="copy-pack-btn" class="btn-outline batch-action-btn" disabled>Copy prompts</button>
+                <details class="sub-section">
+                  <summary>Reword model</summary>
+                  <div class="rewrite-tools">
+                    <select id="rewrite-model-select" class="rewrite-model-select">
+                      <option value="">Worker default (openrouter/free)</option>
+                    </select>
+                    <button type="button" id="refresh-models-btn" class="btn-micro">Refresh models</button>
+                  </div>
+                </details>
+              </div>
+            </div>
+
+            <div class="cron-hint">
+              <span class="cron-hint-label">Cron schedule</span>
+              <span>Daily 00:00 UTC · submit batch</span>
+              <span>Hourly :15 · poll &amp; process</span>
+            </div>
+          </aside>
+
+          <!-- CENTER: queue list -->
+          <section class="batch-queue-col">
+            <header class="batch-col-header">
+              <div class="batch-col-title">
+                <h3>Queue</h3>
+                <span id="batch-summary" class="batch-col-sub">No jobs in flight</span>
+              </div>
+              <span id="batch-last-refresh" class="batch-last-refresh" title="Last status refresh">&mdash;</span>
+            </header>
+            <div id="batch-status" class="batch-status">
+              <div id="batch-job-grid" class="batch-job-grid"></div>
+              <div id="batch-empty" class="batch-empty" hidden>No batch jobs in flight. Hit <strong>Submit new batch</strong> to start one.</div>
+            </div>
+          </section>
+
+          <!-- RIGHT: activity log -->
+          <section class="batch-activity-col">
+            <header class="batch-col-header">
+              <div class="batch-col-title">
+                <h3>Activity Log</h3>
+                <span class="batch-col-sub">Live events &amp; round-trips</span>
+              </div>
+              <button type="button" id="batch-console-clear" class="btn-micro">Clear</button>
+            </header>
+            <ul id="batch-console-log" class="batch-console-log"></ul>
+          </section>
+
         </div>
+      </section>
 
-        <!-- QUEUE PANE -->
-        <section class="drawer-pane drawer-pane--queue" data-tab="queue" role="tabpanel">
-          <div class="drawer-toolbar">
-            <button type="button" id="cron-submit-btn" class="btn-cron">
-              <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M9 5v4.5l3 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Submit
-            </button>
-            <button type="button" id="cron-poll-btn" class="btn-cron">
-              <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M2 9a7 7 0 0 1 13.5-2.5M16 9a7 7 0 0 1-13.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-                <path d="M15.5 3v3.5h-3.5M2.5 15V11.5H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Poll
-            </button>
-            <span class="drawer-toolbar-meta">
-              <span id="batch-summary">No jobs in flight</span>
-              <span class="drawer-toolbar-dot">·</span>
-              <span id="batch-last-refresh" title="Last status refresh">&mdash;</span>
-            </span>
-          </div>
-          <div id="batch-status" class="batch-status">
-            <div id="batch-job-grid" class="batch-job-grid"></div>
-            <div id="batch-empty" class="batch-empty" hidden>No batch jobs in flight. Hit <strong>Submit</strong> to start one.</div>
-          </div>
-        </section>
-
-        <!-- ACTIVITY PANE -->
-        <section class="drawer-pane drawer-pane--activity" data-tab="activity" role="tabpanel" hidden>
-          <div class="drawer-toolbar">
-            <span class="drawer-toolbar-title">Activity Log</span>
-            <button type="button" id="batch-console-clear" class="btn-micro">Clear</button>
-          </div>
-          <ul id="batch-console-log" class="batch-console-log"></ul>
-        </section>
-
-        <!-- MESSAGES PANE -->
-        <section class="drawer-pane drawer-pane--messages" data-tab="messages" role="tabpanel" hidden>
-          <div class="drawer-toolbar">
-            <span class="drawer-toolbar-title">Messages</span>
-            <button type="button" id="load-messages-btn" class="btn-micro">Load</button>
-          </div>
+      <!-- ═══ MESSAGES PAGE ═══ -->
+      <section class="admin-page admin-page--messages" id="page-messages" data-page="messages" role="tabpanel" hidden>
+        <div class="messages-page-layout">
+          <header class="messages-page-header">
+            <div>
+              <h2>Messages</h2>
+              <p class="messages-page-sub">Contact form submissions from the public site.</p>
+            </div>
+            <button type="button" id="load-messages-btn" class="btn-primary">Load Messages</button>
+          </header>
           <div id="messages-list" class="messages-list">
-            <div class="msg-empty">Click "Load" to fetch contact submissions.</div>
+            <div class="msg-empty">Click "Load Messages" to fetch contact submissions.</div>
           </div>
-        </section>
-      </aside>
+        </div>
+      </section>
 
-      </div><!-- /dashboard-main -->
     </div>
-
-    <button type="button" id="drawer-expand-btn" class="drawer-expand" title="Show queue drawer" aria-label="Show queue drawer" hidden>
-      <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M8 3l-3 3 3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span id="drawer-expand-count" class="drawer-expand-count">0</span>
-    </button>
 
     </div><!-- /app-content -->
 
