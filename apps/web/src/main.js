@@ -51,7 +51,6 @@ const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
-const NAME_PROMPT_DECLINED_KEY = 'xefig:profile-name-prompt-declined:v1'
 // Lower bound on what a legit puzzle run looks like: nothing in the app
 // is completable under a second, so anything below is a bug artifact.
 const MIN_PLAUSIBLE_ELAPSED_MS = 1000
@@ -2534,12 +2533,11 @@ function renderGame({ resumeRun = null } = {}) {
             completedRun,
           })
 
-          // Prompt for a leaderboard name once. If they set one, enable
-          // server sync so the name propagates. If they skip, remember
-          // that — no nagging on subsequent completions.
+          // Prompt for a leaderboard name on every completion until the
+          // player actually sets one. Saving enables server sync so the
+          // name propagates. Skip just continues to the overlay.
           const hasName = !!(getProfileName() || '').trim()
-          const declined = localStorage.getItem(NAME_PROMPT_DECLINED_KEY) === 'true'
-          if (!hasName && !declined) {
+          if (!hasName) {
             showNameDialog({
               onDone: (result) => {
                 if (result && result.name) {
@@ -2549,8 +2547,6 @@ function renderGame({ resumeRun = null } = {}) {
                   } catch (e) {
                     console.error('Failed to save profile name', e)
                   }
-                } else {
-                  localStorage.setItem(NAME_PROMPT_DECLINED_KEY, 'true')
                 }
                 presentOverlay()
               },
