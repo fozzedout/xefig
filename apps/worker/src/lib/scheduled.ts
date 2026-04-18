@@ -1,7 +1,10 @@
 import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
-import { processPngImage } from './image'
+import { detectBorder, processPngImage } from './image'
+
+const BORDER_PROMPT_ADDENDUM =
+  'Critical: the image must be full-bleed. Content extends completely to all four edges — no white frame, no coloured border, no paper texture, no torn or deckled edges, no vignette, no matting.'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
 import {
   ensurePuzzleTables,
@@ -319,17 +322,49 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
       continue
     }
 
-    // Batch succeeded — save raw images to R2 temp (base64 decode, lightweight)
+    // Batch succeeded — save raw images to R2 temp, unless border detection
+    // flags one. A flagged image is left off temp so processRemainingCategories
+    // triggers the existing missing-temp regen path. Each category gets at
+    // most BORDER_REGEN_LIMIT regens before we give up and accept the image
+    // so the pipeline can't spin forever on a stubborn model.
+    const BORDER_REGEN_LIMIT = 2
+    const failures = job.validationFailures ?? {}
     let saved = 0
+    let borderFlagged = 0
     for (const image of result.images) {
+      const attempts = failures[image.category] ?? 0
+      let skipForBorder = false
+      if (attempts < BORDER_REGEN_LIMIT) {
+        try {
+          const detection = detectBorder(image.imageBytes)
+          if (detection.hasBorder) {
+            failures[image.category] = attempts + 1
+            borderFlagged++
+            skipForBorder = true
+            console.warn(
+              `[border] ${job.targetDate}/${image.category} flagged edges=${detection.flaggedEdges.join(',')} — skipping temp for regen (attempt ${attempts + 1}/${BORDER_REGEN_LIMIT})`,
+            )
+          }
+        } catch (err) {
+          console.warn(`[border] detection failed for ${image.category}`, err)
+        }
+      } else {
+        console.warn(
+          `[border] ${job.targetDate}/${image.category} hit regen limit (${BORDER_REGEN_LIMIT}), accepting image even if bordered`,
+        )
+      }
+
+      if (skipForBorder) continue
+
       const tempKey = `temp/${job.targetDate}/${image.category}.png`
       await env.assets.put(tempKey, image.imageBytes, {
         httpMetadata: { contentType: image.mimeType || 'image/png' },
       })
       saved++
     }
+    job.validationFailures = failures
 
-    if (saved === 0) {
+    if (saved === 0 && borderFlagged === 0) {
       return {
         found: true,
         message: `Batch for ${job.targetDate} completed but no images found. Job kept for retry.`,
@@ -342,6 +377,9 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
       }
     }
 
+    // Flipping to 'fetched' even when every image was border-flagged is
+    // intentional: processRemainingCategories sees the missing temps and
+    // submits single-category regens with a sharper prompt.
     job.phase = 'fetched'
     await saveBatchJob(env.DB, job)
 
@@ -387,8 +425,12 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
     if (!tempObject) {
       if (env.GOOGLE_AI_API_KEY) {
         const details = await generateSingleCategoryPrompt(env.DB, category)
+        // Border-flagged regens need the extra nudge; other "missing temp"
+        // situations (e.g. R2 hiccup) get the plain prompt back.
+        const borderedBefore = (job.validationFailures?.[category] ?? 0) > 0
+        const prompt = borderedBefore ? `${details.prompt}\n\n${BORDER_PROMPT_ADDENDUM}` : details.prompt
         const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
-          { category, prompt: details.prompt },
+          { category, prompt },
         ])
 
         job.categories[category] = { theme: details.theme, keywords: details.keywords }
@@ -398,7 +440,7 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
 
         return {
           found: true,
-          message: `Temp image for ${category} was missing at ${tempKey}. Submitted a regeneration batch for ${category}.`,
+          message: `Temp image for ${category} was missing at ${tempKey}. Submitted a regeneration batch for ${category}${borderedBefore ? ' (with no-border nudge)' : ''}.`,
           batchName: newBatch,
           targetDate,
           state: 'regenerating',

@@ -106,3 +106,128 @@ export function processPngImage(pngBytes: Uint8Array): ProcessedImage {
     thumbnail: thumbnailBytes,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Border detection
+//
+// Flags an edge when its outer strip is ~uniform in colour AND differs
+// significantly from the strip just inside it. That distinguishes a
+// genuine defect border (solid frame, paper margin, vignette) from a
+// legitimate uniform background that continues into the composition.
+// ---------------------------------------------------------------------------
+
+export type BorderEdge = 'top' | 'bottom' | 'left' | 'right'
+
+export type BorderDetection = {
+  hasBorder: boolean
+  flaggedEdges: BorderEdge[]
+  edges: {
+    edge: BorderEdge
+    outerMean: [number, number, number]
+    outerStd: number
+    innerMean: [number, number, number]
+    meanDistance: number
+    flagged: boolean
+  }[]
+}
+
+export type BorderDetectionOptions = {
+  // Strip thickness as a fraction of min(width, height).
+  stripRatio?: number
+  // Per-channel std below this means the strip is considered uniform.
+  uniformStdMax?: number
+  // Euclidean RGB distance between outer and inner means above which
+  // the two bands are considered visibly different.
+  meanDistanceMin?: number
+  // Number of edges that must flag before we call the image bordered.
+  minFlaggedEdges?: number
+}
+
+const DEFAULTS: Required<BorderDetectionOptions> = {
+  stripRatio: 0.02,
+  uniformStdMax: 5,
+  meanDistanceMin: 20,
+  minFlaggedEdges: 1,
+}
+
+function stripBounds(width: number, height: number, edge: BorderEdge, depth: number, outer: boolean) {
+  switch (edge) {
+    case 'top':
+      return outer
+        ? { x0: 0, y0: 0, x1: width, y1: depth }
+        : { x0: 0, y0: depth, x1: width, y1: depth * 2 }
+    case 'bottom':
+      return outer
+        ? { x0: 0, y0: height - depth, x1: width, y1: height }
+        : { x0: 0, y0: height - depth * 2, x1: width, y1: height - depth }
+    case 'left':
+      return outer
+        ? { x0: 0, y0: 0, x1: depth, y1: height }
+        : { x0: depth, y0: 0, x1: depth * 2, y1: height }
+    case 'right':
+      return outer
+        ? { x0: width - depth, y0: 0, x1: width, y1: height }
+        : { x0: width - depth * 2, y0: 0, x1: width - depth, y1: height }
+  }
+}
+
+function stripStats(rgba: RgbaImage, edge: BorderEdge, outer: boolean, depth: number) {
+  const { x0, y0, x1, y1 } = stripBounds(rgba.width, rgba.height, edge, depth, outer)
+  let sr = 0, sg = 0, sb = 0, count = 0
+  for (let y = y0; y < y1; y++) {
+    const row = y * rgba.width
+    for (let x = x0; x < x1; x++) {
+      const i = (row + x) * 4
+      sr += rgba.data[i]
+      sg += rgba.data[i + 1]
+      sb += rgba.data[i + 2]
+      count++
+    }
+  }
+  const mean: [number, number, number] = [sr / count, sg / count, sb / count]
+  let vr = 0, vg = 0, vb = 0
+  for (let y = y0; y < y1; y++) {
+    const row = y * rgba.width
+    for (let x = x0; x < x1; x++) {
+      const i = (row + x) * 4
+      vr += (rgba.data[i] - mean[0]) ** 2
+      vg += (rgba.data[i + 1] - mean[1]) ** 2
+      vb += (rgba.data[i + 2] - mean[2]) ** 2
+    }
+  }
+  const std = Math.sqrt((vr + vg + vb) / (count * 3))
+  return { mean, std }
+}
+
+function rgbDistance(a: [number, number, number], b: [number, number, number]): number {
+  return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+}
+
+export function detectBorder(imageBytes: Uint8Array, opts: BorderDetectionOptions = {}): BorderDetection {
+  const { stripRatio, uniformStdMax, meanDistanceMin, minFlaggedEdges } = { ...DEFAULTS, ...opts }
+  const rgba = decodeImage(imageBytes)
+  const depth = Math.max(1, Math.round(Math.min(rgba.width, rgba.height) * stripRatio))
+
+  const edges: BorderEdge[] = ['top', 'bottom', 'left', 'right']
+  const results = edges.map((edge) => {
+    const outer = stripStats(rgba, edge, true, depth)
+    const inner = stripStats(rgba, edge, false, depth)
+    const meanDistance = rgbDistance(outer.mean, inner.mean)
+    const flagged = outer.std < uniformStdMax && meanDistance > meanDistanceMin
+    return {
+      edge,
+      outerMean: outer.mean,
+      outerStd: outer.std,
+      innerMean: inner.mean,
+      meanDistance,
+      flagged,
+    }
+  })
+
+  const flaggedEdges = results.filter((r) => r.flagged).map((r) => r.edge)
+  return {
+    hasBorder: flaggedEdges.length >= minFlaggedEdges,
+    flaggedEdges,
+    edges: results,
+  }
+}
