@@ -1499,19 +1499,35 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         </button>
         <div class="sheet-body">
           <div id="completed-leaderboard" class="sheet-leaderboard"></div>
-          <div class="completed-screen-actions">
-            <button id="replay-btn" class="launcher-secondary-btn" type="button">Play Again</button>
-          </div>
         </div>
       </aside>
+      <button id="replay-btn" class="completed-screen-replay" type="button">Play Again</button>
     </main>
   `
 
   const sheet = gameEl.querySelector('#completed-sheet')
-  const handle = sheet.querySelector('.sheet-handle')
-  handle.addEventListener('click', () => {
+  const setSheetExpanded = (expanded) => {
+    sheet.setAttribute('aria-expanded', expanded ? 'true' : 'false')
+  }
+
+  sheet.addEventListener('click', (e) => {
     const expanded = sheet.getAttribute('aria-expanded') === 'true'
-    sheet.setAttribute('aria-expanded', expanded ? 'false' : 'true')
+    const onHandle = e.target.closest('.sheet-handle')
+    if (onHandle) {
+      setSheetExpanded(!expanded)
+    } else if (!expanded) {
+      // Any tap on the peeking sheet body expands it.
+      setSheetExpanded(true)
+    }
+  })
+
+  // Tap anywhere outside the sheet (on the puzzle, blurred backdrop,
+  // topbar, or completed-screen chrome) collapses it when it's open.
+  gameEl.querySelector('.completed-screen').addEventListener('click', (e) => {
+    if (sheet.contains(e.target)) return
+    if (sheet.getAttribute('aria-expanded') === 'true') {
+      setSheetExpanded(false)
+    }
   })
 
   let previewPuzzle = null

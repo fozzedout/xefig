@@ -3844,6 +3844,11 @@ h1 {
   max-height: 75vh;
   transform: translateY(calc(100% - var(--sheet-peek, 3.2rem)));
   transition: transform 0.25s ease;
+  cursor: pointer;
+}
+
+.completed-screen-sheet[aria-expanded="true"] {
+  cursor: default;
 }
 
 .completed-screen-sheet[aria-expanded="true"] {
@@ -3913,10 +3918,44 @@ h1 {
   margin: 1rem 0;
 }
 
-.completed-screen-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: center;
+/* Play Again: bottom-right pill, floats over the puzzle preview. In
+   portrait it sits just above the sheet peek so tapping it doesn't also
+   hit the peek; in landscape the sheet is on the right so the pill
+   stays in the puzzle-area corner. Hidden when the sheet is expanded —
+   the leaderboard is the focus then, and the pill would duplicate
+   "navigate-away" affordances with the back button. */
+.completed-screen-replay {
+  position: absolute;
+  right: 1rem;
+  bottom: calc(var(--sheet-peek, 3.2rem) + 1rem);
+  z-index: 3;
+  appearance: none;
+  border: none;
+  padding: 0.55rem 1.3rem;
+  border-radius: 999px;
+  background: #50e8a0;
+  color: #0a0a0f;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.completed-screen-replay:hover {
+  transform: translateY(-1px);
+}
+
+.completed-screen:has(.completed-screen-sheet[aria-expanded="true"]) .completed-screen-replay {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .completed-screen-replay {
+    bottom: 1rem;
+  }
 }
 
 /* Landscape: sheet takes the right rail instead of the bottom so
