@@ -3673,13 +3673,80 @@ h1 {
   font-weight: 500;
 }
 
-.leaderboard-row-me {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+.leaderboard-row-me,
+.lb-row-me {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-.leaderboard-row-me td {
+.leaderboard-row-me td,
+.lb-row-me td {
   font-weight: 600;
   color: var(--accent);
+}
+
+/* Scrollable leaderboard list: bounded height so it doesn't stretch
+   the card when there are many entries, but lets the user scroll
+   through the full list. Sticky header stays in place while scrolling. */
+.lb-scroll {
+  max-height: 15rem;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  border-radius: 0.4rem;
+}
+
+.lb-scroll .lb-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.lb-rank {
+  position: relative;
+  white-space: nowrap;
+}
+
+.lb-rank .lb-rank-num {
+  display: inline-block;
+}
+
+/* Star next to the player's own row — marks their best. Stroke-only,
+   uses currentColor so it picks up the accent tint applied to lb-row-me. */
+.lb-star {
+  width: 0.95rem;
+  height: 0.95rem;
+  vertical-align: -0.15em;
+  margin-right: 0.3rem;
+  color: var(--accent);
+  fill: none;
+  stroke-linejoin: round;
+}
+
+/* Pinned "this run" row below the scrollable list. Rendered as its own
+   single-row table so it sits flush with the list above and lines up
+   column-for-column. Click → scroll list to the player's best. */
+.lb-pinned {
+  margin-top: 0.5rem;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.lb-pinned tbody tr {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.lb-pinned tbody td {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom: none;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.lb-pinned:hover tbody tr {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .completion-dismiss {
@@ -3738,8 +3805,16 @@ h1 {
     grid-row: 1 / span 3;
     margin: 0;
     max-height: calc(92vh - 2rem);
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     text-align: left;
+  }
+
+  .completion-leaderboard .lb-scroll {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 0;
   }
 
   .completion-leaderboard h3 {

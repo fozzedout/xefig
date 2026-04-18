@@ -1368,7 +1368,35 @@ function renderArchivePage() {
   archiveRendered = true
 }
 
-function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboardEntries, totalEntries, playerGuid: myGuid, completedRun }) {
+const LEADERBOARD_STAR_SVG = `<svg class="lb-star" viewBox="0 0 24 24" aria-label="Your best" role="img"><path d="M12 4 L14.351 8.763 L19.608 9.528 L15.804 13.237 L16.702 18.472 L12 16 L7.298 18.472 L8.196 13.237 L4.392 9.528 L9.649 8.763 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>`
+
+function renderLeaderboardRow({ rank, elapsedMs, playerGuid, isMe, isBest, extraClass = '' }) {
+  const time = formatDuration(elapsedMs)
+  const label = isMe ? 'You' : playerGuid.slice(0, 8)
+  const classes = ['lb-row']
+  if (isMe) classes.push('lb-row-me')
+  if (isBest) classes.push('lb-row-best')
+  if (extraClass) classes.push(extraClass)
+  return `
+    <tr class="${classes.join(' ')}" data-player-guid="${playerGuid}">
+      <td class="lb-rank">${isBest ? LEADERBOARD_STAR_SVG : ''}<span class="lb-rank-num">#${rank}</span></td>
+      <td class="lb-time">${time}</td>
+      <td class="lb-player">${label}</td>
+    </tr>`
+}
+
+function showCompletionOverlay({
+  gameMode,
+  duration,
+  elapsedMs,
+  rank,
+  bestMs,
+  submissionRank,
+  submissionElapsedMs,
+  leaderboardEntries,
+  playerGuid: myGuid,
+  completedRun,
+}) {
   const existing = document.querySelector('.completion-overlay')
   if (existing) existing.remove()
 
@@ -1384,24 +1412,44 @@ function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboar
     setTimeout(() => overlay.remove(), 200)
   }
 
-  let leaderboardHtml = ''
+  let leaderboardBlock = ''
   if (leaderboardEntries && leaderboardEntries.length > 0) {
-    const rows = leaderboardEntries.map((entry) => {
-      const isMe = entry.playerGuid === myGuid
-      const time = formatDuration(entry.elapsedMs)
-      return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
-        <td class="lb-rank">#${entry.rank}</td>
-        <td class="lb-time">${time}</td>
-        <td class="lb-player">${isMe ? 'You' : entry.playerGuid.slice(0, 8)}</td>
-      </tr>`
-    }).join('')
+    const rowsHtml = leaderboardEntries
+      .map((entry) => renderLeaderboardRow({
+        rank: entry.rank,
+        elapsedMs: entry.elapsedMs,
+        playerGuid: entry.playerGuid,
+        isMe: entry.playerGuid === myGuid,
+        isBest: entry.playerGuid === myGuid, // one row per player, so the in-list entry is always their best
+      }))
+      .join('')
 
-    leaderboardHtml = `
+    // Pinned current-submission row: always shown so the player can see
+    // what they just submitted and where it'd place, regardless of
+    // whether it beat their stored best. Click scrolls the list to
+    // their leaderboard entry (their best).
+    const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
+    const submissionTime = formatDuration(submissionElapsedMs)
+    const submissionBeatsBest = Number.isFinite(bestMs) && submissionElapsedMs <= bestMs
+    const submissionLabel = submissionBeatsBest ? 'You (this run = best)' : 'You (this run)'
+
+    leaderboardBlock = `
       <div class="completion-leaderboard">
         <h3>Leaderboard</h3>
-        <table class="lb-table">
-          <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
-          <tbody>${rows}</tbody>
+        <div class="lb-scroll" id="lb-scroll">
+          <table class="lb-table">
+            <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        <table class="lb-table lb-pinned" id="lb-pinned">
+          <tbody>
+            <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
+              <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
+              <td class="lb-time">${submissionTime}</td>
+              <td class="lb-player">${submissionLabel}</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     `
@@ -1420,7 +1468,7 @@ function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboar
           <span class="stat-label">Rank</span>
         </div>
       </div>
-      ${leaderboardHtml}
+      ${leaderboardBlock}
       <button type="button" class="completion-dismiss">Continue</button>
     </div>
   `
@@ -1429,10 +1477,18 @@ function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboar
   requestAnimationFrame(() => overlay.classList.add('is-visible'))
 
   overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
-
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) dismiss()
   })
+
+  const pinned = overlay.querySelector('#lb-pinned')
+  const scrollEl = overlay.querySelector('#lb-scroll')
+  if (pinned && scrollEl) {
+    pinned.addEventListener('click', () => {
+      const target = scrollEl.querySelector('.lb-row-best') || scrollEl.querySelector('.lb-row-me')
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 }
 
 function forceCompletePuzzlePreview(gameMode, puzzle) {
@@ -1728,7 +1784,7 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     }).catch(() => {})
   }
 
-  fetchLeaderboard(puzzleDate, gameMode, state.difficulty, 20)
+  fetchLeaderboard(puzzleDate, gameMode, state.difficulty, 100)
     .then((lb) => {
       const entries = lb.entries || []
       const myEntry = entries.find((e) => e.playerGuid === playerGuid)
@@ -1745,20 +1801,21 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         return
       }
 
-      const rows = entries.map((e) => {
-        const isMe = e.playerGuid === playerGuid
-        return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
-          <td class="lb-rank">#${e.rank}</td>
-          <td class="lb-time">${formatDuration(e.elapsedMs)}</td>
-          <td class="lb-player">${isMe ? 'You' : e.playerGuid.slice(0, 8)}</td>
-        </tr>`
-      }).join('')
+      const rowsHtml = entries.map((e) => renderLeaderboardRow({
+        rank: e.rank,
+        elapsedMs: e.elapsedMs,
+        playerGuid: e.playerGuid,
+        isMe: e.playerGuid === playerGuid,
+        isBest: e.playerGuid === playerGuid,
+      })).join('')
 
       container.innerHTML = `
-        <table class="lb-table">
-          <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="lb-scroll">
+          <table class="lb-table">
+            <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
       `
     })
     .catch(() => {
@@ -2230,18 +2287,24 @@ function renderGame({ resumeRun = null } = {}) {
           )
 
           let rank = null
+          let bestMs = null
+          let submissionRank = null
+          let submissionElapsedMs = currentRun.elapsedActiveMs
           let leaderboardEntries = null
           let totalEntries = 0
 
           try {
             const result = await submitLeaderboard(currentRun)
             rank = result.rank
+            bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
+            submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
+            if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
 
             const lb = await fetchLeaderboard(
               currentRun.puzzleDate,
               currentRun.gameMode,
               currentRun.difficulty,
-              20,
+              100,
             )
             leaderboardEntries = lb.entries || []
             totalEntries = leaderboardEntries.length
@@ -2254,6 +2317,9 @@ function renderGame({ resumeRun = null } = {}) {
             duration: durationLabel,
             elapsedMs: currentRun.elapsedActiveMs,
             rank,
+            bestMs,
+            submissionRank,
+            submissionElapsedMs,
             leaderboardEntries,
             totalEntries,
             playerGuid,

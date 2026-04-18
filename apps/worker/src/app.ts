@@ -976,6 +976,25 @@ export function createApp() {
         .bind(puzzleDate, difficulty, gameMode, bestMs)
         .first<{ rank: number }>()
 
+      // submissionRank = where the player WOULD sit if this attempt's
+      // elapsed were what the leaderboard stored. On live this usually
+      // equals bestRank (MIN-wins makes submission == best post-upsert);
+      // diverges only when the attempt was slower than the stored best.
+      const submissionElapsedMs = Math.round(elapsedMs)
+      let submissionRank = Number(rankRow?.rank || 1)
+      if (submissionElapsedMs !== bestMs) {
+        const subRankRow = await c.env.DB.prepare(
+          `
+          SELECT 1 + COUNT(*) AS rank
+          FROM puzzle_leaderboard
+          WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND elapsed_ms < ?
+          `,
+        )
+          .bind(puzzleDate, difficulty, gameMode, submissionElapsedMs)
+          .first<{ rank: number }>()
+        submissionRank = Number(subRankRow?.rank || submissionRank)
+      }
+
       return c.json({
         ok: true,
         puzzleDate,
@@ -984,6 +1003,8 @@ export function createApp() {
         playerGuid,
         bestMs,
         rank: Number(rankRow?.rank || 1),
+        submissionElapsedMs,
+        submissionRank,
       })
     } catch (error) {
       console.error('Leaderboard submit failed', error)
