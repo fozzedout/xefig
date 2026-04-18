@@ -3643,6 +3643,11 @@ h1 {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  /* Fixed layout + explicit widths on rank/time/best means the pinned
+     single-row table and the multi-row list table get identical column
+     positions, so "Jaxah" in the pinned row lines up with the names
+     above it. */
+  table-layout: fixed;
 }
 
 .lb-table th {
@@ -3663,14 +3668,22 @@ h1 {
 }
 
 .lb-rank {
-  width: 2.5rem;
+  width: 2.75rem;
   font-weight: 600;
   color: var(--muted);
 }
 
 .lb-time {
+  width: 4rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+}
+
+.lb-player {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .leaderboard-row-me,
@@ -3737,7 +3750,10 @@ h1 {
 .lb-pinned {
   margin-top: 0.5rem;
   cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  /* Outline via inset box-shadow (not border) so the pinned table's
+     internal column widths stay identical to the list table — border
+     would steal 2px and shift the columns slightly. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 0.5rem;
   overflow: hidden;
 }
