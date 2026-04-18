@@ -51,6 +51,7 @@ const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
+const NAME_PROMPT_DECLINED_KEY = 'xefig:profile-name-prompt-declined:v1'
 // Lower bound on what a legit puzzle run looks like: nothing in the app
 // is completable under a second, so anything below is a bug artifact.
 const MIN_PLAUSIBLE_ELAPSED_MS = 1000
@@ -1432,16 +1433,30 @@ function renderArchivePage() {
 
 const LEADERBOARD_STAR_SVG = `<svg class="lb-star" viewBox="0 0 24 24" aria-label="Your best" role="img"><path d="M12 4 L14.351 8.763 L19.608 9.528 L15.804 13.237 L16.702 18.472 L12 16 L7.298 18.472 L8.196 13.237 L4.392 9.528 L9.649 8.763 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>`
 
-function renderLeaderboardRow({ rank, elapsedMs, playerGuid, isMe, isBest, extraClass = '', playerLabel }) {
+// Resolve what to show in the Player column. The player's own rows read
+// "You" for self-reference; everyone else shows their profile name if
+// they've set one, or a consistent "Anon-XXXXXXXX" fallback derived
+// from their player_guid so they still have a stable handle.
+function displayPlayerName({ isMe, profileName, playerGuid }) {
+  if (isMe) return 'You'
+  const name = (profileName || '').trim()
+  if (name) return name
+  return `Anon-${String(playerGuid || '').slice(0, 8)}`
+}
+
+function renderLeaderboardRow({ rank, elapsedMs, playerGuid, profileName, isMe, isBest, extraClass = '', playerLabel, hideRank = false }) {
   const time = formatDuration(elapsedMs)
-  const label = playerLabel ?? (isMe ? 'You' : playerGuid.slice(0, 8))
+  const label = playerLabel ?? displayPlayerName({ isMe, profileName, playerGuid })
   const classes = ['lb-row']
   if (isMe) classes.push('lb-row-me')
   if (isBest) classes.push('lb-row-best')
   if (extraClass) classes.push(extraClass)
+  const rankCell = hideRank
+    ? '<td class="lb-rank" aria-hidden="true"></td>'
+    : `<td class="lb-rank"><span class="lb-rank-num">#${rank}</span></td>`
   return `
     <tr class="${classes.join(' ')}" data-player-guid="${playerGuid}">
-      <td class="lb-rank"><span class="lb-rank-num">#${rank}</span></td>
+      ${rankCell}
       <td class="lb-time">${time}</td>
       <td class="lb-player">${label}</td>
       <td class="lb-best">${isBest ? LEADERBOARD_STAR_SVG : ''}</td>
@@ -1501,6 +1516,7 @@ function showCompletionOverlay({
       rank: entry.rank,
       elapsedMs: entry.elapsedMs,
       playerGuid: entry.playerGuid,
+      profileName: entry.profileName,
       isMe: entry.playerGuid === myGuid,
       isBest: entry.playerGuid === myGuid,
     }))
@@ -1511,6 +1527,7 @@ function showCompletionOverlay({
         rank: submissionRank,
         elapsedMs: submissionElapsedMs,
         playerGuid: myGuid,
+        profileName: null,
         isMe: true,
         isBest: false,
       })
@@ -1519,10 +1536,15 @@ function showCompletionOverlay({
       rank: r.rank,
       elapsedMs: r.elapsedMs,
       playerGuid: r.playerGuid,
+      profileName: r.profileName,
       isMe: r.isMe,
       isBest: r.isBest,
       extraClass: r.kind === 'ghost' ? 'lb-row-ghost lb-row-ghost-inline' : '',
       playerLabel: r.kind === 'ghost' ? 'You (this run)' : undefined,
+      // Existing server ranks don't shift when we splice a ghost in,
+      // so showing #26 on both the ghost and the real #26 reads as a
+      // duplicate. Hide the ghost's rank — its list position is the rank.
+      hideRank: r.kind === 'ghost',
     })).join('')
 
     leaderboardBlock = `
@@ -1752,6 +1774,60 @@ function mostlySolvePuzzle(gameMode, puzzle) {
   }
 }
 
+// Ask the player to set a leaderboard name. Save enables sync so other
+// players see the name; Skip remembers the decline so we don't nag.
+function showNameDialog({ defaultName = '', onDone }) {
+  const existing = document.querySelector('.name-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'completion-overlay name-overlay'
+  overlay.innerHTML = `
+    <div class="completion-card name-card">
+      <h3 class="name-title">Claim your leaderboard name</h3>
+      <p class="name-msg">Choose how you'll show up on the board. You can change or clear this anytime in Settings.</p>
+      <input type="text" class="name-input" maxlength="30" placeholder="Anonymous" value="${String(defaultName).replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false" />
+      <div class="confirm-actions">
+        <button type="button" class="confirm-cancel">Skip</button>
+        <button type="button" class="confirm-ok">Save</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+
+  const input = overlay.querySelector('.name-input')
+  setTimeout(() => { try { input.focus(); input.select() } catch {} }, 50)
+
+  let done = false
+  const close = (saved, name) => {
+    if (done) return
+    done = true
+    overlay.classList.remove('is-visible')
+    setTimeout(() => overlay.remove(), 200)
+    if (typeof onDone === 'function') onDone(saved ? { name } : null)
+  }
+
+  overlay.querySelector('.confirm-cancel').addEventListener('click', () => close(false))
+  overlay.querySelector('.confirm-ok').addEventListener('click', () => {
+    const name = input.value.trim()
+    if (name) close(true, name)
+    else close(false)
+  })
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      overlay.querySelector('.confirm-ok').click()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      close(false)
+    }
+  })
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close(false)
+  })
+}
+
 function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm }) {
   const existing = document.querySelector('.confirm-overlay')
   if (existing) existing.remove()
@@ -1929,6 +2005,7 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         rank: e.rank,
         elapsedMs: e.elapsedMs,
         playerGuid: e.playerGuid,
+        profileName: e.profileName,
         isMe: e.playerGuid === playerGuid,
         isBest: e.playerGuid === playerGuid,
       })).join('')
@@ -2442,7 +2519,7 @@ function renderGame({ resumeRun = null } = {}) {
             // Non-fatal
           }
 
-          showCompletionOverlay({
+          const presentOverlay = () => showCompletionOverlay({
             gameMode,
             duration: durationLabel,
             elapsedMs: currentRun.elapsedActiveMs,
@@ -2456,6 +2533,31 @@ function renderGame({ resumeRun = null } = {}) {
             playerGuid,
             completedRun,
           })
+
+          // Prompt for a leaderboard name once. If they set one, enable
+          // server sync so the name propagates. If they skip, remember
+          // that — no nagging on subsequent completions.
+          const hasName = !!(getProfileName() || '').trim()
+          const declined = localStorage.getItem(NAME_PROMPT_DECLINED_KEY) === 'true'
+          if (!hasName && !declined) {
+            showNameDialog({
+              onDone: (result) => {
+                if (result && result.name) {
+                  try {
+                    setProfileName(result.name)
+                    if (!isSyncEnabled()) enableSync(playerGuid).catch(() => {})
+                  } catch (e) {
+                    console.error('Failed to save profile name', e)
+                  }
+                } else {
+                  localStorage.setItem(NAME_PROMPT_DECLINED_KEY, 'true')
+                }
+                presentOverlay()
+              },
+            })
+          } else {
+            presentOverlay()
+          }
 
           setStatus(
             rank

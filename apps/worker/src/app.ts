@@ -858,10 +858,11 @@ export function createApp() {
       await ensureLeaderboardTable(c.env.DB)
       const rows = await c.env.DB.prepare(
         `
-        SELECT player_guid, elapsed_ms, submitted_at
-        FROM puzzle_leaderboard
-        WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ?
-        ORDER BY elapsed_ms ASC, submitted_at ASC
+        SELECT l.player_guid, l.elapsed_ms, l.submitted_at, p.profile_name
+        FROM puzzle_leaderboard l
+        LEFT JOIN player_profiles p ON p.player_guid = l.player_guid
+        WHERE l.puzzle_date = ? AND l.difficulty = ? AND l.game_mode = ?
+        ORDER BY l.elapsed_ms ASC, l.submitted_at ASC
         LIMIT ?
         `,
       )
@@ -870,6 +871,7 @@ export function createApp() {
           player_guid: string
           elapsed_ms: number
           submitted_at: string
+          profile_name: string | null
         }>()
 
       const entries = (rows.results || []).map((entry, index) => ({
@@ -877,6 +879,7 @@ export function createApp() {
         playerGuid: entry.player_guid,
         elapsedMs: entry.elapsed_ms,
         submittedAt: entry.submitted_at,
+        profileName: (entry.profile_name || '').trim() || null,
       }))
 
       const totalRow = await c.env.DB.prepare(
