@@ -74,7 +74,7 @@ binding = "AI"
 [[env.beta.d1_databases]]
 binding = "DB"
 database_name = "daily_puzzles_beta"
-database_id = "REPLACE_WITH_BETA_D1_ID_AFTER_CREATE"
+database_id = "2ef863e2-05e5-4f0f-832b-f6e1da49fd87"
 
 [[env.beta.send_email]]
 name = "SEND_EMAIL"
