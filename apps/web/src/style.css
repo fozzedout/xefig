@@ -3770,14 +3770,13 @@ h1 {
   position: absolute;
   left: 0;
   right: 0;
-  /* Flush with the actual bottom of the viewport — the bar's background
-     fills the home-indicator strip, while padding-bottom keeps the
-     swatches themselves above the safe-area inset. */
+  /* Whole palette (background AND swatches) sits flush with the actual
+     viewport bottom — no safe-area padding pushing the swatches up. */
   bottom: 0;
   z-index: 20;
   display: flex;
   gap: 6px;
-  padding: 8px 12px calc(8px + var(--sai-bottom));
+  padding: 8px 12px;
   overflow-x: auto;
   justify-content: center;
   align-items: center;
