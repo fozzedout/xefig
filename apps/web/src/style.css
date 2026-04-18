@@ -3668,25 +3668,24 @@ h1 {
 }
 
 .lb-rank {
-  width: 2.75rem;
+  width: 2.5rem;
   font-weight: 600;
   color: var(--muted);
 }
 
 .lb-time {
-  width: 4rem;
+  width: 3.5rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
 
 .lb-player {
   text-align: left;
-  /* Allow long names (e.g. Anon-543e4fb8, or a custom handle someone
-     picked) to wrap onto a second line rather than get clipped with
-     an ellipsis. Row height grows to fit; columns still align because
-     .lb-table uses table-layout: fixed with explicit widths on the
-     other columns. */
-  word-break: break-word;
+  /* Allow long names to wrap — but only at natural break points
+     (spaces, hyphens, soft-hyphens). No word-break: break-word, which
+     was splitting "Anon-8dc1d3ef" mid-hex. This way "Anon-" breaks
+     onto line 1 and "8dc1d3ef" onto line 2 as a clean two-liner. */
+  overflow-wrap: normal;
 }
 
 .leaderboard-row-me,
