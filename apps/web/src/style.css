@@ -3924,6 +3924,23 @@ h1 {
     padding: 0.5rem 1.6rem;
     font-size: 0.85rem;
   }
+
+  /* Confirm and name dialogs share the .completion-card class but have
+     totally different content — opt them out of the two-column grid so
+     they render as a simple centered card instead of being squeezed
+     into the leaderboard column layout. */
+  .confirm-card,
+  .name-card {
+    display: block;
+    text-align: center;
+    padding: 1.1rem 1.4rem 0.9rem;
+    max-width: 380px;
+    overflow: visible;
+  }
+
+  .name-card {
+    text-align: left;
+  }
 }
 
 /* Name-prompt dialog — small variant of the completion card with a
