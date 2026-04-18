@@ -1466,13 +1466,14 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
-  const bgMarkup = loaderKey
-    ? `<div class="completed-screen-bg completed-screen-bg-preview" id="completed-bg-mount"></div>`
-    : `<img class="completed-screen-bg" src="${imageUrl}" alt="${modeLabel} puzzle" />`
+  const previewMarkup = loaderKey
+    ? `<div class="completed-screen-bg-preview" id="completed-bg-mount"></div>`
+    : ''
 
   gameEl.innerHTML = `
     <main class="completed-screen">
-      ${bgMarkup}
+      <img class="completed-screen-blur" src="${imageUrl}" alt="" aria-hidden="true" />
+      ${previewMarkup}
       <div class="completed-screen-topbar">
         <button class="completed-screen-back" id="completed-back-btn" type="button" aria-label="Back">←</button>
         <div class="completed-screen-meta">

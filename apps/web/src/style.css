@@ -3672,21 +3672,51 @@ h1 {
   color: #fff;
 }
 
-.completed-screen-bg {
+/* Blurred source image fills the viewport as a backdrop so the inevitable
+   letterboxing around the preview (from aspect-ratio mismatch) is an
+   out-of-focus version of the image rather than dead black. */
+.completed-screen-blur {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
+  filter: blur(32px) brightness(0.55) saturate(1.15);
+  transform: scale(1.12);
+  pointer-events: none;
 }
 
-/* Puzzle preview: the puzzle component mounts inside this container and
-   renders a non-interactive, solved version of the board as the background.
-   Hide mode-specific chrome (palettes, trays, carousels) and block pointer
-   events so the sheet/pill controls above own all interaction. */
+/* Puzzle preview: the puzzle component mounts here and renders a
+   non-interactive, solved version of the board over the blurred backdrop.
+   Fill the viewport, override the puzzle's own dark root backgrounds so
+   the blur shows through the letterbox, and hide mode-specific chrome. */
 .completed-screen-bg-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+}
+
+.completed-screen-bg-preview .diamond-root,
+.completed-screen-bg-preview .diamond-board-frame,
+.completed-screen-bg-preview .jigsaw-root,
+.completed-screen-bg-preview .jigsaw-stage,
+.completed-screen-bg-preview .sliding-root,
+.completed-screen-bg-preview .sliding-board,
+.completed-screen-bg-preview .picture-swap-root,
+.completed-screen-bg-preview .picture-swap-board,
+.completed-screen-bg-preview .polygram-root,
+.completed-screen-bg-preview .polygram-board {
+  background: transparent !important;
+}
+
+/* The jigsaw stage is position:fixed inset:0 in normal play so it covers
+   the viewport as the workspace. In preview mode we want it to stay
+   inside its mount so the blurred backdrop can show around the edges. */
+.completed-screen-bg-preview .jigsaw-stage {
+  position: absolute !important;
 }
 
 .completed-screen-bg-preview .diamond-palette-bar,
