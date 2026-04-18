@@ -1431,8 +1431,7 @@ function showCompletionOverlay({
     // their leaderboard entry (their best).
     const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
     const submissionTime = formatDuration(submissionElapsedMs)
-    const submissionBeatsBest = Number.isFinite(bestMs) && submissionElapsedMs <= bestMs
-    const submissionLabel = submissionBeatsBest ? 'You (this run = best)' : 'You (this run)'
+    const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
 
     leaderboardBlock = `
       <div class="completion-leaderboard">
@@ -1448,8 +1447,8 @@ function showCompletionOverlay({
             <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
               <td class="lb-time">${submissionTime}</td>
-              <td class="lb-player">${submissionLabel}</td>
-              <td class="lb-best" aria-hidden="true"></td>
+              <td class="lb-player">You (this run)</td>
+              <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : ''}</td>
             </tr>
           </tbody>
         </table>

@@ -933,20 +933,17 @@ export function createApp() {
 
     try {
       await ensureLeaderboardTable(c.env.DB)
-      // Live keeps the player's BEST time across re-submissions (so an
-      // accidental slow replay can't tank someone's leaderboard rank).
-      // Beta wants the NEWEST time so the Mostly-solve tool can
-      // exercise different leaderboard positions without a manual wipe.
-      const conflictElapsed = c.env.IS_BETA === 'true'
-        ? 'excluded.elapsed_ms'
-        : 'MIN(excluded.elapsed_ms, puzzle_leaderboard.elapsed_ms)'
+      // Keep the player's BEST time across re-submissions so a slower
+      // replay can't tank the leaderboard rank. The current submission
+      // rank is reported separately in the response so the UI can still
+      // show where *this* attempt would have placed.
       await c.env.DB.prepare(
         `
         INSERT INTO puzzle_leaderboard (puzzle_date, difficulty, game_mode, player_guid, elapsed_ms)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(puzzle_date, difficulty, game_mode, player_guid)
         DO UPDATE SET
-          elapsed_ms = ${conflictElapsed},
+          elapsed_ms = MIN(excluded.elapsed_ms, puzzle_leaderboard.elapsed_ms),
           submitted_at = datetime('now')
         `,
       )
