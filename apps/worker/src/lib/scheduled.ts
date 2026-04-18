@@ -502,6 +502,11 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
     updatedAt: now,
   }
 
+  console.log('[finalizeRecord] saving', {
+    targetDate,
+    categories: Object.fromEntries(Object.entries(puzzleCategories).map(([k, v]) => [k, v.imageUrl])),
+    updatedAt: record.updatedAt,
+  })
   await savePuzzleRecord(env.DB, record)
   await deleteBatchJob(env.DB, batchName)
 
@@ -674,11 +679,31 @@ export async function completeBatchCategory(
   const imageKey = `puzzles/${jobTargetDate}/${category}.jpg`
   const thumbKey = `puzzles/${jobTargetDate}/${category}_thumb.jpg`
 
+  const imgHash = await sha256Hex(imageData)
+  const thumbHash = await sha256Hex(thumbnailData)
+  const before = await env.assets.head(imageKey)
+  console.log('[completeBatchCategory] put', {
+    imageKey,
+    incomingBytes: imageData.byteLength,
+    incomingSha256: imgHash,
+    thumbBytes: thumbnailData.byteLength,
+    thumbSha256: thumbHash,
+    existingEtag: before?.etag ?? null,
+    existingSize: before?.size ?? null,
+  })
+
   await env.assets.put(imageKey, imageData, {
     httpMetadata: { contentType: 'image/jpeg' },
   })
   await env.assets.put(thumbKey, thumbnailData, {
     httpMetadata: { contentType: 'image/jpeg' },
+  })
+
+  const after = await env.assets.head(imageKey)
+  console.log('[completeBatchCategory] put done', {
+    imageKey,
+    newEtag: after?.etag ?? null,
+    newSize: after?.size ?? null,
   })
 
   // Clean up temp file
@@ -700,4 +725,9 @@ export async function completeBatchCategory(
     message: `${category} processed (${job.processedCategories.length}/${CATEGORIES.length}). Remaining: ${remaining.join(', ')}.`,
     allDone: false,
   }
+}
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buf)
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
 }
