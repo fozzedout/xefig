@@ -3918,12 +3918,11 @@ h1 {
   margin: 1rem 0;
 }
 
-/* Play Again: bottom-right pill, floats over the puzzle preview. In
-   portrait it sits just above the sheet peek so tapping it doesn't also
-   hit the peek; in landscape the sheet is on the right so the pill
-   stays in the puzzle-area corner. Hidden when the sheet is expanded —
-   the leaderboard is the focus then, and the pill would duplicate
-   "navigate-away" affordances with the back button. */
+/* Play Again: bottom-right pill matching the dark backdrop-blur style
+   of the back and time/rank pills. In portrait it sits just above the
+   sheet peek; in landscape it pulls left of the sheet peek so the two
+   don't overlap. Hidden when the sheet is expanded so the leaderboard
+   has clean focus. */
 .completed-screen-replay {
   position: absolute;
   right: 1rem;
@@ -3931,20 +3930,17 @@ h1 {
   z-index: 3;
   appearance: none;
   border: none;
-  padding: 0.55rem 1.3rem;
+  padding: 0.5rem 1.1rem;
   border-radius: 999px;
-  background: #50e8a0;
-  color: #0a0a0f;
-  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  transition: opacity 0.2s ease, transform 0.15s ease;
-}
-
-.completed-screen-replay:hover {
-  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.2s ease;
 }
 
 .completed-screen:has(.completed-screen-sheet[aria-expanded="true"]) .completed-screen-replay {
@@ -3955,6 +3951,7 @@ h1 {
 @media (orientation: landscape) and (max-height: 500px) {
   .completed-screen-replay {
     bottom: 1rem;
+    right: calc(var(--sheet-peek, 2.6rem) + 0.6rem);
   }
 }
 
