@@ -56,6 +56,15 @@ CONTACT_EMAIL = "paul.aspinall@gmail.com"
 
 [env.beta]
 name = "xefig-beta"
+# Deploy to the workers.dev subdomain ONLY. Explicit empty routes +
+# triggers here override the top-level [[routes]] and [triggers] so
+# beta can't inherit — and can't accidentally claim xefig.com or run
+# the daily cron against beta's empty DB.
+workers_dev = true
+routes = []
+
+[env.beta.triggers]
+crons = []
 
 [env.beta.assets]
 directory = "../web/dist"
