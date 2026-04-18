@@ -1401,12 +1401,17 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
   const durationLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '—'
   const modeLabel = MODE_LABELS[gameMode] || gameMode
   const imageUrl = resolvePuzzleImageUrl(state.puzzle, gameMode)
+  const usesPuzzlePreview = gameMode === GAME_MODE_DIAMOND
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
+  const bgMarkup = usesPuzzlePreview
+    ? `<div class="completed-screen-bg completed-screen-bg-preview" id="completed-bg-mount"></div>`
+    : `<img class="completed-screen-bg" src="${imageUrl}" alt="${modeLabel} puzzle" />`
+
   gameEl.innerHTML = `
     <main class="completed-screen">
-      <img class="completed-screen-bg" src="${imageUrl}" alt="${modeLabel} puzzle" />
+      ${bgMarkup}
       <div class="completed-screen-topbar">
         <button class="completed-screen-back" id="completed-back-btn" type="button" aria-label="Back">←</button>
         <div class="completed-screen-meta">
@@ -1446,8 +1451,47 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     sheet.setAttribute('aria-expanded', expanded ? 'false' : 'true')
   })
 
-  gameEl.querySelector('#replay-btn').addEventListener('click', onReplay)
-  gameEl.querySelector('#completed-back-btn').addEventListener('click', onBack)
+  let previewPuzzle = null
+  const teardown = () => {
+    if (previewPuzzle) {
+      previewPuzzle.destroy()
+      previewPuzzle = null
+    }
+  }
+
+  gameEl.querySelector('#replay-btn').addEventListener('click', () => {
+    teardown()
+    onReplay()
+  })
+  gameEl.querySelector('#completed-back-btn').addEventListener('click', () => {
+    teardown()
+    onBack()
+  })
+
+  if (usesPuzzlePreview) {
+    const mount = gameEl.querySelector('#completed-bg-mount')
+    puzzleLoaders.diamond().then((PuzzleClass) => {
+      if (!gameEl.isConnected || !mount.isConnected) return
+      const preview = new PuzzleClass({
+        container: mount,
+        imageUrl,
+        difficulty: state.difficulty,
+        boardColorIndex: getGlobalBoardColorIndex(),
+        onProgress: () => {},
+        onComplete: () => {},
+      })
+      previewPuzzle = preview
+      preview.init().then(() => {
+        if (previewPuzzle !== preview) return
+        preview.fills = new Int8Array(preview.grid)
+        preview.completed = true
+        preview.drawGrid()
+      }).catch(() => {
+        // Non-fatal — the image background fallback won't be shown, but the
+        // topbar/pill/sheet still render usable info.
+      })
+    }).catch(() => {})
+  }
 
   fetchLeaderboard(puzzleDate, gameMode, state.difficulty, 20)
     .then((lb) => {
