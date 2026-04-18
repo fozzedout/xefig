@@ -158,6 +158,7 @@ let activeStartedAtMs = null
 let autosaveIntervalId = null
 let gameVisibilityBound = false
 const playerGuid = getPlayerGuid()
+cleanupBadCompletedRuns()
 
 function apiUrl(path) {
   return `${API_BASE}${path}`
@@ -325,6 +326,15 @@ function recordCompletedRun(run) {
     return
   }
 
+  const elapsedMs = Math.max(0, Number(run.elapsedActiveMs) || 0)
+  // Server rejects elapsed_ms <= 0. Match that floor locally so a bug
+  // artifact (e.g. a completion fired before the timer started) can't
+  // write 0 into bestElapsedMs and make the menu disagree with the
+  // leaderboard. Previous entry stays intact.
+  if (elapsedMs <= 0) {
+    return
+  }
+
   const completedRunsByDate = getCompletedRunsByDate()
   const puzzleDate = run.puzzleDate
   const mode = normalizeGameMode(run.gameMode)
@@ -336,8 +346,11 @@ function recordCompletedRun(run) {
       : {}
   const previousEntry =
     dateRuns[mode] && typeof dateRuns[mode] === 'object' && !Array.isArray(dateRuns[mode]) ? dateRuns[mode] : null
-  const elapsedMs = Math.max(0, Number(run.elapsedActiveMs) || 0)
-  const previousBestMs = previousEntry ? Math.max(0, Number(previousEntry.bestElapsedMs) || elapsedMs) : elapsedMs
+  // Only treat a previous best as valid when it's positive. An existing
+  // 0 came from the same pre-fix bug and should be displaced by this
+  // run's real elapsed rather than persisting via Math.min(0, real) = 0.
+  const rawPrevBest = previousEntry ? Number(previousEntry.bestElapsedMs) : NaN
+  const previousBestMs = Number.isFinite(rawPrevBest) && rawPrevBest > 0 ? rawPrevBest : elapsedMs
 
   dateRuns[mode] = {
     completedAt: new Date().toISOString(),
@@ -352,6 +365,34 @@ function recordCompletedRun(run) {
     puzzleDate,
     gameMode: mode,
   })
+}
+
+// One-time migration: drop any completion records stuck at bestElapsedMs = 0
+// left behind by earlier timer bugs. The server never stored those (submit
+// rejects elapsed_ms <= 0), so they only exist in localStorage and cause
+// the menu to show 00:00 while the leaderboard shows a real time. Safe to
+// remove — the player can replay to re-record.
+function cleanupBadCompletedRuns() {
+  const byDate = getCompletedRunsByDate()
+  let changed = false
+  for (const date of Object.keys(byDate)) {
+    const dateRuns = byDate[date]
+    if (!dateRuns || typeof dateRuns !== 'object' || Array.isArray(dateRuns)) continue
+    for (const mode of Object.keys(dateRuns)) {
+      const entry = dateRuns[mode]
+      if (!entry || typeof entry !== 'object') continue
+      const best = Number(entry.bestElapsedMs) || 0
+      if (best <= 0) {
+        delete dateRuns[mode]
+        changed = true
+      }
+    }
+    if (Object.keys(dateRuns).length === 0) {
+      delete byDate[date]
+      changed = true
+    }
+  }
+  if (changed) writeJsonStorage(COMPLETED_RUNS_KEY, byDate)
 }
 
 function createGuid() {
