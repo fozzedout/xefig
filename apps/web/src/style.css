@@ -3732,52 +3732,62 @@ h1 {
   touch-action: auto;
 }
 
+/* Top-left envelope: mirrors the time/rank pill on the right — the back
+   button, mode label, and date sit inside a single dark blurred pill so
+   the text is readable against any puzzle image. */
 .completed-screen-topbar {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0.8rem;
+  left: 1rem;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.8rem 1rem;
-  pointer-events: none;
-  z-index: 2;
+  gap: 0.5rem;
+  padding: 0.3rem 0.9rem 0.3rem 0.3rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  color: #fff;
+  max-width: calc(100% - 2rem);
 }
 
 .completed-screen-back {
-  pointer-events: auto;
   appearance: none;
   border: none;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: 1.2rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
 }
 
 .completed-screen-meta {
-  pointer-events: none;
   display: flex;
   flex-direction: column;
-  line-height: 1.15;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  line-height: 1.1;
+  min-width: 0;
 }
 
 .completed-screen-meta .meta-mode {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .completed-screen-meta .meta-date {
-  font-size: 0.75rem;
-  opacity: 0.8;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
 }
 
 .completed-screen-pill {
@@ -3893,14 +3903,16 @@ h1 {
 }
 
 /* Landscape: sheet takes the right rail instead of the bottom so
-   the image keeps more vertical room and the leaderboard is reachable. */
+   the image keeps more vertical room and the leaderboard is reachable.
+   Sheet is narrower than in portrait and the top-right time/rank pill
+   shifts left so the sheet peek doesn't sit on top of it. */
 @media (orientation: landscape) and (max-height: 500px) {
   .completed-screen-sheet {
     top: 0;
     bottom: 0;
     left: auto;
     right: 0;
-    width: min(22rem, 60vw);
+    width: min(18rem, 45vw);
     max-height: none;
     border-radius: 1rem 0 0 1rem;
     transform: translateX(calc(100% - var(--sheet-peek, 2.6rem)));
@@ -3920,6 +3932,20 @@ h1 {
   .sheet-handle-bar {
     width: 0.25rem;
     height: 2.5rem;
+  }
+
+  /* Keep the time/rank pill clear of the collapsed sheet peek on the
+     right. Sheet peek is var(--sheet-peek, 2.6rem); leave a small gap.
+     When the sheet opens, the pill is redundant (the sheet shows time
+     and rank in its header row) so fade it out instead of layering. */
+  .completed-screen-pill {
+    right: calc(var(--sheet-peek, 2.6rem) + 0.6rem);
+    transition: opacity 0.2s ease;
+  }
+
+  .completed-screen:has(.completed-screen-sheet[aria-expanded="true"]) .completed-screen-pill {
+    opacity: 0;
+    pointer-events: none;
   }
 }
 
