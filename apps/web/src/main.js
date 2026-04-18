@@ -1406,37 +1406,50 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
   const gameEl = document.querySelector('#page-game')
   gameEl.innerHTML = `
     <main class="completed-screen">
-      <div class="completed-screen-card">
-        <div class="completed-screen-image-wrap">
-          <img class="completed-screen-image" src="${imageUrl}" alt="${modeLabel} puzzle" />
-        </div>
-        <h2>Puzzle Complete</h2>
-        <p class="completed-screen-mode">${modeLabel}</p>
-        <p class="completed-screen-date">${puzzleDate}</p>
-        <div class="completion-stats">
-          <div class="completion-stat">
-            <span class="stat-value">${durationLabel}</span>
-            <span class="stat-label">Best Time</span>
-          </div>
-          <div class="completion-stat">
-            <span class="stat-value" id="completed-rank">—</span>
-            <span class="stat-label">Rank</span>
-          </div>
-        </div>
-        <div id="completed-leaderboard"></div>
-        <div class="completed-screen-actions">
-          <button id="replay-btn" class="launcher-secondary-btn" type="button">Play Again</button>
-          <button id="completed-back-btn" class="launcher-secondary-btn" type="button">Back</button>
+      <img class="completed-screen-bg" src="${imageUrl}" alt="${modeLabel} puzzle" />
+      <div class="completed-screen-topbar">
+        <button class="completed-screen-back" id="completed-back-btn" type="button" aria-label="Back">←</button>
+        <div class="completed-screen-meta">
+          <span class="meta-mode">${modeLabel}</span>
+          <span class="meta-date">${puzzleDate}</span>
         </div>
       </div>
+      <div class="completed-screen-pill">
+        <div class="pill-item">
+          <span class="pill-value">${durationLabel}</span>
+          <span class="pill-label">Best</span>
+        </div>
+        <div class="pill-item">
+          <span class="pill-value" id="completed-rank">—</span>
+          <span class="pill-label">Rank</span>
+        </div>
+      </div>
+      <aside class="completed-screen-sheet" id="completed-sheet" aria-expanded="false">
+        <button class="sheet-handle" type="button" aria-label="Toggle leaderboard">
+          <span class="sheet-handle-bar"></span>
+          <span class="sheet-handle-label">Leaderboard</span>
+        </button>
+        <div class="sheet-body">
+          <div id="completed-leaderboard" class="sheet-leaderboard"></div>
+          <div class="completed-screen-actions">
+            <button id="replay-btn" class="launcher-secondary-btn" type="button">Play Again</button>
+          </div>
+        </div>
+      </aside>
     </main>
   `
 
-  document.querySelector('#replay-btn').addEventListener('click', onReplay)
-  document.querySelector('#completed-back-btn').addEventListener('click', onBack)
+  const sheet = gameEl.querySelector('#completed-sheet')
+  const handle = sheet.querySelector('.sheet-handle')
+  handle.addEventListener('click', () => {
+    const expanded = sheet.getAttribute('aria-expanded') === 'true'
+    sheet.setAttribute('aria-expanded', expanded ? 'false' : 'true')
+  })
 
-  // Fetch leaderboard async
-  fetchLeaderboard(puzzleDate, gameMode, difficulty, 20)
+  gameEl.querySelector('#replay-btn').addEventListener('click', onReplay)
+  gameEl.querySelector('#completed-back-btn').addEventListener('click', onBack)
+
+  fetchLeaderboard(puzzleDate, gameMode, state.difficulty, 20)
     .then((lb) => {
       const entries = lb.entries || []
       const myEntry = entries.find((e) => e.playerGuid === playerGuid)
@@ -1445,29 +1458,29 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         rankEl.textContent = `#${myEntry.rank}`
       }
 
-      if (entries.length > 0) {
-        const rows = entries.map((e) => {
-          const isMe = e.playerGuid === playerGuid
-          return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
-            <td class="lb-rank">#${e.rank}</td>
-            <td class="lb-time">${formatDuration(e.elapsedMs)}</td>
-            <td class="lb-player">${isMe ? 'You' : e.playerGuid.slice(0, 8)}</td>
-          </tr>`
-        }).join('')
+      const container = document.querySelector('#completed-leaderboard')
+      if (!container) return
 
-        const container = document.querySelector('#completed-leaderboard')
-        if (container) {
-          container.innerHTML = `
-            <div class="completion-leaderboard">
-              <h3>Leaderboard</h3>
-              <table class="lb-table">
-                <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </div>
-          `
-        }
+      if (entries.length === 0) {
+        container.innerHTML = `<p class="sheet-leaderboard-empty">No times recorded yet.</p>`
+        return
       }
+
+      const rows = entries.map((e) => {
+        const isMe = e.playerGuid === playerGuid
+        return `<tr class="${isMe ? 'leaderboard-row-me' : ''}">
+          <td class="lb-rank">#${e.rank}</td>
+          <td class="lb-time">${formatDuration(e.elapsedMs)}</td>
+          <td class="lb-player">${isMe ? 'You' : e.playerGuid.slice(0, 8)}</td>
+        </tr>`
+      }).join('')
+
+      container.innerHTML = `
+        <table class="lb-table">
+          <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `
     })
     .catch(() => {
       // Non-fatal

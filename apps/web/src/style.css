@@ -3664,61 +3664,212 @@ h1 {
 /* ─── Completed puzzle screen ─── */
 
 .completed-screen {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+}
+
+.completed-screen-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.completed-screen-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 100dvh;
-  padding: 2rem;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  pointer-events: none;
+  z-index: 2;
 }
 
-.completed-screen-card {
-  background: var(--surface);
-  border-radius: 1rem;
-  padding: 2.5rem;
-  max-width: 400px;
-  width: 100%;
-  text-align: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+.completed-screen-back {
+  pointer-events: auto;
+  appearance: none;
+  border: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
 }
 
-.completed-screen-card h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
-  color: var(--text);
+.completed-screen-meta {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
-.completed-screen-mode {
-  margin: 0 0 0.2rem;
-  font-size: 1rem;
-  color: var(--accent);
+.completed-screen-meta .meta-mode {
+  font-size: 0.95rem;
   font-weight: 600;
 }
 
-.completed-screen-date {
-  margin: 0 0 1.5rem;
-  font-size: 0.85rem;
-  color: var(--muted);
+.completed-screen-meta .meta-date {
+  font-size: 0.75rem;
+  opacity: 0.8;
 }
 
-.completed-screen-image-wrap {
-  margin: 0 -1rem 1.2rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
+.completed-screen-pill {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  z-index: 2;
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-.completed-screen-image {
-  display: block;
+.completed-screen-pill .pill-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.completed-screen-pill .pill-value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.completed-screen-pill .pill-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+
+.completed-screen-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
+  transform: translateY(calc(100% - var(--sheet-peek, 3.2rem)));
+  transition: transform 0.25s ease;
+}
+
+.completed-screen-sheet[aria-expanded="true"] {
+  transform: translateY(0);
+}
+
+.sheet-handle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
   width: 100%;
-  height: auto;
-  object-fit: cover;
-  max-height: 240px;
+  padding: 0.5rem 1rem 0.6rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.sheet-handle-bar {
+  width: 2.5rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.sheet-handle-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.4rem 1rem 1.2rem;
+}
+
+.sheet-leaderboard {
+  margin-bottom: 1rem;
+}
+
+.sheet-leaderboard .lb-table {
+  width: 100%;
+}
+
+.sheet-leaderboard-empty {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 1rem 0;
 }
 
 .completed-screen-actions {
   display: flex;
   gap: 0.75rem;
   justify-content: center;
-  margin-top: 1.5rem;
+}
+
+/* Landscape: sheet takes the right rail instead of the bottom so
+   the image keeps more vertical room and the leaderboard is reachable. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .completed-screen-sheet {
+    top: 0;
+    bottom: 0;
+    left: auto;
+    right: 0;
+    width: min(22rem, 60vw);
+    max-height: none;
+    border-radius: 1rem 0 0 1rem;
+    transform: translateX(calc(100% - var(--sheet-peek, 2.6rem)));
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .completed-screen-sheet[aria-expanded="true"] {
+    transform: translateX(0);
+  }
+
+  .sheet-handle {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 0.8rem 0.6rem;
+  }
+
+  .sheet-handle-bar {
+    width: 0.25rem;
+    height: 2.5rem;
+  }
 }
 
 /* ── Diamond Painting ───────────────────────────────── */
