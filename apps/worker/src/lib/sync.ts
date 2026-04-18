@@ -99,8 +99,13 @@ export function mergeCompletedEntry(
 
   const localElapsed = Number(localEntry.elapsedActiveMs) || 0
   const remoteElapsed = Number(remoteEntry.elapsedActiveMs) || 0
-  const localBest = Number(localEntry.bestElapsedMs ?? localElapsed) || 0
-  const remoteBest = Number(remoteEntry.bestElapsedMs ?? remoteElapsed) || 0
+  const rawLocalBest = Number(localEntry.bestElapsedMs ?? localElapsed) || 0
+  const rawRemoteBest = Number(remoteEntry.bestElapsedMs ?? remoteElapsed) || 0
+  // Treat sub-second bests as absent — they're artifacts of the pre-fix
+  // timer race and shouldn't poison the merge by being picked as the
+  // "faster" value via Math.min.
+  const localBest = rawLocalBest >= 1000 ? rawLocalBest : 0
+  const remoteBest = rawRemoteBest >= 1000 ? rawRemoteBest : 0
   const cmp = compareIsoTimestamps(localEntry.completedAt, remoteEntry.completedAt)
   const newer = cmp >= 0 ? localEntry : remoteEntry
 

@@ -940,7 +940,10 @@ export function createApp() {
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
       return c.json({ error: 'Invalid playerGuid.' }, 400)
     }
-    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || elapsedMs > 24 * 60 * 60 * 1000) {
+    // Floor at 1s — no puzzle mode is completable in under a second; a
+    // value below that is a timer-race artifact (was leaking through as
+    // 00:00 on the menu pill while the leaderboard showed the real time).
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 1000 || elapsedMs > 24 * 60 * 60 * 1000) {
       return c.json({ error: 'Invalid elapsedMs.' }, 400)
     }
 

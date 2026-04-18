@@ -51,6 +51,9 @@ const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
+// Lower bound on what a legit puzzle run looks like: nothing in the app
+// is completable under a second, so anything below is a bug artifact.
+const MIN_PLAUSIBLE_ELAPSED_MS = 1000
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
@@ -327,11 +330,11 @@ function recordCompletedRun(run) {
   }
 
   const elapsedMs = Math.max(0, Number(run.elapsedActiveMs) || 0)
-  // Server rejects elapsed_ms <= 0. Match that floor locally so a bug
-  // artifact (e.g. a completion fired before the timer started) can't
-  // write 0 into bestElapsedMs and make the menu disagree with the
-  // leaderboard. Previous entry stays intact.
-  if (elapsedMs <= 0) {
+  // Floor at 1 second — no puzzle mode is completable under that, so
+  // anything below is a bug artifact (e.g. the completion fired before
+  // the timer started). Would otherwise leak through as 00:00 on the
+  // menu pill and disagree with the leaderboard.
+  if (elapsedMs < MIN_PLAUSIBLE_ELAPSED_MS) {
     return
   }
 
@@ -346,11 +349,14 @@ function recordCompletedRun(run) {
       : {}
   const previousEntry =
     dateRuns[mode] && typeof dateRuns[mode] === 'object' && !Array.isArray(dateRuns[mode]) ? dateRuns[mode] : null
-  // Only treat a previous best as valid when it's positive. An existing
-  // 0 came from the same pre-fix bug and should be displaced by this
-  // run's real elapsed rather than persisting via Math.min(0, real) = 0.
+  // Only treat a previous best as valid when it's above the sanity
+  // floor. A sub-second value came from the same pre-fix bug and should
+  // be displaced by this run's real elapsed rather than persisting via
+  // Math.min(bogus, real) = bogus.
   const rawPrevBest = previousEntry ? Number(previousEntry.bestElapsedMs) : NaN
-  const previousBestMs = Number.isFinite(rawPrevBest) && rawPrevBest > 0 ? rawPrevBest : elapsedMs
+  const previousBestMs = Number.isFinite(rawPrevBest) && rawPrevBest >= MIN_PLAUSIBLE_ELAPSED_MS
+    ? rawPrevBest
+    : elapsedMs
 
   dateRuns[mode] = {
     completedAt: new Date().toISOString(),
@@ -367,11 +373,10 @@ function recordCompletedRun(run) {
   })
 }
 
-// One-time migration: drop any completion records stuck at bestElapsedMs = 0
-// left behind by earlier timer bugs. The server never stored those (submit
-// rejects elapsed_ms <= 0), so they only exist in localStorage and cause
-// the menu to show 00:00 while the leaderboard shows a real time. Safe to
-// remove — the player can replay to re-record.
+// One-time migration: drop completion records stuck below the plausible
+// floor (0ms exact, or sub-second values like ~50ms that format to
+// "00:00" on the menu pill even though the leaderboard has the real
+// time). Safe to remove — the player can replay to re-record.
 function cleanupBadCompletedRuns() {
   const byDate = getCompletedRunsByDate()
   let changed = false
@@ -382,7 +387,7 @@ function cleanupBadCompletedRuns() {
       const entry = dateRuns[mode]
       if (!entry || typeof entry !== 'object') continue
       const best = Number(entry.bestElapsedMs) || 0
-      if (best <= 0) {
+      if (best < MIN_PLAUSIBLE_ELAPSED_MS) {
         delete dateRuns[mode]
         changed = true
       }
