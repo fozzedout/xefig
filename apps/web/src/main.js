@@ -1453,6 +1453,38 @@ function forceCompletePuzzlePreview(gameMode, puzzle) {
   }
 }
 
+function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm }) {
+  const existing = document.querySelector('.confirm-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'completion-overlay confirm-overlay'
+  overlay.innerHTML = `
+    <div class="completion-card confirm-card">
+      <p class="confirm-message">${message}</p>
+      <div class="confirm-actions">
+        <button type="button" class="confirm-cancel">${cancelLabel}</button>
+        <button type="button" class="confirm-ok">${confirmLabel}</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+
+  const dismiss = () => {
+    overlay.classList.remove('is-visible')
+    setTimeout(() => overlay.remove(), 200)
+  }
+  overlay.querySelector('.confirm-cancel').addEventListener('click', dismiss)
+  overlay.querySelector('.confirm-ok').addEventListener('click', () => {
+    dismiss()
+    onConfirm()
+  })
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismiss()
+  })
+}
+
 function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBack }) {
   const durationLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '—'
   const modeLabel = MODE_LABELS[gameMode] || gameMode
@@ -1538,9 +1570,17 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     }
   }
 
-  gameEl.querySelector('#replay-btn').addEventListener('click', () => {
-    teardown()
-    onReplay()
+  gameEl.querySelector('#replay-btn').addEventListener('click', (e) => {
+    e.stopPropagation() // don't let the completed-screen outside-click handler collapse the sheet first
+    showConfirmDialog({
+      message: 'Play this puzzle again? Your best time and leaderboard rank are already saved.',
+      confirmLabel: 'Play Again',
+      cancelLabel: 'Cancel',
+      onConfirm: () => {
+        teardown()
+        onReplay()
+      },
+    })
   })
   gameEl.querySelector('#completed-back-btn').addEventListener('click', () => {
     teardown()

@@ -3654,6 +3654,52 @@ h1 {
   opacity: 0.85;
 }
 
+/* Confirmation dialog — small variant of the completion card. */
+.confirm-card {
+  padding: 1.5rem 1.5rem 1.2rem;
+  max-width: 320px;
+}
+
+.confirm-message {
+  margin: 0 0 1.2rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.confirm-cancel,
+.confirm-ok {
+  appearance: none;
+  border: none;
+  padding: 0.55rem 1.2rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s ease;
+}
+
+.confirm-cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.confirm-ok {
+  background: var(--accent, #50e8a0);
+  color: #0a0a0f;
+}
+
+.confirm-cancel:hover,
+.confirm-ok:hover {
+  transform: translateY(-1px);
+}
+
 /* ─── Save/resume badge ─── */
 
 .mode-card-badge-save {
