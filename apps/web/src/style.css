@@ -3759,12 +3759,14 @@ h1 {
 }
 
 /* Ghost treatment: a pinned row that didn't beat the stored best is a
-   practice attempt, not a leaderboard entry. Desaturate and dim so it
-   reads as "here's where you landed, but nothing changed". Selectors
-   are scoped to .lb-pinned for specificity > .lb-pinned tbody td so no
-   !important is needed. */
+   practice attempt, not a leaderboard entry. Fade the whole row so the
+   "this doesn't count" reading is immediate, and swap the solid accent
+   border for a punchier dashed outline that visually breaks from the
+   surrounding list. Selectors scoped to .lb-pinned for specificity >
+   .lb-pinned tbody td so no !important is needed. */
 .lb-pinned tr.lb-row-ghost {
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  opacity: 0.6;
 }
 
 .lb-pinned tr.lb-row-ghost td {
@@ -3773,8 +3775,7 @@ h1 {
 }
 
 .lb-pinned-ghost {
-  border-color: color-mix(in srgb, var(--muted) 40%, transparent);
-  border-style: dashed;
+  border: 2px dashed color-mix(in srgb, var(--muted) 70%, transparent);
 }
 
 /* Trend arrow in the pinned row time cell. Points down for faster
