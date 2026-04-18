@@ -3947,8 +3947,10 @@ h1 {
     padding: 0.8rem 0.6rem;
   }
 
-  /* Replace the bar + text with the trophy icon in the narrow rail —
-     "LEA…" clipping looked broken, the icon speaks for itself. */
+  /* Narrow peek can't fit the text alongside the trophy, so the label
+     is hidden by default. When the sheet slides out the header would
+     look empty with just the icon — bring the label back so it reads
+     as a proper "Leaderboard" title. */
   .sheet-handle-bar,
   .sheet-handle-label {
     display: none;
@@ -3956,6 +3958,14 @@ h1 {
 
   .sheet-handle-icon {
     display: block;
+  }
+
+  .completed-screen-sheet[aria-expanded="true"] .sheet-handle-label {
+    display: inline;
+  }
+
+  .completed-screen-sheet[aria-expanded="true"] .sheet-handle {
+    gap: 0.5rem;
   }
 
   /* Keep the time/rank pill clear of the collapsed sheet peek on the
