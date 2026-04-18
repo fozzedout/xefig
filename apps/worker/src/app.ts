@@ -2,7 +2,12 @@ import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 
-import { ensureLeaderboardTable, isLeaderboardDifficulty, isLeaderboardGameMode } from './lib/leaderboard'
+import {
+  ensureLeaderboardTable,
+  ensureSubmissionsTable,
+  isLeaderboardDifficulty,
+  isLeaderboardGameMode,
+} from './lib/leaderboard'
 import { ensureContactTable, validateContact as validateContactForm, storeContactMessage } from './lib/contact'
 import { registerProfile, linkProfile, pushProfile, pullProfile, type PushInput } from './lib/sync'
 import {
@@ -933,6 +938,7 @@ export function createApp() {
 
     try {
       await ensureLeaderboardTable(c.env.DB)
+      await ensureSubmissionsTable(c.env.DB)
       // Keep the player's BEST time across re-submissions so a slower
       // replay can't tank the leaderboard rank. The current submission
       // rank is reported separately in the response so the UI can still
@@ -949,6 +955,20 @@ export function createApp() {
       )
         .bind(puzzleDate, difficulty, gameMode, playerGuid, Math.round(elapsedMs))
         .run()
+
+      // Append to the per-attempt log (insert-only, not read on the
+      // leaderboard hot path). Non-fatal if it fails so the player's
+      // leaderboard submission still succeeds.
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO puzzle_submissions (puzzle_date, difficulty, game_mode, player_guid, elapsed_ms)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+          .bind(puzzleDate, difficulty, gameMode, playerGuid, Math.round(elapsedMs))
+          .run()
+      } catch (submissionErr) {
+        console.error('puzzle_submissions insert failed', submissionErr)
+      }
 
       const personal = await c.env.DB.prepare(
         `

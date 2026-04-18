@@ -90,3 +90,38 @@ async function createLeaderboardTable(
     )
     .run()
 }
+
+// Append-only log of every leaderboard submission. Not read from the
+// hot path (leaderboard queries still hit puzzle_leaderboard's
+// one-row-per-player best-time snapshot); used for attempt counts,
+// improvement deltas, streaks, replay analytics, and fraud signals.
+let submissionsTableReady = false
+export async function ensureSubmissionsTable(db: D1Database): Promise<void> {
+  if (submissionsTableReady) return
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS puzzle_submissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        puzzle_date TEXT NOT NULL,
+        difficulty TEXT NOT NULL,
+        game_mode TEXT NOT NULL CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram', 'diamond')),
+        player_guid TEXT NOT NULL,
+        elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
+        submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+    )
+    .run()
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_player
+       ON puzzle_submissions (player_guid, submitted_at DESC)`,
+    )
+    .run()
+  await db
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_puzzle
+       ON puzzle_submissions (puzzle_date, game_mode, difficulty, submitted_at DESC)`,
+    )
+    .run()
+  submissionsTableReady = true
+}
