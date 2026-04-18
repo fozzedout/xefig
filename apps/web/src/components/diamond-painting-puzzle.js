@@ -409,10 +409,11 @@ export class DiamondPaintingPuzzle {
     const targetGridColor = this.grid[index]
     const currentFill = this.fills[index]
 
-    // Wrong color — flash temporarily and play buzzer
+    // Wrong color — flash temporarily and play buzzer. Block further taps
+    // (correct or wrong) until the restore completes so rapid taps can't
+    // stack mismatched fills on top of an in-flight restore.
     if (this.selectedColor !== targetGridColor) {
-      if (this._wrongFlash) return
-      this._wrongFlash = true
+      this.filling = true
       const allIdx = this.collectFloodIndices(col, row, targetGridColor, currentFill)
       for (const idx of allIdx) {
         this.fills[idx] = this.selectedColor
@@ -426,7 +427,7 @@ export class DiamondPaintingPuzzle {
           this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
         }
         this.redrawGridLines()
-        this._wrongFlash = false
+        this.filling = false
       }, 1000)
       return
     }

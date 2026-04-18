@@ -519,7 +519,7 @@ function unbindGameActivity() {
 }
 
 function persistActiveRun(progressState) {
-  if (!currentRun || currentRun.completed) {
+  if (!currentRun) {
     return
   }
 
@@ -1330,12 +1330,21 @@ function renderArchivePage() {
   archiveRendered = true
 }
 
-function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboardEntries, totalEntries, playerGuid: myGuid }) {
+function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboardEntries, totalEntries, playerGuid: myGuid, completedRun }) {
   const existing = document.querySelector('.completion-overlay')
   if (existing) existing.remove()
 
   const overlay = document.createElement('div')
   overlay.className = 'completion-overlay'
+
+  let dismissed = false
+  const dismiss = () => {
+    if (dismissed) return
+    dismissed = true
+    if (completedRun) clearRunForMode(completedRun)
+    overlay.classList.remove('is-visible')
+    setTimeout(() => overlay.remove(), 200)
+  }
 
   let leaderboardHtml = ''
   if (leaderboardEntries && leaderboardEntries.length > 0) {
@@ -1381,16 +1390,10 @@ function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboar
   document.body.appendChild(overlay)
   requestAnimationFrame(() => overlay.classList.add('is-visible'))
 
-  overlay.querySelector('.completion-dismiss').addEventListener('click', () => {
-    overlay.classList.remove('is-visible')
-    setTimeout(() => overlay.remove(), 200)
-  })
+  overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      overlay.classList.remove('is-visible')
-      setTimeout(() => overlay.remove(), 200)
-    }
+    if (e.target === overlay) dismiss()
   })
 }
 
@@ -1879,7 +1882,7 @@ function renderGame({ resumeRun = null } = {}) {
           currentRun.completed = true
           currentRun.updatedAt = new Date().toISOString()
           recordCompletedRun(currentRun)
-          clearRunForMode(currentRun)
+          const completedRun = currentRun
 
           // Celebration confetti
           const workspace = document.querySelector('.workspace')
@@ -1920,6 +1923,7 @@ function renderGame({ resumeRun = null } = {}) {
             leaderboardEntries,
             totalEntries,
             playerGuid,
+            completedRun,
           })
 
           setStatus(
