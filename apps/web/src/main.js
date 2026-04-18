@@ -2017,6 +2017,12 @@ function renderGame({ resumeRun = null } = {}) {
     setImmersiveControlsVisible(true)
   }
 
+  // Shared timer-started flag so the BETA mostly-solve hook can flip it
+  // and prevent the first real emitProgress from resetting the timer to
+  // zero (which happens for puzzle classes whose applyProgressState
+  // doesn't itself emit progress — jigsaw, sliding, swap, polygram).
+  const timerState = { started: false }
+
   if (BETA) {
     const btn = document.createElement('button')
     btn.className = 'beta-tool-btn'
@@ -2025,10 +2031,6 @@ function renderGame({ resumeRun = null } = {}) {
     btn.title = 'BETA: near-solved state + set the elapsed time the submission will record'
     btn.addEventListener('click', () => {
       if (!puzzle) return
-      // Without this, applying the near-solved state via emitProgress
-      // kicks the timer from zero and a fast last tap records ~00:00.
-      // Let the tester pick a realistic elapsed time so leaderboard
-      // placement can be exercised.
       const input = prompt('Elapsed time to record on completion (MM:SS, blank = keep current timer):', '05:00')
       if (input === null) return
       let targetMs = 0
@@ -2043,10 +2045,13 @@ function renderGame({ resumeRun = null } = {}) {
       }
       try {
         mostlySolvePuzzle(state.gameMode, puzzle)
-        // Must be after mostlySolvePuzzle — the applyProgressState call
-        // inside it fires an onProgress that (on a fresh run) would
-        // call startActiveTimer(0) and trample our override.
-        if (targetMs > 0) startActiveTimer(targetMs)
+        if (targetMs > 0) {
+          startActiveTimer(targetMs)
+          // Flip the shared flag so the onProgress fired by the user's
+          // final interaction doesn't see !started and reset to zero.
+          timerState.started = true
+          startTimerDisplay()
+        }
       } catch (err) {
         console.error('Mostly solve failed', err)
       }
@@ -2164,7 +2169,7 @@ function renderGame({ resumeRun = null } = {}) {
 
       // For resumed games, start timer immediately. For new games, defer until first interaction.
       const isResume = Boolean(resumeRun)
-      let timerStarted = isResume
+      timerState.started = isResume
       let initDone = false
       if (isResume) {
         startActiveTimer(currentRun.elapsedActiveMs)
@@ -2187,8 +2192,8 @@ function renderGame({ resumeRun = null } = {}) {
             currentRun.completed = Boolean(completed)
           }
           // Start timer on first piece interaction (not on puzzle load / init)
-          if (!timerStarted && initDone) {
-            timerStarted = true
+          if (!timerState.started && initDone) {
+            timerState.started = true
             startActiveTimer(0)
             startTimerDisplay()
           }
