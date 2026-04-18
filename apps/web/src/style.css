@@ -3880,6 +3880,18 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+/* Trophy glyph: hidden in portrait (bar + label are enough), shown as
+   the sole peek indicator in landscape where the rail is too narrow for
+   text. Muted gold to hint at "reward/leaderboard" without going full
+   cartoon trophy. */
+.sheet-handle-icon {
+  display: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: #f0c040;
+  flex-shrink: 0;
+}
+
 .sheet-body {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -3930,13 +3942,19 @@ h1 {
 
   .sheet-handle {
     flex-direction: row;
-    justify-content: flex-start;
-    padding: 0.8rem 0.6rem;
+    justify-content: center;
+    padding: 0.8rem 0.4rem;
   }
 
-  .sheet-handle-bar {
-    width: 0.25rem;
-    height: 2.5rem;
+  /* Replace the bar + text with the trophy icon in the narrow rail —
+     "LEA…" clipping looked broken, the icon speaks for itself. */
+  .sheet-handle-bar,
+  .sheet-handle-label {
+    display: none;
+  }
+
+  .sheet-handle-icon {
+    display: block;
   }
 
   /* Keep the time/rank pill clear of the collapsed sheet peek on the
