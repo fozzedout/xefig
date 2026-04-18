@@ -3685,10 +3685,13 @@ h1 {
 }
 
 /* Scrollable leaderboard list: bounded height so it doesn't stretch
-   the card when there are many entries, but lets the user scroll
-   through the full list. Sticky header stays in place while scrolling. */
+   the card off-screen on short viewports (iPhone SE portrait has
+   ~190px for it after the other card sections and the Continue
+   button), but lets the user scroll through the full list. Sticky
+   header stays in place while scrolling. Landscape two-column layout
+   overrides this with flex: 1 so the list fills the column height. */
 .lb-scroll {
-  max-height: 15rem;
+  max-height: 11rem;
   overflow-y: auto;
   scroll-behavior: smooth;
   border-radius: 0.4rem;
@@ -3757,17 +3760,19 @@ h1 {
 
 /* Ghost treatment: a pinned row that didn't beat the stored best is a
    practice attempt, not a leaderboard entry. Desaturate and dim so it
-   reads as "here's where you landed, but nothing changed". */
-.lb-row-ghost {
-  background: color-mix(in srgb, var(--muted) 12%, transparent) !important;
+   reads as "here's where you landed, but nothing changed". Selectors
+   are scoped to .lb-pinned for specificity > .lb-pinned tbody td so no
+   !important is needed. */
+.lb-pinned tr.lb-row-ghost {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
 }
 
-.lb-row-ghost td {
-  color: var(--muted) !important;
-  font-weight: 500 !important;
+.lb-pinned tr.lb-row-ghost td {
+  color: var(--muted);
+  font-weight: 500;
 }
 
-.lb-pinned:has(.lb-row-ghost) {
+.lb-pinned-ghost {
   border-color: color-mix(in srgb, var(--muted) 40%, transparent);
   border-style: dashed;
 }

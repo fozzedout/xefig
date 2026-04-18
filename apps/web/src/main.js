@@ -498,6 +498,15 @@ function startActiveTimer(initialElapsedMs = 0) {
   activeStartedAtMs = isSessionActive() ? getNowMs() : null
 }
 
+// Freeze the active timer at an exact elapsed — used by the BETA
+// Mostly-solve hook so the submitted time equals the tester's set
+// target precisely, without the live wall-clock delta that accumulates
+// between "set target" and the final tap.
+function setFixedActiveElapsed(ms) {
+  activeElapsedBaseMs = Math.max(0, Number(ms) || 0)
+  activeStartedAtMs = null
+}
+
 function isSessionActive() {
   return document.visibilityState === 'visible' && document.hasFocus()
 }
@@ -1491,8 +1500,10 @@ function showCompletionOverlay({
     const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
     const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
     const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
-    const pinnedClasses = ['lb-row', 'lb-row-me', 'lb-row-pinned']
-    if (slowerThanPb) pinnedClasses.push('lb-row-ghost')
+    const pinnedRowClasses = ['lb-row', 'lb-row-me', 'lb-row-pinned']
+    if (slowerThanPb) pinnedRowClasses.push('lb-row-ghost')
+    const pinnedTableClasses = ['lb-table', 'lb-pinned']
+    if (slowerThanPb) pinnedTableClasses.push('lb-pinned-ghost')
     const trendArrow = fasterThanPb
       ? '<span class="lb-trend lb-trend-down" aria-label="faster than PB">▼</span>'
       : slowerThanPb
@@ -1508,9 +1519,9 @@ function showCompletionOverlay({
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
-        <table class="lb-table lb-pinned" id="lb-pinned">
+        <table class="${pinnedTableClasses.join(' ')}" id="lb-pinned">
           <tbody>
-            <tr class="${pinnedClasses.join(' ')}" title="Tap to find your entry on the leaderboard">
+            <tr class="${pinnedRowClasses.join(' ')}" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
               <td class="lb-time">${trendArrow} ${submissionTime}</td>
               <td class="lb-player">You (this run)</td>
@@ -1549,7 +1560,7 @@ function showCompletionOverlay({
     pbStatLabel = 'First Solve'
   }
   const rankLine = headerRank
-    ? `<div class="completion-rankline">Rank #${headerRank}${totalEntries ? ` of ${totalEntries}` : ''}</div>`
+    ? `<div class="completion-rankline">Rank #${headerRank}${totalEntries > 1 ? ` <span class="rankline-total">(${totalEntries} players)</span>` : ''}</div>`
     : ''
 
   overlay.innerHTML = `
@@ -2201,9 +2212,12 @@ function renderGame({ resumeRun = null } = {}) {
       try {
         mostlySolvePuzzle(state.gameMode, puzzle)
         if (targetMs > 0) {
-          startActiveTimer(targetMs)
-          // Flip the shared flag so the onProgress fired by the user's
-          // final interaction doesn't see !started and reset to zero.
+          // Freeze the timer at EXACTLY the target. setFixedActiveElapsed
+          // leaves activeStartedAtMs null, so pauseActiveTimer in
+          // onComplete is a no-op and the submitted elapsed equals
+          // targetMs to the millisecond — no off-by-one from the
+          // interaction delay between "set target" and the final tap.
+          setFixedActiveElapsed(targetMs)
           timerState.started = true
           startTimerDisplay()
         }
