@@ -879,12 +879,20 @@ export function createApp() {
         submittedAt: entry.submitted_at,
       }))
 
+      const totalRow = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM puzzle_leaderboard
+         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ?`,
+      )
+        .bind(date, difficultyRaw, gameModeRaw)
+        .first<{ total: number }>()
+
       return c.json({
         ok: true,
         date,
         gameMode: gameModeRaw,
         difficulty: difficultyRaw,
         entries,
+        totalEntries: Number(totalRow?.total || entries.length),
       })
     } catch (error) {
       console.error('Leaderboard fetch failed', error)
@@ -939,6 +947,19 @@ export function createApp() {
     try {
       await ensureLeaderboardTable(c.env.DB)
       await ensureSubmissionsTable(c.env.DB)
+
+      // Capture the player's stored best BEFORE the upsert so the
+      // response can tell the UI whether this attempt set a new PB,
+      // tied, or was off by N seconds.
+      const previousBestRow = await c.env.DB.prepare(
+        `SELECT elapsed_ms FROM puzzle_leaderboard
+         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND player_guid = ?
+         LIMIT 1`,
+      )
+        .bind(puzzleDate, difficulty, gameMode, playerGuid)
+        .first<{ elapsed_ms: number }>()
+      const previousBestMs = previousBestRow ? Number(previousBestRow.elapsed_ms) : null
+
       // Keep the player's BEST time across re-submissions so a slower
       // replay can't tank the leaderboard rank. The current submission
       // rank is reported separately in the response so the UI can still
@@ -1012,6 +1033,14 @@ export function createApp() {
         submissionRank = Number(subRankRow?.rank || submissionRank)
       }
 
+      // Total entries for "Rank #N of TOTAL" display.
+      const totalRow = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM puzzle_leaderboard
+         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ?`,
+      )
+        .bind(puzzleDate, difficulty, gameMode)
+        .first<{ total: number }>()
+
       return c.json({
         ok: true,
         puzzleDate,
@@ -1019,9 +1048,11 @@ export function createApp() {
         difficulty,
         playerGuid,
         bestMs,
+        previousBestMs,
         rank: Number(rankRow?.rank || 1),
         submissionElapsedMs,
         submissionRank,
+        totalEntries: Number(totalRow?.total || 0),
       })
     } catch (error) {
       console.error('Leaderboard submit failed', error)

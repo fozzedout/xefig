@@ -485,6 +485,13 @@ function formatDuration(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+// Signed MM:SS for PB deltas. Positive = slower, negative = faster.
+function formatDelta(ms) {
+  if (!Number.isFinite(ms) || ms === 0) return '00:00'
+  const sign = ms > 0 ? '+' : '−'
+  return `${sign}${formatDuration(Math.abs(ms))}`
+}
+
 function bindGameActivity(onAutosave) {
   if (gameVisibilityBound) {
     return
@@ -1392,8 +1399,10 @@ function showCompletionOverlay({
   elapsedMs,
   rank,
   bestMs,
+  previousBestMs,
   submissionRank,
   submissionElapsedMs,
+  totalEntries,
   leaderboardEntries,
   playerGuid: myGuid,
   completedRun,
@@ -1426,12 +1435,23 @@ function showCompletionOverlay({
       .join('')
 
     // Pinned current-submission row: always shown so the player can see
-    // what they just submitted and where it'd place, regardless of
-    // whether it beat their stored best. Click scrolls the list to
-    // their leaderboard entry (their best).
+    // what they just submitted and where it'd place. Starred only when
+    // it IS the best. Ghost-styled (desaturated) when slower than the
+    // stored best — it's a practice attempt that won't be saved. Tap
+    // scrolls the list to the player's starred in-list entry. The trend
+    // arrow compares this attempt's time to the PB.
     const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
     const submissionTime = formatDuration(submissionElapsedMs)
     const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
+    const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
+    const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
+    const pinnedClasses = ['lb-row', 'lb-row-me', 'lb-row-pinned']
+    if (slowerThanPb) pinnedClasses.push('lb-row-ghost')
+    const trendArrow = fasterThanPb
+      ? '<span class="lb-trend lb-trend-down" aria-label="faster than PB">▼</span>'
+      : slowerThanPb
+        ? '<span class="lb-trend lb-trend-up" aria-label="slower than PB">▲</span>'
+        : '<span class="lb-trend lb-trend-flat" aria-label="same as PB">—</span>'
 
     leaderboardBlock = `
       <div class="completion-leaderboard">
@@ -1444,9 +1464,9 @@ function showCompletionOverlay({
         </div>
         <table class="lb-table lb-pinned" id="lb-pinned">
           <tbody>
-            <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
+            <tr class="${pinnedClasses.join(' ')}" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
-              <td class="lb-time">${submissionTime}</td>
+              <td class="lb-time">${trendArrow} ${submissionTime}</td>
               <td class="lb-player">You (this run)</td>
               <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : ''}</td>
             </tr>
@@ -1456,10 +1476,36 @@ function showCompletionOverlay({
     `
   }
 
-  // Header reflects THIS attempt (the thing the player just did) so the
-  // time and rank numbers agree. The in-list starred row surfaces the
-  // stored best separately.
+  // Header focuses on the PERSONAL story: the time the player just
+  // clocked + where that sits versus their own best. Rank on the global
+  // board is a quieter secondary line underneath — still present for
+  // the competitive / viral hook, just not the emotional lead.
   const headerRank = submissionRank ?? rank
+  let pbStatValue = formatDuration(submissionElapsedMs)
+  let pbStatLabel = 'Your Time'
+  let pbStatClass = 'completion-stat-pb-neutral'
+  if (Number.isFinite(previousBestMs)) {
+    const delta = submissionElapsedMs - previousBestMs
+    if (delta < 0) {
+      pbStatValue = formatDelta(delta)
+      pbStatLabel = 'New PB!'
+      pbStatClass = 'completion-stat-pb-better'
+    } else if (delta === 0) {
+      pbStatValue = '00:00'
+      pbStatLabel = 'Tied PB'
+      pbStatClass = 'completion-stat-pb-neutral'
+    } else {
+      pbStatValue = formatDelta(delta)
+      pbStatLabel = 'vs PB'
+      pbStatClass = 'completion-stat-pb-worse'
+    }
+  } else {
+    pbStatLabel = 'First Solve'
+  }
+  const rankLine = headerRank
+    ? `<div class="completion-rankline">Rank #${headerRank}${totalEntries ? ` of ${totalEntries}` : ''}</div>`
+    : ''
+
   overlay.innerHTML = `
     <div class="completion-card">
       <h2>Puzzle Complete!</h2>
@@ -1468,11 +1514,12 @@ function showCompletionOverlay({
           <span class="stat-value">${duration}</span>
           <span class="stat-label">Time</span>
         </div>
-        <div class="completion-stat">
-          <span class="stat-value">${headerRank ? `#${headerRank}` : '—'}</span>
-          <span class="stat-label">Rank</span>
+        <div class="completion-stat ${pbStatClass}">
+          <span class="stat-value">${pbStatValue}</span>
+          <span class="stat-label">${pbStatLabel}</span>
         </div>
       </div>
+      ${rankLine}
       ${leaderboardBlock}
       <button type="button" class="completion-dismiss">Continue</button>
     </div>
@@ -2293,6 +2340,7 @@ function renderGame({ resumeRun = null } = {}) {
 
           let rank = null
           let bestMs = null
+          let previousBestMs = null
           let submissionRank = null
           let submissionElapsedMs = currentRun.elapsedActiveMs
           let leaderboardEntries = null
@@ -2302,8 +2350,10 @@ function renderGame({ resumeRun = null } = {}) {
             const result = await submitLeaderboard(currentRun)
             rank = result.rank
             bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
+            previousBestMs = Number.isFinite(result.previousBestMs) ? result.previousBestMs : null
             submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
             if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
+            if (Number.isFinite(result.totalEntries)) totalEntries = result.totalEntries
 
             const lb = await fetchLeaderboard(
               currentRun.puzzleDate,
@@ -2312,7 +2362,7 @@ function renderGame({ resumeRun = null } = {}) {
               100,
             )
             leaderboardEntries = lb.entries || []
-            totalEntries = leaderboardEntries.length
+            if (Number.isFinite(lb.totalEntries)) totalEntries = lb.totalEntries
           } catch {
             // Non-fatal
           }
@@ -2323,6 +2373,7 @@ function renderGame({ resumeRun = null } = {}) {
             elapsedMs: currentRun.elapsedActiveMs,
             rank,
             bestMs,
+            previousBestMs,
             submissionRank,
             submissionElapsedMs,
             leaderboardEntries,
