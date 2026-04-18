@@ -3697,6 +3697,11 @@ h1 {
   width: 100%;
   height: 100%;
   pointer-events: none;
+  /* Contain the puzzle's internal z-indexes (sliding-tile-layer: 3,
+     polygram-piece: 4, jigsaw-piece-layer: 2 …) inside this element's
+     own stacking context. Without isolation, those z-indexes escape
+     and paint over the topbar/pill/sheet (all z:2), clipping them. */
+  isolation: isolate;
 }
 
 .completed-screen-bg-preview .diamond-root,
