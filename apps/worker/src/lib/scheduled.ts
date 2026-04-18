@@ -548,7 +548,12 @@ function describeJob(job: PendingBatchJob): BatchJobStatus {
   for (const category of jobCategories) {
     themes[category] = job.categories[category]?.theme ?? ''
     if (job.phase === 'fetched' && !job.processedCategories.includes(category)) {
-      tempUrls[category] = toCdnUrl(`temp/${job.targetDate}/${category}.png`)
+      // Include the job's submittedAt so a re-regeneration of the same
+      // date+category produces a unique URL — otherwise the admin panel's
+      // service worker (sw.js, /cdn/* cache-first) hands back the previous
+      // run's PNG and we end up re-encoding stale bytes into R2.
+      const bust = encodeURIComponent(job.submittedAt)
+      tempUrls[category] = `${toCdnUrl(`temp/${job.targetDate}/${category}.png`)}?v=${bust}`
     }
   }
   return {
