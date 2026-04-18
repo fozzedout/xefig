@@ -39,6 +39,7 @@ const API_BASE = ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
+const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
@@ -199,6 +200,24 @@ function getInteractionHint(gameMode = state.gameMode) {
   return isLandscapeDesktop
     ? 'Scroll the right tray and drag pieces onto the board.'
     : 'Swipe tray left/right. Drag up on a piece to pick it up.'
+}
+
+function getLauncherFocus() {
+  const raw = readJsonStorage(LAUNCHER_FOCUS_KEY)
+  if (!raw || typeof raw !== 'object') return null
+  if (raw.date !== getIsoDate(new Date())) return null
+  const focus = raw.focus
+  if (focus === 'more') return 'more'
+  if ([GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND].includes(focus)) return focus
+  return null
+}
+
+function setLauncherFocus(focus) {
+  if (!focus) return
+  writeJsonStorage(LAUNCHER_FOCUS_KEY, {
+    date: getIsoDate(new Date()),
+    focus,
+  })
 }
 
 function getGameModeOfDay(dateKey = getIsoDate(new Date())) {
@@ -806,11 +825,14 @@ function renderLauncher() {
   const renderSlices = (puzzlePayload) => {
     const puzzleDate = puzzlePayload?.date || todayDate
     const completedModes = getCompletedModesForDate(puzzleDate)
+    // Remember which slice the player was last on and open there on return
+    // (same day only). Falls back to the daily pick for a fresh day.
+    const defaultFocus = getLauncherFocus() || pickMode
     return modes
       .map((mode, index) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
         const isPick = mode === pickMode
-        const isActive = isPick
+        const isActive = mode === defaultFocus
         const title = (mode === GAME_MODE_DIAMOND && !isActive) ? 'Paint' : MODE_LABELS[mode]
         const isCompleted = completedModes.has(mode)
         const hasSave = hasActiveRun(puzzleDate, mode)
@@ -841,7 +863,7 @@ function renderLauncher() {
         `
       })
       .join('') + `
-          <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
+          <div class="slice slice-more${defaultFocus === 'more' ? ' active' : ''}" style="--flex: ${defaultFocus === 'more' ? MORE_ACTIVE_FLEX : MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
             <div class="slice-title">More</div>
             <div class="slice-more-cards">
@@ -967,6 +989,11 @@ function renderLauncher() {
           s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
         }
       })
+      const activated = slices[index]
+      if (activated) {
+        const focus = activated.classList.contains('slice-more') ? 'more' : activated.dataset.mode
+        if (focus) setLauncherFocus(focus)
+      }
     }
 
     slices.forEach((slice, i) => {
