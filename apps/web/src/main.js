@@ -1560,7 +1560,7 @@ function showCompletionOverlay({
     pbStatLabel = 'First Solve'
   }
   const rankLine = headerRank
-    ? `<div class="completion-rankline">Rank #${headerRank}${totalEntries > 1 ? ` <span class="rankline-total">(${totalEntries} players)</span>` : ''}</div>`
+    ? `<div class="completion-rankline">Rank #${headerRank}</div>`
     : ''
 
   overlay.innerHTML = `
