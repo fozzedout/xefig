@@ -1397,15 +1397,76 @@ function showCompletionOverlay({ gameMode, duration, elapsedMs, rank, leaderboar
   })
 }
 
+function forceCompletePuzzlePreview(gameMode, puzzle) {
+  if (gameMode === GAME_MODE_DIAMOND) {
+    puzzle.fills = new Int8Array(puzzle.grid)
+    puzzle.completed = true
+    puzzle.drawGrid()
+    return
+  }
+  if (gameMode === GAME_MODE_JIGSAW) {
+    puzzle.applyProgressState({
+      pieces: puzzle.pieces.map((p) => ({
+        row: p.row,
+        col: p.col,
+        locked: true,
+        inCarousel: false,
+      })),
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_SLIDING) {
+    const slots = Array.from({ length: puzzle.totalSlots }, (_, i) =>
+      i < puzzle.tileCount ? i : null,
+    )
+    puzzle.applyProgressState({
+      slots,
+      cols: puzzle.cols,
+      rows: puzzle.rows,
+      completed: true,
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_SWAP) {
+    const slots = Array.from({ length: puzzle.totalTiles }, (_, i) => i)
+    puzzle.applyProgressState({
+      slots,
+      cols: puzzle.cols,
+      rows: puzzle.rows,
+      completed: true,
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_POLYGRAM) {
+    puzzle.applyProgressState({
+      pieces: puzzle.pieces.map((p) => ({
+        id: p.id,
+        locked: true,
+        placed: false,
+        rotation: 0,
+        trayOrder: p.trayOrder,
+      })),
+      shardCount: puzzle.shardCount,
+      completed: true,
+    })
+    return
+  }
+}
+
 function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBack }) {
   const durationLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '—'
   const modeLabel = MODE_LABELS[gameMode] || gameMode
   const imageUrl = resolvePuzzleImageUrl(state.puzzle, gameMode)
-  const usesPuzzlePreview = gameMode === GAME_MODE_DIAMOND
+  const loaderKey = gameMode === GAME_MODE_JIGSAW ? 'jigsaw'
+    : gameMode === GAME_MODE_SLIDING ? 'sliding'
+    : gameMode === GAME_MODE_SWAP ? 'swap'
+    : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
+    : gameMode === GAME_MODE_DIAMOND ? 'diamond'
+    : null
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
-  const bgMarkup = usesPuzzlePreview
+  const bgMarkup = loaderKey
     ? `<div class="completed-screen-bg completed-screen-bg-preview" id="completed-bg-mount"></div>`
     : `<img class="completed-screen-bg" src="${imageUrl}" alt="${modeLabel} puzzle" />`
 
@@ -1468,9 +1529,9 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     onBack()
   })
 
-  if (usesPuzzlePreview) {
+  if (loaderKey) {
     const mount = gameEl.querySelector('#completed-bg-mount')
-    puzzleLoaders.diamond().then((PuzzleClass) => {
+    puzzleLoaders[loaderKey]().then((PuzzleClass) => {
       if (!gameEl.isConnected || !mount.isConnected) return
       const preview = new PuzzleClass({
         container: mount,
@@ -1483,12 +1544,9 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
       previewPuzzle = preview
       preview.init().then(() => {
         if (previewPuzzle !== preview) return
-        preview.fills = new Int8Array(preview.grid)
-        preview.completed = true
-        preview.drawGrid()
+        forceCompletePuzzlePreview(gameMode, preview)
       }).catch(() => {
-        // Non-fatal — the image background fallback won't be shown, but the
-        // topbar/pill/sheet still render usable info.
+        // Non-fatal — preview just won't render; topbar/pill/sheet still work.
       })
     }).catch(() => {})
   }

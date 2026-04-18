@@ -3681,15 +3681,20 @@ h1 {
   display: block;
 }
 
-/* Diamond preview: the puzzle component mounts inside this container and
-   renders a non-interactive, fully-filled version of the grid as the
-   background. Hide the palette and block pointer events so the sheet/pill
-   controls above own all interaction. */
+/* Puzzle preview: the puzzle component mounts inside this container and
+   renders a non-interactive, solved version of the board as the background.
+   Hide mode-specific chrome (palettes, trays, carousels) and block pointer
+   events so the sheet/pill controls above own all interaction. */
 .completed-screen-bg-preview {
   pointer-events: none;
 }
 
-.completed-screen-bg-preview .diamond-palette-bar {
+.completed-screen-bg-preview .diamond-palette-bar,
+.completed-screen-bg-preview .jigsaw-carousel,
+.completed-screen-bg-preview .jigsaw-tray-tools,
+.completed-screen-bg-preview .floating-game-controls,
+.completed-screen-bg-preview .polygram-tray,
+.completed-screen-bg-preview .polygram-rotate-ring {
   display: none;
 }
 
