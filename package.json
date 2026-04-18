@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm --prefix apps/worker run dev",
     "deploy": "npm --prefix apps/worker run deploy",
+    "deploy:beta": "npm --prefix apps/worker run deploy:beta",
     "deploy:dry": "npm --prefix apps/worker run deploy:dry",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build"

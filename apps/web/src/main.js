@@ -35,6 +35,17 @@ const puzzleLoaders = {
 }
 
 const app = document.querySelector('#app')
+// Beta build flag — Vite statically replaces import.meta.env.MODE at
+// build time, so anything gated on BETA is tree-shaken from production
+// bundles. Set by `vite build --mode beta` via the deploy:beta script.
+const BETA = import.meta.env.MODE === 'beta'
+if (BETA && typeof document !== 'undefined') {
+  const badge = document.createElement('div')
+  badge.className = 'beta-badge'
+  badge.textContent = 'BETA'
+  badge.title = 'Beta build — test-only features enabled, data isolated from live'
+  document.body.appendChild(badge)
+}
 const API_BASE = ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
 const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'

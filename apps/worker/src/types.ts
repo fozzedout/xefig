@@ -10,6 +10,12 @@ export type Bindings = {
   OPENROUTER_MODEL?: string
   GOOGLE_AI_API_KEY?: string
   CONTACT_EMAIL?: string
+  // Beta-environment flags. When IS_BETA is set, the puzzle-content
+  // endpoints proxy reads to UPSTREAM_PUZZLE_ORIGIN (live) so beta
+  // doesn't need to generate its own puzzles — only player progress
+  // and leaderboard writes hit beta's own D1.
+  IS_BETA?: string
+  UPSTREAM_PUZZLE_ORIGIN?: string
 }
 
 export const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond'] as const

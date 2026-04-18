@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "npm run build:web && wrangler dev --config wrangler.toml",
     "build:web": "npm --prefix ../web run build",
+    "build:web:beta": "npm --prefix ../web run build -- --mode beta",
     "deploy:dry": "npm run build:web && wrangler deploy --dry-run --config wrangler.toml",
     "deploy": "npm run build:web && wrangler deploy --config wrangler.toml",
+    "deploy:beta": "npm run build:web:beta && wrangler deploy --env beta --config wrangler.toml",
     "test": "node --test --import tsx tests/**/*.test.ts"
   },
   "keywords": [],

@@ -33,5 +33,54 @@ crons = ["0 0 * * *", "15 * * * *"]
 name = "SEND_EMAIL"
 
 [vars]
-OPENROUTER_MODEL = "openrouter/free"
+OPENROUTER_MODEL = "mistralai/ministral-3-3b"
+CONTACT_EMAIL = "paul.aspinall@gmail.com"
+
+# ─── Beta environment ────────────────────────────────────────────────
+# Parallel deploy at xefig-beta.<account>.workers.dev — no custom
+# domain on purpose so it isn't discoverable via xefig.com. Shares the
+# live R2 bucket (read-only in practice — beta doesn't run the
+# generation cron) so beta testers see real images without running the
+# expensive AI pipeline. Has its own D1 so player progress / leaderboard
+# writes stay isolated from live. The puzzle-content endpoints fall
+# back to proxying live via UPSTREAM_PUZZLE_ORIGIN when the beta DB is
+# empty (which it will be, since there's no cron).
+#
+# One-time setup (run once, copy the returned database_id into the
+# d1_databases block below):
+#   npx wrangler d1 create daily_puzzles_beta
+#   npx wrangler d1 execute daily_puzzles_beta --remote --file schema.sql --env beta
+#
+# Deploy:
+#   npm run deploy:beta  (from repo root)
+
+[env.beta]
+name = "xefig-beta"
+
+[env.beta.assets]
+directory = "../web/dist"
+binding = "STATIC_ASSETS"
+run_worker_first = true
+not_found_handling = "404-page"
+html_handling = "none"
+
+[[env.beta.r2_buckets]]
+binding = "assets"
+bucket_name = "assets"
+
+[env.beta.ai]
+binding = "AI"
+
+[[env.beta.d1_databases]]
+binding = "DB"
+database_name = "daily_puzzles_beta"
+database_id = "REPLACE_WITH_BETA_D1_ID_AFTER_CREATE"
+
+[[env.beta.send_email]]
+name = "SEND_EMAIL"
+
+[env.beta.vars]
+IS_BETA = "true"
+UPSTREAM_PUZZLE_ORIGIN = "https://xefig.com"
+OPENROUTER_MODEL = "mistralai/ministral-3-3b"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"

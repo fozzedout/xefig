@@ -93,10 +93,37 @@ export function createApp() {
     }),
   )
 
+  // Beta environments don't run the puzzle-generation cron, so their
+  // local `puzzles` table stays empty. Fall back to fetching from the
+  // live origin (set via UPSTREAM_PUZZLE_ORIGIN) so beta testers see
+  // real puzzles without contaminating live writes.
+  const fetchUpstreamPuzzle = async (path: string, env: Bindings): Promise<Response | null> => {
+    const origin = (env.UPSTREAM_PUZZLE_ORIGIN || '').trim()
+    if (!env.IS_BETA || !origin) return null
+    try {
+      const upstream = await fetch(`${origin}${path}`, {
+        headers: { accept: 'application/json' },
+      })
+      if (!upstream.ok) return null
+      const body = await upstream.text()
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'public, s-maxage=300, max-age=60, stale-while-revalidate=600',
+        },
+      })
+    } catch {
+      return null
+    }
+  }
+
   app.get('/api/puzzles/today', async (c) => {
     const date = getUtcDateKey()
     const puzzle = await getPuzzleByDate(c.env.DB, date)
     if (!puzzle) {
+      const proxied = await fetchUpstreamPuzzle(`/api/puzzles/today`, c.env)
+      if (proxied) return proxied
       return c.json(
         {
           error: `No puzzle scheduled for ${date}`,
@@ -118,6 +145,8 @@ export function createApp() {
 
     const puzzle = await getPuzzleByDate(c.env.DB, date)
     if (!puzzle) {
+      const proxied = await fetchUpstreamPuzzle(`/api/puzzles/${encodeURIComponent(date)}`, c.env)
+      if (proxied) return proxied
       return c.json(
         {
           error: `No puzzle scheduled for ${date}`,

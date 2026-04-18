@@ -48,6 +48,25 @@ body,
   touch-action: manipulation;
 }
 
+/* Beta-build badge: tiny fixed label so you always know you're on the
+   test deploy rather than live. Only rendered when BETA is true in
+   main.js, and that branch is tree-shaken from production bundles. */
+.beta-badge {
+  position: fixed;
+  top: calc(var(--sai-top, 0px) + 6px);
+  right: calc(var(--sai-right, 0px) + 6px);
+  z-index: 9999;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f0c040;
+  color: #0a0a0f;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 #app {
   position: relative;
   height: var(--app-height, 100vh);
