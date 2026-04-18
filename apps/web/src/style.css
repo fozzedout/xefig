@@ -3667,14 +3667,20 @@ h1 {
   color: var(--text);
 }
 
+/* Colgroup widths lock the column sizes under table-layout: fixed —
+   the browser uses these regardless of which row is measured first,
+   so the header <th>s without classes don't override the td widths. */
+.lb-col-rank { width: 2.5rem; }
+.lb-col-time { width: 3.5rem; }
+.lb-col-best { width: 1.75rem; }
+/* .lb-col-player has no width — takes the remainder. */
+
 .lb-rank {
-  width: 2.5rem;
   font-weight: 600;
   color: var(--muted);
 }
 
 .lb-time {
-  width: 3.5rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
@@ -3728,11 +3734,10 @@ h1 {
   display: inline-block;
 }
 
-/* Star on the rightmost cell — marks the player's best. Sits in its own
-   narrow column so it doesn't push the rank/time/player columns. Uses
-   currentColor so it picks up the accent tint applied to lb-row-me. */
+/* Star on the rightmost cell — marks the player's best. Column width
+   comes from .lb-col-best on the shared colgroup; this rule just
+   handles content alignment. */
 .lb-best {
-  width: 1.5rem;
   text-align: right;
   padding-right: 0.4rem;
 }

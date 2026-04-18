@@ -1554,16 +1554,26 @@ function showCompletionOverlay({
       hideRank: r.kind === 'ghost',
     })).join('')
 
+    // Shared colgroup so both the list table and the pinned table get
+     // identical column widths under table-layout: fixed, regardless of
+     // which row the browser measures first.
+    const lbColgroup = `
+      <colgroup>
+        <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
+      </colgroup>`
+
     leaderboardBlock = `
       <div class="completion-leaderboard">
         <h3>Leaderboard</h3>
         <div class="lb-scroll" id="lb-scroll">
           <table class="lb-table">
+            ${lbColgroup}
             <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
         <table class="lb-table lb-pinned" id="lb-pinned">
+          ${lbColgroup}
           <tbody>
             <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
@@ -2021,6 +2031,9 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
       // cap would clip the list at 15rem in landscape).
       container.innerHTML = `
         <table class="lb-table">
+          <colgroup>
+            <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
+          </colgroup>
           <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
