@@ -2022,11 +2022,31 @@ function renderGame({ resumeRun = null } = {}) {
     btn.className = 'beta-tool-btn'
     btn.type = 'button'
     btn.textContent = 'Mostly solve'
-    btn.title = 'BETA: apply a nearly-complete state so a single move finishes the puzzle'
+    btn.title = 'BETA: near-solved state + set the elapsed time the submission will record'
     btn.addEventListener('click', () => {
       if (!puzzle) return
+      // Without this, applying the near-solved state via emitProgress
+      // kicks the timer from zero and a fast last tap records ~00:00.
+      // Let the tester pick a realistic elapsed time so leaderboard
+      // placement can be exercised.
+      const input = prompt('Elapsed time to record on completion (MM:SS, blank = keep current timer):', '05:00')
+      if (input === null) return
+      let targetMs = 0
+      const trimmed = input.trim()
+      if (trimmed) {
+        const parts = trimmed.split(':').map((p) => Number(p))
+        if (parts.length === 2 && parts.every(Number.isFinite)) {
+          targetMs = Math.max(0, parts[0] * 60_000 + parts[1] * 1000)
+        } else if (parts.length === 1 && Number.isFinite(parts[0])) {
+          targetMs = Math.max(0, parts[0] * 1000)
+        }
+      }
       try {
         mostlySolvePuzzle(state.gameMode, puzzle)
+        // Must be after mostlySolvePuzzle — the applyProgressState call
+        // inside it fires an onProgress that (on a fresh run) would
+        // call startActiveTimer(0) and trample our override.
+        if (targetMs > 0) startActiveTimer(targetMs)
       } catch (err) {
         console.error('Mostly solve failed', err)
       }
