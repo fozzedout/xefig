@@ -41,7 +41,6 @@ import {
   handleSingleBatchSubmit,
   handleBatchPoll,
   getBatchJobStatus,
-  completeBatchCategory,
   cancelBatchJob,
 } from './lib/scheduled'
 import {
@@ -598,48 +597,6 @@ export function createApp() {
 
     const status = await getBatchJobStatus(c.env)
     return c.json({ ok: true, ...status })
-  })
-
-  app.post('/api/admin/generate-images/complete-category', async (c) => {
-    const token = getCookie(c, ADMIN_SESSION_COOKIE)
-    if (!(await hasAdminSession(c.env, token))) {
-      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
-      return c.json({ error: 'Admin session required.' }, 401)
-    }
-
-    try {
-      const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
-      const category = getStringField(body.category)?.trim() as PuzzleCategory
-      const targetDate = getStringField(body.targetDate)?.trim() || getStringField(body.date)?.trim()
-
-      if (!CATEGORIES.includes(category)) {
-        return c.json({ error: 'Invalid category.' }, 400)
-      }
-
-      const imageFile = getFileField(body.image)
-      const thumbFile = getFileField(body.thumbnail)
-
-      if (!imageFile || imageFile.size === 0) {
-        return c.json({ error: 'Image file is required.' }, 400)
-      }
-      if (!thumbFile || thumbFile.size === 0) {
-        return c.json({ error: 'Thumbnail file is required.' }, 400)
-      }
-
-      const result = await completeBatchCategory(
-        c.env,
-        category,
-        await imageFile.arrayBuffer(),
-        await thumbFile.arrayBuffer(),
-        targetDate && isValidDateKey(targetDate) ? targetDate : undefined,
-      )
-
-      return c.json(result)
-    } catch (error) {
-      console.error('Complete category failed', error)
-      const message = error instanceof Error ? error.message : 'Failed to complete category.'
-      return c.json({ error: message }, 500)
-    }
   })
 
   app.post('/api/admin/generate-images/cancel', async (c) => {

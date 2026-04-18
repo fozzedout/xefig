@@ -461,9 +461,6 @@ function summarizeBatchResponse(method, path, payload, status) {
   if (action === 'cancel') {
     return `${arrow} ${payload?.message || payload?.error || 'cancel request'}`
   }
-  if (action === 'complete-category') {
-    return `${arrow} ${payload?.message || 'category finalised'}`
-  }
   return null
 }
 
@@ -1504,7 +1501,6 @@ batchPollBtn.addEventListener('click', async () => {
   batchPollBtn.disabled = true
   setStatus('Polling batch job status...', 'working')
   try {
-    // First do a server-side poll (advances the state machine if batch just completed)
     const { response, payload } = await adminFetch('/api/admin/generate-images/poll', {
       method: 'POST',
     })
@@ -1517,12 +1513,9 @@ batchPollBtn.addEventListener('click', async () => {
       return
     }
 
-    // Check if there are images ready for client-side processing
-    const status = await checkAndProcessBatch()
-    if (!status) {
-      setStatus(payload.message || 'Batch poll completed.', 'ok')
-      await loadDateDetails()
-    }
+    setStatus(payload.message || 'Batch poll completed.', 'ok')
+    if (payload.savedDate) dateInput.value = payload.savedDate
+    await loadDateDetails()
     refreshBatchStatus()
   } catch {
     setStatus('Network error during batch poll.', 'error')
@@ -1586,12 +1579,9 @@ cronPollBtn.addEventListener('click', async () => {
       return
     }
 
-    // Also run client-side processing if images are ready
-    const processed = await checkAndProcessBatch()
-    if (!processed) {
-      setStatus(payload.message || 'Cron poll completed.', 'ok')
-      await loadDateDetails()
-    }
+    setStatus(payload.message || 'Cron poll completed.', 'ok')
+    if (payload.savedDate) dateInput.value = payload.savedDate
+    await loadDateDetails()
     refreshBatchStatus()
   } catch {
     setStatus('Network error during cron poll.', 'error')
@@ -1599,88 +1589,6 @@ cronPollBtn.addEventListener('click', async () => {
     cronPollBtn.disabled = false
   }
 })
-
-// ─── Batch Processing ───
-
-async function checkAndProcessBatch() {
-  const { response, payload } = await adminFetch('/api/admin/generate-images/status')
-  if (!response.ok || !payload.active) return false
-  if (payload.phase !== 'fetched') return false
-
-  const remaining = payload.remainingCategories || []
-  if (remaining.length === 0) return false
-
-  const tempUrls = payload.tempUrls || {}
-  const total = CATEGORIES.length
-  let processed = total - remaining.length
-
-  for (const category of remaining) {
-    const tempUrl = tempUrls[category]
-    if (!tempUrl) continue
-
-    processed++
-    setStatus(`Processing ${category} (${processed}/${total})...`, 'working')
-
-    try {
-      // Fetch as blob + object URL instead of img.src = tempUrl so we can
-      // pass cache: 'no-store' — img element requests ignore that option
-      // and would happily be served by the service worker's /cdn cache.
-      const pngRes = await fetch(tempUrl, { cache: 'no-store' })
-      const pngBlob = await pngRes.blob()
-
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      const objectUrl = URL.createObjectURL(pngBlob)
-      img.src = objectUrl
-      await img.decode()
-      URL.revokeObjectURL(objectUrl)
-
-      // Full-size JPEG
-      const fullCanvas = document.createElement('canvas')
-      fullCanvas.width = img.naturalWidth
-      fullCanvas.height = img.naturalHeight
-      const fullCtx = fullCanvas.getContext('2d')
-      fullCtx.fillStyle = '#fff'
-      fullCtx.fillRect(0, 0, fullCanvas.width, fullCanvas.height)
-      fullCtx.drawImage(img, 0, 0)
-
-      const jpegBlob = await new Promise((resolve, reject) => {
-        fullCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error('JPEG encode failed'))), 'image/jpeg', 0.8)
-      })
-
-      const thumbBlob = await generateThumbnailFromUrl(tempUrl)
-
-      const formData = new FormData()
-      formData.append('category', category)
-      formData.append('image', jpegBlob, `${category}.jpg`)
-      formData.append('thumbnail', thumbBlob, `${category}_thumb.jpg`)
-
-      const { response: completeRes, payload: completePayload } = await adminFetch(
-        '/api/admin/generate-images/complete-category',
-        { method: 'POST', body: formData },
-      )
-
-      if (!completeRes.ok) {
-        setStatus(completePayload.error || `Failed to save ${category}.`, 'error')
-        return true
-      }
-
-      if (completePayload.allDone) {
-        setStatus(completePayload.message || 'All images processed and saved.', 'ok')
-        dateInput.value = payload.targetDate
-        await loadDateDetails()
-        return true
-      }
-    } catch (err) {
-      setStatus(`Failed to process ${category}: ${err.message || 'unknown error'}`, 'error')
-      return true
-    }
-  }
-
-  setStatus('Batch processing complete.', 'ok')
-  await loadDateDetails()
-  return true
-}
 
 // ─── Copy ───
 

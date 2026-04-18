@@ -5,8 +5,6 @@ import { processPngImage } from './image'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
 import {
   ensurePuzzleTables,
-  getBatchJob,
-  getBatchJobByTargetDate,
   getBatchJobsByTargetDate,
   getBatchJobByBatchName,
   getAllPendingBatchJobs,
@@ -275,10 +273,12 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   }
 
   // Prefer CPU-bound work on a job whose images are already fetched —
-  // that moves the oldest ready job one category closer to done.
+  // process every remaining category in one tick so the whole batch
+  // finalises immediately instead of dribbling through one image per
+  // cron firing.
   const fetchedJob = jobs.find((j) => j.phase === 'fetched')
   if (fetchedJob) {
-    return await processNextCategory(env, fetchedJob)
+    return await processRemainingCategories(env, fetchedJob)
   }
 
   // Otherwise poll Gemini for every submitted job in FIFO order so
@@ -345,15 +345,9 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
     job.phase = 'fetched'
     await saveBatchJob(env.DB, job)
 
-    return {
-      found: true,
-      message: `Batch for ${job.targetDate} completed. ${saved} raw images saved. Processing will begin on next tick.`,
-      batchName: job.batchName,
-      targetDate: job.targetDate,
-      state: 'fetched',
-      submittedAt: job.submittedAt,
-      imagesProcessed: job.processedCategories.length,
-    }
+    // Fall through into processing in the same tick rather than
+    // returning and waiting for the next cron firing.
+    return await processRemainingCategories(env, job)
   }
 
   // All submitted jobs still waiting at Gemini.
@@ -369,11 +363,11 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Process one category: read temp PNG → JPEG + thumbnail → final R2 keys
+// Process every remaining category in a single tick, then finalize.
 // ---------------------------------------------------------------------------
 
-async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise<BatchPollResult> {
-  const { batchName, targetDate, submittedAt, categories: categoryMeta } = job
+async function processRemainingCategories(env: Bindings, job: PendingBatchJob): Promise<BatchPollResult> {
+  const { batchName, targetDate, submittedAt } = job
   const jobCategories = job.requestedCategories ?? CATEGORIES
   const processed = new Set(job.processedCategories)
   const remaining = jobCategories.filter((c) => !processed.has(c))
@@ -382,83 +376,67 @@ async function processNextCategory(env: Bindings, job: PendingBatchJob): Promise
     return await finalizeRecord(env, job)
   }
 
-  const category = remaining[0]
-  const meta = categoryMeta[category]
-  const tempKey = `temp/${targetDate}/${category}.png`
+  // Decode + encode sequentially (CPU-bound, no overlap benefit) while
+  // keeping the encoded bytes in memory. If one category's temp PNG is
+  // missing we bail out early — same regen-submit behaviour as before —
+  // rather than silently finalising a short record.
+  const encoded: { category: PuzzleCategory; jpeg: Uint8Array; thumbnail: Uint8Array }[] = []
+  for (const category of remaining) {
+    const tempKey = `temp/${targetDate}/${category}.png`
+    const tempObject = await env.assets.get(tempKey)
+    if (!tempObject) {
+      if (env.GOOGLE_AI_API_KEY) {
+        const details = await generateSingleCategoryPrompt(env.DB, category)
+        const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
+          { category, prompt: details.prompt },
+        ])
 
-  const tempObject = await env.assets.get(tempKey)
-  if (!tempObject) {
-    if (env.GOOGLE_AI_API_KEY) {
-      const details = await generateSingleCategoryPrompt(env.DB, category)
-      const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
-        { category, prompt: details.prompt },
-      ])
+        job.categories[category] = { theme: details.theme, keywords: details.keywords }
+        job.phase = 'submitted'
+        job.batchName = newBatch
+        await saveBatchJob(env.DB, job)
 
-      job.categories[category] = { theme: details.theme, keywords: details.keywords }
-      job.phase = 'submitted'
-      job.batchName = newBatch
-      await saveBatchJob(env.DB, job)
-
+        return {
+          found: true,
+          message: `Temp image for ${category} was missing at ${tempKey}. Submitted a regeneration batch for ${category}.`,
+          batchName: newBatch,
+          targetDate,
+          state: 'regenerating',
+          submittedAt,
+          imagesProcessed: processed.size,
+        }
+      }
       return {
         found: true,
-        message: `Temp image for ${category} was missing at ${tempKey}. Submitted a regeneration batch for ${category}.`,
-        batchName: newBatch,
+        message: `Temp image for ${category} not found at ${tempKey}. Job kept for retry.`,
+        batchName,
         targetDate,
-        state: 'regenerating',
+        state: 'processing',
         submittedAt,
         imagesProcessed: processed.size,
       }
     }
 
-    return {
-      found: true,
-      message: `Temp image for ${category} not found at ${tempKey}. Job kept for retry.`,
-      batchName,
-      targetDate,
-      state: 'processing',
-      submittedAt,
-      imagesProcessed: processed.size,
-    }
+    const pngBytes = new Uint8Array(await tempObject.arrayBuffer())
+    const { jpeg, thumbnail } = processPngImage(pngBytes)
+    encoded.push({ category, jpeg, thumbnail })
   }
 
-  const pngBytes = new Uint8Array(await tempObject.arrayBuffer())
+  // R2 writes are IO-bound — do them in parallel.
+  await Promise.all(
+    encoded.flatMap(({ category, jpeg, thumbnail }) => [
+      env.assets.put(`puzzles/${targetDate}/${category}.jpg`, jpeg, {
+        httpMetadata: { contentType: 'image/jpeg' },
+      }),
+      env.assets.put(`puzzles/${targetDate}/${category}_thumb.jpg`, thumbnail, {
+        httpMetadata: { contentType: 'image/jpeg' },
+      }),
+      env.assets.delete(`temp/${targetDate}/${category}.png`),
+    ]),
+  )
 
-  // AI image validation disabled — cost too high and results unreliable
-
-  const { jpeg, thumbnail } = processPngImage(pngBytes)
-
-  const imageKey = `puzzles/${targetDate}/${category}.jpg`
-  const thumbKey = `puzzles/${targetDate}/${category}_thumb.jpg`
-
-  await env.assets.put(imageKey, jpeg, {
-    httpMetadata: { contentType: 'image/jpeg' },
-  })
-  await env.assets.put(thumbKey, thumbnail, {
-    httpMetadata: { contentType: 'image/jpeg' },
-  })
-
-  // Clean up temp file
-  await env.assets.delete(tempKey)
-
-  // Update job state
-  job.processedCategories = [...job.processedCategories, category]
-  await saveBatchJob(env.DB, job)
-
-  const newRemaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
-
-  if (newRemaining.length === 0) {
-    return await finalizeRecord(env, job)
-  }
-
-  return {
-    found: true,
-    message: `Processed ${category} (${job.processedCategories.length}/${CATEGORIES.length}). Next: ${newRemaining[0]}.`,
-    batchName,
-    targetDate,
-    state: 'processing',
-    submittedAt,
-    imagesProcessed: job.processedCategories.length,
-  }
+  job.processedCategories = [...processed, ...encoded.map((e) => e.category)]
+  return await finalizeRecord(env, job)
 }
 
 // ---------------------------------------------------------------------------
@@ -520,12 +498,10 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
 }
 
 // ---------------------------------------------------------------------------
-// Batch job status (for admin panel to pick up client-side processing)
+// Batch job status (queue page listing)
 // ---------------------------------------------------------------------------
 
 export type BatchJobStatus = {
-  // True when the head-of-queue job is active — preserved so the old
-  // client behaviour (polling a single job) still works.
   active: boolean
   phase?: string
   batchName?: string
@@ -534,8 +510,6 @@ export type BatchJobStatus = {
   processedCategories?: PuzzleCategory[]
   remainingCategories?: PuzzleCategory[]
   themes?: Record<string, string>
-  tempUrls?: Record<string, string>
-  // Full queue (oldest first). Includes the head job above.
   queue?: BatchJobStatus[]
   queueLength?: number
 }
@@ -544,17 +518,8 @@ function describeJob(job: PendingBatchJob): BatchJobStatus {
   const jobCategories = job.requestedCategories ?? CATEGORIES
   const remaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
   const themes: Record<string, string> = {}
-  const tempUrls: Record<string, string> = {}
   for (const category of jobCategories) {
     themes[category] = job.categories[category]?.theme ?? ''
-    if (job.phase === 'fetched' && !job.processedCategories.includes(category)) {
-      // Include the job's submittedAt so a re-regeneration of the same
-      // date+category produces a unique URL — otherwise the admin panel's
-      // service worker (sw.js, /cdn/* cache-first) hands back the previous
-      // run's PNG and we end up re-encoding stale bytes into R2.
-      const bust = encodeURIComponent(job.submittedAt)
-      tempUrls[category] = `${toCdnUrl(`temp/${job.targetDate}/${category}.png`)}?v=${bust}`
-    }
   }
   return {
     active: true,
@@ -565,7 +530,6 @@ function describeJob(job: PendingBatchJob): BatchJobStatus {
     processedCategories: [...job.processedCategories],
     remainingCategories: remaining,
     themes,
-    tempUrls,
   }
 }
 
@@ -628,76 +592,4 @@ export async function cancelBatchJob(
   }
 
   return { ok: false, message: 'Provide either batchName or targetDate to cancel.' }
-}
-
-// ---------------------------------------------------------------------------
-// Complete a single category from client-side processing
-// ---------------------------------------------------------------------------
-
-export type CompleteCategoryResult = {
-  ok: boolean
-  message: string
-  allDone: boolean
-  savedDate?: string
-}
-
-export async function completeBatchCategory(
-  env: Bindings,
-  category: PuzzleCategory,
-  imageData: ArrayBuffer,
-  thumbnailData: ArrayBuffer,
-  targetDate?: string,
-): Promise<CompleteCategoryResult> {
-  await ensurePuzzleTables(env.DB)
-  const job = targetDate
-    ? await getBatchJobByTargetDate(env.DB, targetDate)
-    : await getBatchJob(env.DB)
-  if (!job) {
-    return {
-      ok: false,
-      message: targetDate
-        ? `No queued batch job for ${targetDate}.`
-        : 'No pending batch job.',
-      allDone: false,
-    }
-  }
-
-  if (job.phase !== 'fetched') {
-    return { ok: false, message: `Batch job is in "${job.phase}" phase, not ready for processing.`, allDone: false }
-  }
-
-  if (job.processedCategories.includes(category)) {
-    return { ok: true, message: `${category} already processed.`, allDone: false }
-  }
-
-  const jobTargetDate = job.targetDate
-  const imageKey = `puzzles/${jobTargetDate}/${category}.jpg`
-  const thumbKey = `puzzles/${jobTargetDate}/${category}_thumb.jpg`
-
-  await env.assets.put(imageKey, imageData, {
-    httpMetadata: { contentType: 'image/jpeg' },
-  })
-  await env.assets.put(thumbKey, thumbnailData, {
-    httpMetadata: { contentType: 'image/jpeg' },
-  })
-
-  // Clean up temp file
-  await env.assets.delete(`temp/${jobTargetDate}/${category}.png`)
-
-  // Update job state
-  job.processedCategories = [...job.processedCategories, category]
-  const jobCategories = job.requestedCategories ?? CATEGORIES
-  const remaining = jobCategories.filter((c) => !job.processedCategories.includes(c))
-
-  if (remaining.length === 0) {
-    const result = await finalizeRecord(env, job)
-    return { ok: true, message: result.message, allDone: true, savedDate: result.savedDate }
-  }
-
-  await saveBatchJob(env.DB, job)
-  return {
-    ok: true,
-    message: `${category} processed (${job.processedCategories.length}/${CATEGORIES.length}). Remaining: ${remaining.join(', ')}.`,
-    allDone: false,
-  }
 }
