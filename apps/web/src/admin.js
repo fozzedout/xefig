@@ -716,14 +716,10 @@ async function loadDateDetails() {
     // Bypass CF edge cache (s-maxage=300 on /api/puzzles/:date) so admin
     // sees regenerated images immediately. Unique query → edge miss;
     // no-store → browser won't serve its own cached copy either.
-    const puzzleUrl = apiUrl(`/api/puzzles/${encodeURIComponent(date)}?_=${Date.now()}`)
-    const response = await fetch(puzzleUrl, { cache: 'no-store' })
-    console.log('[loadDateDetails] fetched', puzzleUrl, {
-      status: response.status,
-      cfCache: response.headers.get('cf-cache-status'),
-      age: response.headers.get('age'),
-      date: response.headers.get('date'),
-    })
+    const response = await fetch(
+      apiUrl(`/api/puzzles/${encodeURIComponent(date)}?_=${Date.now()}`),
+      { cache: 'no-store' },
+    )
     const payload = await readJsonResponse(response)
     if (response.status === 404) {
       isExistingDate = false
@@ -741,7 +737,6 @@ async function loadDateDetails() {
     }
 
     isExistingDate = true
-    console.log('[loadDateDetails]', date, 'updatedAt=', payload.updatedAt, 'imageUrls=', Object.fromEntries(Object.entries(payload.categories || {}).map(([k, v]) => [k, v?.imageUrl])))
     renderLoadedPuzzle(payload)
     applyDateMode()
     setRecordBadge('Exists', 'existing')
@@ -1609,7 +1604,6 @@ cronPollBtn.addEventListener('click', async () => {
 
 async function checkAndProcessBatch() {
   const { response, payload } = await adminFetch('/api/admin/generate-images/status')
-  console.log('[reprocess] status', { ok: response.ok, active: payload.active, phase: payload.phase, targetDate: payload.targetDate, submittedAt: payload.submittedAt, tempUrls: payload.tempUrls, remaining: payload.remainingCategories })
   if (!response.ok || !payload.active) return false
   if (payload.phase !== 'fetched') return false
 
@@ -1628,23 +1622,11 @@ async function checkAndProcessBatch() {
     setStatus(`Processing ${category} (${processed}/${total})...`, 'working')
 
     try {
-      // Fetch the temp PNG as a blob so we can see its size and hash, and
-      // bypass the SW cache-first /cdn handler. If the SW were handing us
-      // stale bytes the blob size/hash would match across re-runs.
-      console.log(`[reprocess] ${category}: fetching`, tempUrl)
-      const fetchStart = performance.now()
+      // Fetch as blob + object URL instead of img.src = tempUrl so we can
+      // pass cache: 'no-store' — img element requests ignore that option
+      // and would happily be served by the service worker's /cdn cache.
       const pngRes = await fetch(tempUrl, { cache: 'no-store' })
       const pngBlob = await pngRes.blob()
-      const pngBuf = await pngBlob.arrayBuffer()
-      const pngHash = await hashBuffer(pngBuf)
-      console.log(`[reprocess] ${category}: temp PNG`, {
-        status: pngRes.status,
-        fromServiceWorker: pngRes.type === 'basic' ? '?' : pngRes.type,
-        xCache: pngRes.headers.get('cf-cache-status') || pngRes.headers.get('x-cache') || null,
-        bytes: pngBlob.size,
-        sha256: pngHash,
-        fetchMs: Math.round(performance.now() - fetchStart),
-      })
 
       const img = new Image()
       img.crossOrigin = 'anonymous'
@@ -1652,7 +1634,6 @@ async function checkAndProcessBatch() {
       img.src = objectUrl
       await img.decode()
       URL.revokeObjectURL(objectUrl)
-      console.log(`[reprocess] ${category}: decoded`, { w: img.naturalWidth, h: img.naturalHeight })
 
       // Full-size JPEG
       const fullCanvas = document.createElement('canvas')
@@ -1666,14 +1647,9 @@ async function checkAndProcessBatch() {
       const jpegBlob = await new Promise((resolve, reject) => {
         fullCanvas.toBlob((b) => (b ? resolve(b) : reject(new Error('JPEG encode failed'))), 'image/jpeg', 0.8)
       })
-      const jpegHash = await hashBuffer(await jpegBlob.arrayBuffer())
-      console.log(`[reprocess] ${category}: JPEG encoded`, { bytes: jpegBlob.size, sha256: jpegHash })
 
-      // Thumbnail
       const thumbBlob = await generateThumbnailFromUrl(tempUrl)
-      console.log(`[reprocess] ${category}: thumbnail`, { bytes: thumbBlob.size })
 
-      // Upload both
       const formData = new FormData()
       formData.append('category', category)
       formData.append('image', jpegBlob, `${category}.jpg`)
@@ -1683,7 +1659,6 @@ async function checkAndProcessBatch() {
         '/api/admin/generate-images/complete-category',
         { method: 'POST', body: formData },
       )
-      console.log(`[reprocess] ${category}: complete-category`, { status: completeRes.status, payload: completePayload })
 
       if (!completeRes.ok) {
         setStatus(completePayload.error || `Failed to save ${category}.`, 'error')
@@ -1697,7 +1672,6 @@ async function checkAndProcessBatch() {
         return true
       }
     } catch (err) {
-      console.error(`[reprocess] ${category}: failed`, err)
       setStatus(`Failed to process ${category}: ${err.message || 'unknown error'}`, 'error')
       return true
     }
@@ -1706,15 +1680,6 @@ async function checkAndProcessBatch() {
   setStatus('Batch processing complete.', 'ok')
   await loadDateDetails()
   return true
-}
-
-async function hashBuffer(buf) {
-  try {
-    const digest = await crypto.subtle.digest('SHA-256', buf)
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
-  } catch {
-    return '(hash-unavailable)'
-  }
 }
 
 // ─── Copy ───
