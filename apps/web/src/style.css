@@ -48,6 +48,32 @@ body,
   touch-action: manipulation;
 }
 
+/* Beta-only test controls: floating pill buttons, fixed above the game
+   chrome. Only appended to the DOM when BETA === true (gated in
+   main.js) — the whole tree-shakes from production bundles. */
+.beta-tool-btn {
+  position: fixed;
+  bottom: calc(var(--sai-bottom, 0px) + 10px);
+  left: calc(var(--sai-left, 0px) + 10px);
+  z-index: 9999;
+  appearance: none;
+  border: 1px solid #f0c040;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  color: #f0c040;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.beta-tool-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
 /* Beta-build badge: tiny fixed label so you always know you're on the
    test deploy rather than live. Only rendered when BETA is true in
    main.js, and that branch is tree-shaken from production bundles. */

@@ -1491,6 +1491,87 @@ function forceCompletePuzzlePreview(gameMode, puzzle) {
   }
 }
 
+// Apply a near-solved state to an active puzzle instance so a single
+// interaction completes it. Used by the BETA-only "Mostly solve" test
+// button — tree-shaken from production bundles via the BETA guard.
+function mostlySolvePuzzle(gameMode, puzzle) {
+  if (gameMode === GAME_MODE_DIAMOND) {
+    const lastIdx = puzzle.totalCells - 1
+    const fills = Array.from(puzzle.grid)
+    fills[lastIdx] = -1
+    puzzle.applyProgressState({
+      cols: puzzle.cols,
+      rows: puzzle.rows,
+      palette: puzzle.palette.map((c) => [...c]),
+      grid: Array.from(puzzle.grid),
+      fills,
+      selectedColor: puzzle.grid[lastIdx],
+      completed: false,
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_JIGSAW) {
+    const last = puzzle.pieces.length - 1
+    puzzle.applyProgressState({
+      pieces: puzzle.pieces.map((p, i) => ({
+        row: p.row,
+        col: p.col,
+        locked: i !== last,
+        inCarousel: i === last,
+      })),
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_SLIDING) {
+    // Solved:   [0, 1, ..., tc-1, null]
+    // Near:     [0, 1, ..., tc-2, null, tc-1]  (one slide finishes it)
+    const tc = puzzle.tileCount
+    const slots = Array.from({ length: puzzle.totalSlots }, (_, i) => {
+      if (i < tc - 1) return i
+      if (i === tc - 1) return null
+      return tc - 1
+    })
+    puzzle.applyProgressState({
+      slots,
+      cols: puzzle.cols,
+      rows: puzzle.rows,
+      completed: false,
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_SWAP) {
+    // Solved identity; swap last two so a single swap finishes it.
+    const n = puzzle.totalTiles
+    const slots = Array.from({ length: n }, (_, i) => {
+      if (i === n - 2) return n - 1
+      if (i === n - 1) return n - 2
+      return i
+    })
+    puzzle.applyProgressState({
+      slots,
+      cols: puzzle.cols,
+      rows: puzzle.rows,
+      completed: false,
+    })
+    return
+  }
+  if (gameMode === GAME_MODE_POLYGRAM) {
+    const last = puzzle.pieces.length - 1
+    puzzle.applyProgressState({
+      pieces: puzzle.pieces.map((p, i) => ({
+        id: p.id,
+        locked: i !== last,
+        placed: false,
+        rotation: 0,
+        trayOrder: p.trayOrder,
+      })),
+      shardCount: puzzle.shardCount,
+      completed: false,
+    })
+    return
+  }
+}
+
 function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm }) {
   const existing = document.querySelector('.confirm-overlay')
   if (existing) existing.remove()
@@ -1934,6 +2015,23 @@ function renderGame({ resumeRun = null } = {}) {
     workspaceEl.addEventListener('pointermove', wakeImmersiveControls, { passive: true })
     workspaceEl.addEventListener('focusin', wakeImmersiveControls)
     setImmersiveControlsVisible(true)
+  }
+
+  if (BETA) {
+    const btn = document.createElement('button')
+    btn.className = 'beta-tool-btn'
+    btn.type = 'button'
+    btn.textContent = 'Mostly solve'
+    btn.title = 'BETA: apply a nearly-complete state so a single move finishes the puzzle'
+    btn.addEventListener('click', () => {
+      if (!puzzle) return
+      try {
+        mostlySolvePuzzle(state.gameMode, puzzle)
+      } catch (err) {
+        console.error('Mostly solve failed', err)
+      }
+    })
+    gameEl.appendChild(btn)
   }
 
   const restartBtn = gameEl.querySelector('#restart-btn')
