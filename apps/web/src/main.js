@@ -1432,9 +1432,9 @@ function renderArchivePage() {
 
 const LEADERBOARD_STAR_SVG = `<svg class="lb-star" viewBox="0 0 24 24" aria-label="Your best" role="img"><path d="M12 4 L14.351 8.763 L19.608 9.528 L15.804 13.237 L16.702 18.472 L12 16 L7.298 18.472 L8.196 13.237 L4.392 9.528 L9.649 8.763 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>`
 
-function renderLeaderboardRow({ rank, elapsedMs, playerGuid, isMe, isBest, extraClass = '' }) {
+function renderLeaderboardRow({ rank, elapsedMs, playerGuid, isMe, isBest, extraClass = '', playerLabel }) {
   const time = formatDuration(elapsedMs)
-  const label = isMe ? 'You' : playerGuid.slice(0, 8)
+  const label = playerLabel ?? (isMe ? 'You' : playerGuid.slice(0, 8))
   const classes = ['lb-row']
   if (isMe) classes.push('lb-row-me')
   if (isBest) classes.push('lb-row-best')
@@ -1479,36 +1479,51 @@ function showCompletionOverlay({
 
   let leaderboardBlock = ''
   if (leaderboardEntries && leaderboardEntries.length > 0) {
-    const rowsHtml = leaderboardEntries
-      .map((entry) => renderLeaderboardRow({
-        rank: entry.rank,
-        elapsedMs: entry.elapsedMs,
-        playerGuid: entry.playerGuid,
-        isMe: entry.playerGuid === myGuid,
-        isBest: entry.playerGuid === myGuid, // one row per player, so the in-list entry is always their best
-      }))
-      .join('')
-
-    // Pinned current-submission row: always shown so the player can see
-    // what they just submitted and where it'd place. Starred only when
-    // it IS the best. Ghost-styled (desaturated) when slower than the
-    // stored best — it's a practice attempt that won't be saved. Tap
-    // scrolls the list to the player's starred in-list entry. The trend
-    // arrow compares this attempt's time to the PB.
-    const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
     const submissionTime = formatDuration(submissionElapsedMs)
+    const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
     const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
     const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
     const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
-    const pinnedRowClasses = ['lb-row', 'lb-row-me', 'lb-row-pinned']
-    if (slowerThanPb) pinnedRowClasses.push('lb-row-ghost')
-    const pinnedTableClasses = ['lb-table', 'lb-pinned']
-    if (slowerThanPb) pinnedTableClasses.push('lb-pinned-ghost')
     const trendArrow = fasterThanPb
       ? '<span class="lb-trend lb-trend-down" aria-label="faster than PB">▼</span>'
       : slowerThanPb
         ? '<span class="lb-trend lb-trend-up" aria-label="slower than PB">▲</span>'
         : '<span class="lb-trend lb-trend-flat" aria-label="same as PB">—</span>'
+
+    // Build the list rows. When this run is slower than the stored PB,
+    // splice a ghost row into the visible list at the position it would
+    // occupy — so the player sees "here's where you'd be with this
+    // attempt" in context with the real entries. The PB entry stays
+    // starred wherever it already sits. When the run tied or beat PB,
+    // it IS the in-list starred entry, so no ghost is needed.
+    const rows = leaderboardEntries.map((entry) => ({
+      kind: 'real',
+      rank: entry.rank,
+      elapsedMs: entry.elapsedMs,
+      playerGuid: entry.playerGuid,
+      isMe: entry.playerGuid === myGuid,
+      isBest: entry.playerGuid === myGuid,
+    }))
+    if (slowerThanPb && submissionRank) {
+      const insertAt = Math.min(Math.max(submissionRank - 1, 0), rows.length)
+      rows.splice(insertAt, 0, {
+        kind: 'ghost',
+        rank: submissionRank,
+        elapsedMs: submissionElapsedMs,
+        playerGuid: myGuid,
+        isMe: true,
+        isBest: false,
+      })
+    }
+    const rowsHtml = rows.map((r) => renderLeaderboardRow({
+      rank: r.rank,
+      elapsedMs: r.elapsedMs,
+      playerGuid: r.playerGuid,
+      isMe: r.isMe,
+      isBest: r.isBest,
+      extraClass: r.kind === 'ghost' ? 'lb-row-ghost lb-row-ghost-inline' : '',
+      playerLabel: r.kind === 'ghost' ? 'You (this run)' : undefined,
+    })).join('')
 
     leaderboardBlock = `
       <div class="completion-leaderboard">
@@ -1519,9 +1534,9 @@ function showCompletionOverlay({
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
-        <table class="${pinnedTableClasses.join(' ')}" id="lb-pinned">
+        <table class="lb-table lb-pinned" id="lb-pinned">
           <tbody>
-            <tr class="${pinnedRowClasses.join(' ')}" title="Tap to find your entry on the leaderboard">
+            <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
               <td class="lb-time">${trendArrow} ${submissionTime}</td>
               <td class="lb-player">You (this run)</td>
