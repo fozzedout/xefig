@@ -59,7 +59,7 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'ruins', 'tower', 'alley', 'forest', 'cave', 'mountain', 'valley',
     'coast', 'island', 'cliffs', 'gorge', 'canyon', 'desert', 'savanna',
     'jungle', 'tundra', 'glacier', 'village', 'city', 'rooftops', 'sky',
-    'underwater', 'lunar', 'nebula', 'cavern', 'meadow', 'swamp', 'delta',
+    'nebula', 'cavern', 'meadow', 'swamp', 'delta',
     'fjord', 'plateau', 'mesa', 'volcano', 'outpost', 'stronghold',
     'archipelago', 'lagoon', 'estuary', 'wetlands', 'steppe', 'taiga',
     'rainforest canopy', 'cloud forest', 'alpine lake', 'mountain pass',
@@ -179,35 +179,57 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   // "hundreds of tiny things" — those collapse to noise at 16 colours
   // and are miserable to paint.
   concept: [
-    // bold single subjects in styled settings
+    // hero subjects in styled settings
     'lighthouse on a cliff', 'sailboat on calm water', 'hot air balloon over hills',
-    'lone windmill in a field', 'cottage with garden path',
-    'stone bridge over a river', 'small chapel on a hill',
-    'pagoda in a quiet garden', 'lone palm tree on a beach',
+    'windmill in a field', 'cottage with garden path',
+    'stone bridge over a river', 'chapel on a hill',
+    'pagoda in a quiet garden', 'palm tree on a beach',
     'cherry blossom tree by a river', 'autumn tree on a lawn',
     'mountain reflected in a still lake', 'barn under a starry sky',
-    // iconic animals (single or paired)
-    'fox in snow', 'owl on a branch', 'stag in a meadow',
-    'hummingbird at a flower', 'cat on a windowsill', 'parrot on a perch',
-    'peacock with tail fan', 'deer at a forest edge', 'whale breaching',
-    'koi pair in a pond', 'flamingo wading', 'polar bear on ice',
-    // simple decorative subjects with bold shapes
-    'vase of sunflowers on a table', 'bowl of fruit on a cloth',
-    'teapot and cup still life', 'lantern on a porch',
-    'bicycle against a wall with flowers in the basket',
-    'rocking chair on a wooden porch',
-    // landscapes with big shapes, not overloaded
-    'rolling hills at sunset', 'lavender field at dawn',
-    'tulip field in rows', 'small sunflower field under blue sky',
-    'vineyard terrace at dusk', 'quiet harbour with a few sailboats',
-    'beach umbrella by the sea', 'snowy pine tree under aurora',
-    // simple folk-art / mosaic subjects (uncluttered)
-    'stained glass flower panel', 'simple mandala with 8-fold symmetry',
-    'folk-art tree of life', 'talavera plate pattern with central motif',
+    // iconic animals in richer environments
+    'fox in a snowy forest', 'owl on a branch among autumn leaves',
+    'stag in a coastal meadow with boats in the bay',
+    'hummingbirds among tropical flowers', 'cat on a windowsill overlooking rooftops',
+    'parrots in a jungle canopy', 'peacock with tail fan in a walled garden',
+    'deer at a forest edge with wildflowers', 'whale breaching near fishing boats',
+    'koi pond with lotus flowers and stepping stones',
+    'flamingos wading in a tropical lagoon', 'polar bear on ice with an aurora sky',
+    // still-life and decorative scenes
+    'vase of sunflowers on a tiled table by a window',
+    'bowl of fruit on a patterned cloth', 'teapot and cups on a folk-art runner',
+    'lantern on a porch with climbing roses',
+    'bicycle against a wall with flowers in the basket and market stalls behind',
+    'rocking chair on a wooden porch overlooking a garden',
+    // landscapes with layered elements
+    'rolling hills at sunset with a village nestled below',
+    'lavender field at dawn with a farmhouse',
+    'tulip field in rows with a windmill behind',
+    'sunflower field with a red barn under a blue sky',
+    'vineyard terrace at dusk with a chateau', 'harbour with fishing boats and dockside buildings',
+    'beach scene with umbrellas, towels and swimmers',
+    'snowy pine forest with a cabin and aurora',
+    // busier scenes — lots of small flat-colour elements
+    'village market square with stalls, awnings and shoppers',
+    'circus tent in a town square with crowds and bunting',
+    'harvest festival with stalls, bunting and families',
+    'canal town with layered rooftops and boats',
+    'alpine village with chalets, skiers and pine trees',
+    'seaside promenade with beach huts, strollers and gulls',
+    'old town plaza with cafes, trees and passers-by',
+    'carnival parade through a decorated street',
+    'rooftop view across a tiled city',
+    'botanical scene with layered plants, butterflies and birds',
+    'forest clearing with animals gathered around a stream',
+    'tea plantation with workers, baskets and mountains behind',
+    // folk-art / decorative patterns
+    'stained glass flower panel', 'mandala with 8-fold symmetry',
+    'folk-art tree of life with birds and fruit',
+    'talavera plate pattern with central motif',
     'paper-cut bird and flower motif', 'quilted heart block',
-    // architectural (single structure, not a whole town)
-    'little red barn in snow', 'windmill at sunset',
-    'lonely lighthouse at night with moon', 'simple church steeple against sky',
+    // architectural
+    'red barn in snow with pine trees', 'windmill at sunset over tulip fields',
+    'lighthouse at night with moon and sailboats',
+    'church steeple against sky with cottages below',
   ],
 
   location: [
@@ -218,9 +240,11 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   ],
 
   state: [
-    'bold', 'clean', 'vivid', 'vibrant', 'saturated', 'flat-shaded',
+    'bold', 'vivid', 'vibrant', 'saturated', 'flat-shaded',
     'poster-like', 'graphic', 'high-contrast', 'colour-blocked', 'cel-shaded',
-    'posterised', 'simplified', 'stylised', 'decorative',
+    'posterised', 'stylised', 'decorative', 'detailed but flat',
+    'intricate in silhouette', 'densely composed but clean-edged',
+    'layered flat shapes',
   ],
 
   lighting: [
@@ -331,44 +355,35 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'Depict a bold, uncluttered scene built from big, confident flat-colour shapes. Favour a single strong subject (a lighthouse, a stag, a vase of flowers, a sailboat, a simple stained-glass panel) centred against a supporting backdrop. Think of a good paint-by-numbers kit or a mid-century travel poster: clean silhouettes, obvious foreground / midground / sky, maybe one or two accent elements. Shapes should be medium-sized and clearly nameable — a whole mountain, a whole flower head, a whole bird, a whole roof — not micro-detail that dissolves into noise.',
+      'A vivid scene rendered as flat, unmixed colour panels with crisp hard edges between every region — the visual language of a mid-century travel poster, a screen-printed folk-art illustration, or a bold cel-shaded storybook painting. The scene may be a single hero subject against a supporting backdrop, or a busy composition packed with characters, buildings, plants, and objects. Small details — riggings, leaves, windows, flags, figures, petals, patterned roofs — are welcome, each rendered as a confident flat shape in its own solid colour.',
     qualityTarget:
-      'CRITICAL: the final image will be quantized to exactly 16 flat colours and painted by hand cell-by-cell. Aim for roughly 30–60 distinct, hand-paintable regions total, not hundreds. Most regions should be medium-sized (takes several dozen cells each); a handful of small accent shapes are fine, but no fields of micro-detail, no tiny repeated patterns, no dense filigree, no busy backgrounds crowded with small elements. Think of the image as a paint-by-numbers template an adult could complete in an hour, not a hyperdetailed illuminated manuscript. Flat colour fills with crisp edges, no gradients, no speckle, no photographic grain. Leave generous "breathing room" in skies, water, walls, or foliage — broad calm areas make the busier focal points land.',
+      'The final image will be quantized to roughly 16 flat colours and painted cell-by-cell, so every shape — large or small — should read as a single solid colour panel meeting its neighbours along a crisp hard edge. Think woodblock print or screen print: bold silhouettes, clean colour separation, flat fills. Small detail shapes stay at least a handful of cells wide in a ~100×75 grid so each lands as a paintable chip. A crowded market of confident flat shapes reads beautifully; a soft minimalist wash does not.',
   },
 }
 
-// Step-by-step prompt structure per Google best practices:
-// Each section builds on the last — subject/context first, then environment,
-// then render instructions. Order is fixed for clarity, not shuffled.
-
-const PROMPT_CONTEXT_TEMPLATES = [
-  'Create a vivid, detailed illustration.',
-  'Generate a vivid, detailed illustration.',
-  'Produce a vivid, detailed illustration.',
+// Narrative templates weave the descriptor slots into prose rather than a
+// labelled keyword list. Google's Nano Banana guide is explicit that narrative
+// description outperforms "concept: X; location: Y" style lists.
+const PROMPT_NARRATIVE_TEMPLATES = [
+  'The scene features {stateArticle} {state} {concept} set in {locationPhrase}, bathed in {lighting}. The overall atmosphere feels {mood}. Render it in {style}, using {palette}.',
+  'Depict {stateArticle} {state} {concept} in {locationPhrase}, under {lighting} and with {mood} energy throughout. Paint it in {style}, anchored by {palette}.',
+  'Show {stateArticle} {state} {concept} in {locationPhrase}. Light it with {lighting} and give the image {mood} atmosphere throughout. Render in {style}, using {palette}.',
 ] as const
 
-const PROMPT_SUBJECT_TEMPLATES = [
-  'First, establish the subject and scene: {composition}',
-  'Begin with the subject and setting: {composition}',
-  'Start by defining the scene: {composition}',
-] as const
-
-const PROMPT_DESCRIPTOR_INTRO_TEMPLATES = [
-  'Then apply these visual properties:',
-  'Next, apply the following properties:',
-  'Apply these specific visual qualities:',
-] as const
-
-const PROMPT_QUALITY_TEMPLATES = [
-  'Finally, ensure rendering quality: {quality}',
-  'For the final render: {quality}',
-  'Rendering requirement: {quality}',
+// Diamond concepts ("stag in a coastal meadow with boats in the bay",
+// "lighthouse on a cliff") already embed their setting, so the diamond
+// narrative omits the {location} slot to avoid redundant or contradictory
+// phrasing like "…in a coastal meadow set in a hillside".
+const PROMPT_NARRATIVE_TEMPLATES_DIAMOND = [
+  'Depict {stateArticle} {state} {concept}, lit by {lighting} and carrying {mood} energy throughout. Render it in {style}, using {palette}.',
+  'Show {stateArticle} {state} {concept} under {lighting}, with {mood} atmosphere overall. Paint it in {style}, anchored by {palette}.',
+  'The scene features {stateArticle} {state} {concept}, bathed in {lighting}. The overall atmosphere feels {mood}. Render in {style}, using {palette}.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES = [
-  'Output: one landscape 4:3 image , fully edge-to-edge composition with no borders, frames, or vignettes. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image . The composition must fill the full frame with no decorative borders or edges. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
-  'Single 4:3 landscape image  only. Extend the scene to every edge — the composition should contain no frames, borders, or vignetting. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+  'Output: one landscape 4:3 image that fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 image with the composition extending to every edge of the frame. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape image, the scene extending to every edge so it fills the full frame. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 // Polygram output templates reinforce orientation rather than edge-to-edge fill.
@@ -376,15 +391,15 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
-  'Output: one landscape 4:3 image built from a handful of bold, confident flat-colour shapes — think mid-century travel poster or a classic paint-by-numbers kit. Each region must be large enough to stay readable after the image is downsampled to a ~100×75 cell grid at 16 flat colours. Do NOT pack the frame with fine detail, micro-patterns, filigree, or many tiny elements — those pixelate into unreadable mush. Keep skies, water, walls, and foliage broad and calm; let the hero subject read clearly. No gradients, no soft blends, no noise. No borders or frames. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image that reads clearly at low resolution. Use roughly 30–60 flat-colour regions total, most of them medium to large — a whole mountain, a whole roof, a whole flower head — not crowds of tiny motifs. Fine detail will be dropped by the 16-colour quantization and ~100×75 cell grid, so anything smaller than a cell or two just becomes speckle. Shapes should be nameable at a glance. No smooth gradients, no soft blending, no fine noise or photographic grain. No borders or frames. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
-  'Single 4:3 landscape image only, designed to survive pixelation. Favour a small number of big, clean flat-colour shapes with crisp edges — imagine the result rendered as ~7500 painted cells at 16 colours and make every shape big enough that each cell belongs obviously to one region. Avoid busy backgrounds, intricate patterning, and small repeated elements. No gradients, no blending, no noise. No borders or frames. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+  'Output: one landscape 4:3 image rendered as flat-colour panels with crisp hard edges — the visual language of a screen print, travel poster, or cel-shaded illustration. Every region, large or small, is a single solid colour meeting its neighbours along a clean boundary. Small details (leaves, birds, figures, flags, windows) each stay at least a few cells wide in a ~100×75 grid. The composition fills the full frame. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 image built from clean flat-colour shapes separated by crisp edges, rendered in a tight ~16-colour palette. The composition can be busy or spare; every shape — from a whole sky down to a single petal — reads as one solid panel of colour. Small accents stay paintable in a ~100×75 cell grid. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape image, designed to survive quantization to ~16 flat colours on a ~100×75 cell grid. Use clean flat-colour shapes with crisp boundaries at every scale — a crowded festival of confident silhouettes is ideal. Keep the smallest shapes at least a couple of cells wide. Compose edge to edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 image . The directional lines, shadows, and tonal gradient must be clearly readable across the whole image. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. Do not include any text, titles, labels, watermarks, signatures, or lettering of any kind anywhere in the image.',
-  'Deliver a single landscape 4:3 image . Ensure perspective lines, cast shadows, and top-to-bottom tonal variation are strong and unambiguous throughout the full frame. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. The image must contain absolutely no text, titles, captions, watermarks, signatures, or any form of writing.',
-  'Single 4:3 landscape image  only. The orientation cues — converging lines, directional shadows, vertical gradient — must be vivid and consistent across the entire composition. No borders or frames. Use heavy line work, ink work, or a stained glass style to define shapes. Exclude all text, titles, labels, watermarks, signatures, and lettering from the image entirely.',
+  'Output: one landscape 4:3 image with directional lines, shadows, and tonal gradient reading clearly across the whole composition. Use heavy line work, ink work, or a stained glass style to define shapes. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 image with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. Use heavy line work, ink work, or a stained glass style to define shapes. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape image with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. Use heavy line work, ink work, or a stained glass style to define shapes. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -485,48 +500,56 @@ function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet
 }
 
 // ---------------------------------------------------------------------------
-// Prompt builder — assembles one prompt from a coherent DescriptorSet
-// Step-by-step structure per Google best practices: context → subject →
-// visual properties → quality → output format. Order is fixed, not shuffled,
-// so each instruction builds clearly on the last.
+// Prompt builder — assembles one narrative prompt from a DescriptorSet.
+// Structured as: composition + camera → descriptor narrative → quality
+// target → output format. No meta-scaffolding ("First,", "Finally,") — the
+// model doesn't need a procedure, it needs a scene description.
 // ---------------------------------------------------------------------------
 
 function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string {
   const intent = CATEGORY_PROMPT_INTENTS[category]
 
-  // Step 1: context — tell the model the purpose of the image
-  const contextLine = pickRandom(PROMPT_CONTEXT_TEMPLATES)
+  const subjectLine = `${intent.composition} Use ${vowelArticle(set.camera)} ${set.camera}.`
 
-  // Step 2: subject — composition intent with camera framing
-  const subjectLine = pickRandom(PROMPT_SUBJECT_TEMPLATES)
-    .replace('{composition}', intent.composition)
-    + ` Use a ${set.camera}.`
+  const narrativeTemplate = category === 'diamond'
+    ? pickRandom(PROMPT_NARRATIVE_TEMPLATES_DIAMOND)
+    : pickRandom(PROMPT_NARRATIVE_TEMPLATES)
 
-  // Step 3: visual properties — one specific value per role, clearly labelled
-  const descriptorIntro = pickRandom(PROMPT_DESCRIPTOR_INTRO_TEMPLATES)
-  const descriptorLine = [
-    descriptorIntro,
-    `concept: ${set.concept};`,
-    `location: ${set.location};`,
-    `state: ${set.state};`,
-    `lighting: ${set.lighting};`,
-    `mood: ${set.mood};`,
-    `style: ${set.style};`,
-    `colour palette: ${set.palette}.`,
-  ].join(' ')
+  const narrativeLine = narrativeTemplate
+    .replace('{stateArticle}', vowelArticle(set.state))
+    .replace('{state}', set.state)
+    .replace('{concept}', set.concept)
+    .replace('{locationPhrase}', locationPhrase(set.location))
+    .replace('{lighting}', set.lighting)
+    .replace('{mood}', stripMoodSuffix(set.mood))
+    .replace('{style}', set.style)
+    .replace('{palette}', set.palette)
 
-  // Step 4: quality target
-  const qualityLine = pickRandom(PROMPT_QUALITY_TEMPLATES)
-    .replace('{quality}', intent.qualityTarget)
+  const qualityLine = intent.qualityTarget
 
-  // Step 5: output format
   const outputLine = category === 'polygram'
     ? pickRandom(PROMPT_OUTPUT_TEMPLATES_POLYGRAM)
     : category === 'diamond'
     ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
     : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
-  return [contextLine, subjectLine, descriptorLine, qualityLine, outputLine].join(' ')
+  return [subjectLine, narrativeLine, qualityLine, outputLine].join(' ')
+}
+
+function vowelArticle(word: string): string {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a'
+}
+
+function stripMoodSuffix(mood: string): string {
+  return mood.replace(/\s+(mood|tone|feel)$/i, '')
+}
+
+// Plurals like "cliffs" or "rooftops" take "the", not "a/an". "sky" reads
+// more naturally with "the" as well.
+function locationPhrase(location: string): string {
+  if (location === 'sky') return 'the sky'
+  if (/s$/.test(location) && !/ss$/.test(location)) return `the ${location}`
+  return `${vowelArticle(location)} ${location}`
 }
 
 // ---------------------------------------------------------------------------
