@@ -1379,9 +1379,10 @@ function renderLeaderboardRow({ rank, elapsedMs, playerGuid, isMe, isBest, extra
   if (extraClass) classes.push(extraClass)
   return `
     <tr class="${classes.join(' ')}" data-player-guid="${playerGuid}">
-      <td class="lb-rank">${isBest ? LEADERBOARD_STAR_SVG : ''}<span class="lb-rank-num">#${rank}</span></td>
+      <td class="lb-rank"><span class="lb-rank-num">#${rank}</span></td>
       <td class="lb-time">${time}</td>
       <td class="lb-player">${label}</td>
+      <td class="lb-best">${isBest ? LEADERBOARD_STAR_SVG : ''}</td>
     </tr>`
 }
 
@@ -1438,7 +1439,7 @@ function showCompletionOverlay({
         <h3>Leaderboard</h3>
         <div class="lb-scroll" id="lb-scroll">
           <table class="lb-table">
-            <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
+            <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
@@ -1448,6 +1449,7 @@ function showCompletionOverlay({
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
               <td class="lb-time">${submissionTime}</td>
               <td class="lb-player">${submissionLabel}</td>
+              <td class="lb-best" aria-hidden="true"></td>
             </tr>
           </tbody>
         </table>
@@ -1809,13 +1811,13 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         isBest: e.playerGuid === playerGuid,
       })).join('')
 
+      // Sheet-body already scrolls — don't wrap in .lb-scroll (the inner
+      // cap would clip the list at 15rem in landscape).
       container.innerHTML = `
-        <div class="lb-scroll">
-          <table class="lb-table">
-            <thead><tr><th></th><th>Time</th><th>Player</th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
+        <table class="lb-table">
+          <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
       `
     })
     .catch(() => {
