@@ -3681,9 +3681,12 @@ h1 {
 
 .lb-player {
   text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Allow long names (e.g. Anon-543e4fb8, or a custom handle someone
+     picked) to wrap onto a second line rather than get clipped with
+     an ellipsis. Row height grows to fit; columns still align because
+     .lb-table uses table-layout: fixed with explicit widths on the
+     other columns. */
+  word-break: break-word;
 }
 
 .leaderboard-row-me,
