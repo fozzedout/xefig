@@ -713,7 +713,13 @@ async function loadDateDetails() {
 
   setStatus(`Loading ${date}...`, 'working')
   try {
-    const response = await fetch(apiUrl(`/api/puzzles/${encodeURIComponent(date)}`))
+    // Bypass CF edge cache (s-maxage=300 on /api/puzzles/:date) so admin
+    // sees regenerated images immediately. Unique query → edge miss;
+    // no-store → browser won't serve its own cached copy either.
+    const response = await fetch(
+      apiUrl(`/api/puzzles/${encodeURIComponent(date)}?_=${Date.now()}`),
+      { cache: 'no-store' },
+    )
     const payload = await readJsonResponse(response)
     if (response.status === 404) {
       isExistingDate = false
