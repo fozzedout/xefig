@@ -3775,26 +3775,25 @@ h1 {
   border-bottom: 1px dashed color-mix(in srgb, var(--muted) 60%, transparent);
 }
 
-/* Trend arrow in the pinned row time cell. Points down for faster
-   than PB (good — times trending lower), up for slower, flat dash for
-   tied. Colored via its own color-mix so it stays visible even in the
-   muted ghost state. */
+/* Trend marker in the pinned row's right column (same slot as the
+   star for a best). Points UP for faster than PB (climbed the board),
+   DOWN for slower (fell down the board), flat dash for tied. */
 .lb-trend {
   display: inline-block;
-  font-size: 0.7em;
-  margin-right: 0.3em;
-  vertical-align: 0.08em;
+  font-size: 0.95em;
+  line-height: 1;
+  vertical-align: -0.1em;
 }
 
-.lb-trend-down {
+.lb-trend-better {
   color: #58d38a;
 }
 
-.lb-trend-up {
+.lb-trend-worse {
   color: #e87676;
 }
 
-.lb-trend-flat {
+.lb-trend-tied {
   color: var(--muted);
 }
 

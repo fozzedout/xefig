@@ -1432,13 +1432,13 @@ function renderArchivePage() {
 
 const LEADERBOARD_STAR_SVG = `<svg class="lb-star" viewBox="0 0 24 24" aria-label="Your best" role="img"><path d="M12 4 L14.351 8.763 L19.608 9.528 L15.804 13.237 L16.702 18.472 L12 16 L7.298 18.472 L8.196 13.237 L4.392 9.528 L9.649 8.763 Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>`
 
-// Resolve what to show in the Player column. The player's own rows read
-// "You" for self-reference; everyone else shows their profile name if
-// they've set one, or a consistent "Anon-XXXXXXXX" fallback derived
-// from their player_guid so they still have a stable handle.
+// Resolve what to show in the Player column. Self-reference: show the
+// player's name if they've set one, else fall back to "You". Other
+// players: profile name if set, else "Anon-XXXXXXXX" from the guid
+// prefix so they still have a stable handle.
 function displayPlayerName({ isMe, profileName, playerGuid }) {
-  if (isMe) return 'You'
   const name = (profileName || '').trim()
+  if (isMe) return name || 'You'
   if (name) return name
   return `Anon-${String(playerGuid || '').slice(0, 8)}`
 }
@@ -1498,11 +1498,20 @@ function showCompletionOverlay({
     const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
     const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
     const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
+
+    // Trend marker for the pinned row's right column. Slower = dropped
+    // down the board (▼), faster = climbed up (▲), tied = flat (—).
     const trendArrow = fasterThanPb
-      ? '<span class="lb-trend lb-trend-down" aria-label="faster than PB">▼</span>'
+      ? '<span class="lb-trend lb-trend-better" aria-label="faster than PB">▲</span>'
       : slowerThanPb
-        ? '<span class="lb-trend lb-trend-up" aria-label="slower than PB">▲</span>'
-        : '<span class="lb-trend lb-trend-flat" aria-label="same as PB">—</span>'
+        ? '<span class="lb-trend lb-trend-worse" aria-label="slower than PB">▼</span>'
+        : '<span class="lb-trend lb-trend-tied" aria-label="same as PB">—</span>'
+
+    // The user's own name if they've set one — used for their in-list
+    // row (local source of truth in case sync hasn't pushed yet), plus
+    // the pinned and ghost rows which are synthesised client-side.
+    const myProfileName = (getProfileName() || '').trim()
+    const myDisplayName = displayPlayerName({ isMe: true, profileName: myProfileName, playerGuid: myGuid })
 
     // Build the list rows. When this run is slower than the stored PB,
     // splice a ghost row into the visible list at the position it would
@@ -1515,7 +1524,7 @@ function showCompletionOverlay({
       rank: entry.rank,
       elapsedMs: entry.elapsedMs,
       playerGuid: entry.playerGuid,
-      profileName: entry.profileName,
+      profileName: entry.playerGuid === myGuid ? (myProfileName || entry.profileName) : entry.profileName,
       isMe: entry.playerGuid === myGuid,
       isBest: entry.playerGuid === myGuid,
     }))
@@ -1526,7 +1535,7 @@ function showCompletionOverlay({
         rank: submissionRank,
         elapsedMs: submissionElapsedMs,
         playerGuid: myGuid,
-        profileName: null,
+        profileName: myProfileName,
         isMe: true,
         isBest: false,
       })
@@ -1539,7 +1548,6 @@ function showCompletionOverlay({
       isMe: r.isMe,
       isBest: r.isBest,
       extraClass: r.kind === 'ghost' ? 'lb-row-ghost lb-row-ghost-inline' : '',
-      playerLabel: r.kind === 'ghost' ? 'You (this run)' : undefined,
       // Existing server ranks don't shift when we splice a ghost in,
       // so showing #26 on both the ghost and the real #26 reads as a
       // duplicate. Hide the ghost's rank — its list position is the rank.
@@ -1559,9 +1567,9 @@ function showCompletionOverlay({
           <tbody>
             <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
               <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
-              <td class="lb-time">${trendArrow} ${submissionTime}</td>
-              <td class="lb-player">You (this run)</td>
-              <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : ''}</td>
+              <td class="lb-time">${submissionTime}</td>
+              <td class="lb-player">${myDisplayName}</td>
+              <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : trendArrow}</td>
             </tr>
           </tbody>
         </table>
