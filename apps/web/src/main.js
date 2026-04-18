@@ -1456,6 +1456,10 @@ function showCompletionOverlay({
     `
   }
 
+  // Header reflects THIS attempt (the thing the player just did) so the
+  // time and rank numbers agree. The in-list starred row surfaces the
+  // stored best separately.
+  const headerRank = submissionRank ?? rank
   overlay.innerHTML = `
     <div class="completion-card">
       <h2>Puzzle Complete!</h2>
@@ -1465,7 +1469,7 @@ function showCompletionOverlay({
           <span class="stat-label">Time</span>
         </div>
         <div class="completion-stat">
-          <span class="stat-value">${rank ? `#${rank}` : '—'}</span>
+          <span class="stat-value">${headerRank ? `#${headerRank}` : '—'}</span>
           <span class="stat-label">Rank</span>
         </div>
       </div>
