@@ -1604,16 +1604,17 @@ canvas.slice-image {
   }
 
   /* Music on/off indicator: diagonal slash over the icon when off, plus
-     a colored accent when on. Visible in both collapsed and active state. */
-  .ls-default .more-card--music .music-off-slash {
-    opacity: 0;
+     a colored accent when on. Visible in both collapsed and active state.
+     The slash has opacity=0 inline on the SVG element so it's hidden by
+     default; CSS only flips it on when .is-off is set. */
+  .more-card--music .music-off-slash {
     transition: opacity 0.2s;
   }
-  .ls-default .more-card--music.is-off .music-off-slash {
-    opacity: 1;
+  .more-card--music.is-off .music-off-slash {
+    opacity: 1 !important;
     stroke: rgba(232,230,224,0.55);
   }
-  .ls-default .more-card--music.is-on {
+  .more-card--music.is-on {
     color: #8ad0a0;
   }
 

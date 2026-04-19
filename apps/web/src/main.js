@@ -1112,7 +1112,7 @@ function renderLauncher() {
                     <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
                     <ellipse cx="22" cy="44" rx="6" ry="4"/>
                     <ellipse cx="42" cy="40" rx="6" ry="4"/>
-                    <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round"/>
+                    <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round" opacity="0"/>
                   </svg>
                 </div>
                 <span class="more-card-label">Music: ${getMusicEnabled() ? 'On' : 'Off'}</span>
