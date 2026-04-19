@@ -105,5 +105,22 @@ for (const viewport of VIEWPORTS) {
       const topCard = geom.cards.reduce((a, b) => (a.rect.y < b.rect.y ? a : b))
       expect(topCard.rect.y).toBeGreaterThanOrEqual(geom.moreTitle.bottom - 2)
     }
+
+    // MORE title must be horizontally centered in the More slice (the More
+    // slice is narrower than a collapsed slice so it can't reuse the shared
+    // --slice-center that positions the other titles).
+    if (geom.moreTitle) {
+      const sliceMid = geom.moreSlice.x + geom.moreSlice.w / 2
+      const titleMid = geom.moreTitle.x + geom.moreTitle.w / 2
+      expect(Math.abs(sliceMid - titleMid)).toBeLessThan(1.5)
+    }
+
+    // Bottom More-card SVG must sit on the same row as the other slices'
+    // bottom icons (within a few px of rounding).
+    const lastCard = geom.cards[geom.cards.length - 1]
+    if (lastCard?.svg && geom.otherSliceIcons?.length) {
+      const otherBottom = geom.otherSliceIcons[0].rect.bottom
+      expect(Math.abs(lastCard.svg.bottom - otherBottom)).toBeLessThan(3)
+    }
   })
 }

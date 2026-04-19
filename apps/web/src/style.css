@@ -1489,6 +1489,13 @@ h1 {
     cursor: pointer;
   }
 
+  /* The More slice is narrower than a collapsed slice (flex 0.6 vs 0.8), so
+     --slice-center (= half a collapsed slice) overshoots its actual middle.
+     Use the slice's own 50% for the title and the cards' centering anchor. */
+  .ls-default .slice-more .slice-title {
+    left: 50%;
+  }
+
   /* Cards — stacked at bottom. Bottom offset matches .slice-icon so the
      bottommost card icon aligns horizontally with the icons of the other
      slices, and gap (no per-card margin) keeps spacing predictable. */
