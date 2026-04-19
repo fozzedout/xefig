@@ -1404,7 +1404,7 @@ export function createApp() {
       return c.env.STATIC_ASSETS.fetch(new Request(url, c.req.raw))
     }
     const isRootStaticAsset = /^\/[^/]+\.[a-z0-9]+$/i.test(pathname)
-    const isStaticAsset = isRootStaticAsset || pathname.startsWith('/assets/')
+    const isStaticAsset = isRootStaticAsset || pathname.startsWith('/assets/') || pathname.startsWith('/music/')
     if (isAppRoute || isStaticAsset) {
       const response = await c.env.STATIC_ASSETS.fetch(c.req.raw)
       if (response.status !== 404) {
