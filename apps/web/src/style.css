@@ -1986,8 +1986,6 @@ canvas.slice-image {
     overflow: hidden;
     writing-mode: vertical-lr;
     direction: rtl;
-    appearance: slider-vertical;
-    -webkit-appearance: slider-vertical;
   }
 
   .ls-default .slice-more.active .more-card-volume {
