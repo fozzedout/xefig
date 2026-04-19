@@ -626,6 +626,29 @@ h1 {
   background: rgba(240, 96, 80, 0.1);
 }
 
+.sync-now-btn {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e8e6e0;
+  background: rgba(80, 232, 160, 0.14);
+  border: 1px solid rgba(80, 232, 160, 0.4);
+  border-radius: 4px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+  margin-right: 0.4rem;
+}
+
+.sync-now-btn:hover {
+  background: rgba(80, 232, 160, 0.22);
+}
+
+.sync-now-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .sync-status {
   font-size: 0.75rem;
   min-height: 1.2em;

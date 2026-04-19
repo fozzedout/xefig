@@ -3177,6 +3177,7 @@ function renderSyncSettings() {
       </div>
       <p class="sync-hint">Enter this code on another device to sync your progress.</p>
       <div id="sync-status-msg" class="sync-status"></div>
+      <button type="button" id="sync-now-btn" class="sync-now-btn">Sync Now</button>
       <button type="button" id="sync-disable-btn" class="sync-disable-btn">Disable Sync</button>
     `
 
@@ -3197,6 +3198,31 @@ function renderSyncSettings() {
         setTimeout(() => { btn.textContent = 'Copy' }, 2000)
       } catch {
         // fallback
+      }
+    })
+
+    const syncNowBtn = syncEl.querySelector('#sync-now-btn')
+    const syncStatusEl = syncEl.querySelector('#sync-status-msg')
+    syncNowBtn.addEventListener('click', async () => {
+      syncNowBtn.disabled = true
+      const originalLabel = syncNowBtn.textContent
+      syncNowBtn.textContent = 'Syncing...'
+      syncStatusEl.textContent = ''
+      syncStatusEl.className = 'sync-status'
+      try {
+        await forcePush()
+        syncStatusEl.textContent = 'Synced.'
+        syncStatusEl.className = 'sync-status sync-status-ok'
+        // Re-render the launcher on next home-page visit so any newly-pulled
+        // completions show up. Triggering it now is safe because settings is
+        // an overlay on top of the launcher.
+        renderLauncher()
+      } catch (err) {
+        syncStatusEl.textContent = err?.message || 'Sync failed.'
+        syncStatusEl.className = 'sync-status sync-status-error'
+      } finally {
+        syncNowBtn.textContent = originalLabel
+        syncNowBtn.disabled = false
       }
     })
 
