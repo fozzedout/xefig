@@ -29,40 +29,46 @@ export type GemmaRewriter = (
 
 export type GemmaRewriteOutcome = {
   text: string | null
+  rawText: string | null
+  promptSent: string | null
   keyUsed: 'free' | 'paid' | null
   error: string | null
 }
 
-// Instructions the model should follow. For Gemini models this goes in
-// the top-level `systemInstruction` field (matching the two-role shape
-// the existing OpenRouter rewriter uses for instruction-following
-// models). For Gemma models — which don't accept `systemInstruction` —
-// we inline this as a prefix on the user turn.
-const SYSTEM_RUBRIC = [
-  'You are a creative writer specializing in vivid scene descriptions.',
-  'Transform the given image scene into a single cohesive paragraph that reads as a concrete visual description.',
-  'Invent concrete sensory details, textures, and atmosphere. Do not just reword the input.',
-  'Return ONLY the rewritten descriptive paragraph. No preamble, no explanation, no markdown, no bullet points, no drafts.',
+// Match the OpenRouter rewriter's system + user prompt byte-for-byte
+// (see apps/worker/src/lib/prompt-rewriter.ts) so that swapping models
+// is the only variable. Gemma's API doesn't accept `systemInstruction`
+// for real, so for Gemma we concatenate the system text onto the user
+// turn with a blank line between; for Gemini models we use the
+// systemInstruction field and preserve the two-role shape.
+const SYSTEM_MESSAGE = [
+  'You are a creative writer specializing in vivid scene descriptions. You will be given a structured image prompt and its associated metadata.',
+  'Your task is to transform the descriptive elements into a single, cohesive, and highly imaginative paragraph.',
+  'Do not just reword the input; invent concrete sensory details, textures, and atmosphere that bring the scene to life.',
+  'Use the provided Theme and Keywords as high-level creative direction to ensure the scene reflects the intended mood and subject.',
+  'Return ONLY the rewritten descriptive paragraph. No technical instructions, no preamble, no explanation, no markdown.',
 ].join(' ')
 
 function isGeminiModel(model: string): boolean {
   return /^gemini[-\s]/i.test(model.trim())
 }
 
-function buildUserTurn(descriptive: string, context: GemmaRewriteContext, inlineSystem: boolean): string {
-  const hints: string[] = []
-  if (context.theme) hints.push(`Theme: ${context.theme}`)
-  if (Array.isArray(context.keywords) && context.keywords.length > 0) {
-    hints.push(`Keywords: ${context.keywords.join(', ')}`)
-  }
-  const hintBlock = hints.length > 0 ? `${hints.join('\n')}\n\n` : ''
+function buildUserMessage(descriptive: string, context: GemmaRewriteContext): string {
+  const themeCtx = context.theme ? `Theme: ${context.theme}` : ''
+  const keywordsCtx =
+    Array.isArray(context.keywords) && context.keywords.length > 0
+      ? `Keywords: ${context.keywords.join(', ')}`
+      : ''
 
-  // Gemini: system rubric sits in systemInstruction, user turn is just
-  // the brief. Gemma: user turn has to include the rubric.
-  if (inlineSystem) {
-    return `Rewrite the following image scene as a single vivid descriptive paragraph. Output only the paragraph.\n\n${descriptive}`
-  }
-  return `${hintBlock}${descriptive}`
+  return [
+    `Category: ${context.category}`,
+    themeCtx,
+    keywordsCtx,
+    '--- Structured Prompt ---',
+    descriptive,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 function isQuotaError(status: number, body: GenerateContentResponse | null): boolean {
@@ -213,27 +219,34 @@ async function callGemmaOnce(
   model: string,
   descriptive: string,
   context: GemmaRewriteContext,
-): Promise<{ text: string | null; status: number; body: GenerateContentResponse | null; rawBody: string }> {
+): Promise<{
+  text: string | null
+  status: number
+  body: GenerateContentResponse | null
+  rawBody: string
+  promptSent: string
+}> {
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
 
+  const userMessage = buildUserMessage(descriptive, context)
   const useSystemInstruction = isGeminiModel(model)
+
+  // For Gemma the system message is concatenated onto the user turn; for
+  // Gemini it goes into the systemInstruction field. Either way the
+  // generationConfig matches the OpenRouter rewriter (temp 1, 1024 toks).
   const userText = useSystemInstruction
-    ? buildUserTurn(descriptive, context, false)
-    : // Gemma: inline the rubric + hints in the user turn.
-      `${SYSTEM_RUBRIC}\n\n${buildUserTurn(descriptive, context, true)}`
+    ? userMessage
+    : `${SYSTEM_MESSAGE}\n\n${userMessage}`
 
   const requestBody: Record<string, unknown> = {
     contents: [{ role: 'user', parts: [{ text: userText }] }],
     generationConfig: {
-      // Keep temperature high (1.0) for creative variety per request —
-      // the "one paragraph only" discipline is enforced by the rubric
-      // and by the post-processor that strips any scratchpad leakage.
       temperature: 1,
-      maxOutputTokens: 500,
+      maxOutputTokens: 1024,
     },
   }
   if (useSystemInstruction) {
-    requestBody.systemInstruction = { parts: [{ text: SYSTEM_RUBRIC }] }
+    requestBody.systemInstruction = { parts: [{ text: SYSTEM_MESSAGE }] }
   }
 
   const response = await fetch(url, {
@@ -246,11 +259,11 @@ async function callGemmaOnce(
   const parsed = parseJsonSafely<GenerateContentResponse>(rawBody)
 
   if (!response.ok) {
-    return { text: null, status: response.status, body: parsed, rawBody }
+    return { text: null, status: response.status, body: parsed, rawBody, promptSent: userText }
   }
 
   const text = extractText(parsed)
-  return { text: text || null, status: response.status, body: parsed, rawBody }
+  return { text: text || null, status: response.status, body: parsed, rawBody, promptSent: userText }
 }
 
 export async function rewriteWithGemma(
@@ -267,20 +280,36 @@ export async function rewriteWithGemma(
   if (paidKey && paidKey !== freeKey) attempts.push({ key: paidKey, label: 'paid' })
 
   if (attempts.length === 0) {
-    return { text: null, keyUsed: null, error: 'No Google AI API key configured.' }
+    return {
+      text: null,
+      rawText: null,
+      promptSent: null,
+      keyUsed: null,
+      error: 'No Google AI API key configured.',
+    }
   }
 
   let lastError: string | null = null
+  let lastPromptSent: string | null = null
+  let lastRaw: string | null = null
 
   for (let i = 0; i < attempts.length; i++) {
     const { key, label } = attempts[i]
     try {
       const result = await callGemmaOnce(key, model, descriptive, context)
+      lastPromptSent = result.promptSent
+      lastRaw = result.text
 
       if (result.text) {
         const cleaned = cleanRewrite(result.text)
         if (cleaned) {
-          return { text: cleaned, keyUsed: label, error: null }
+          return {
+            text: cleaned,
+            rawText: result.text,
+            promptSent: result.promptSent,
+            keyUsed: label,
+            error: null,
+          }
         }
         lastError = `${label} key returned empty text`
         continue
@@ -295,19 +324,37 @@ export async function rewriteWithGemma(
       const shouldFallback =
         i < attempts.length - 1 && isQuotaError(result.status, result.body)
       if (!shouldFallback) {
-        return { text: null, keyUsed: label, error: lastError }
+        return {
+          text: null,
+          rawText: result.text,
+          promptSent: result.promptSent,
+          keyUsed: label,
+          error: lastError,
+        }
       }
       console.warn(`[gemma-rewriter] ${label} key quota-exhausted, falling back to paid key`)
     } catch (err) {
       lastError = `${label} key request error: ${err instanceof Error ? err.message : String(err)}`
       // Network errors — try the next key if we have one.
       if (i === attempts.length - 1) {
-        return { text: null, keyUsed: label, error: lastError }
+        return {
+          text: null,
+          rawText: lastRaw,
+          promptSent: lastPromptSent,
+          keyUsed: label,
+          error: lastError,
+        }
       }
     }
   }
 
-  return { text: null, keyUsed: null, error: lastError }
+  return {
+    text: null,
+    rawText: lastRaw,
+    promptSent: lastPromptSent,
+    keyUsed: null,
+    error: lastError,
+  }
 }
 
 // Convenience factory: returns a rewriter bound to `env` for passing into

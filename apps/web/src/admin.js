@@ -1981,6 +1981,8 @@ const testGemmaKeyChip = document.getElementById('test-gemma-key-chip')
 const testGemmaModelChip = document.getElementById('test-gemma-model-chip')
 const testGemmaTimeChip = document.getElementById('test-gemma-time-chip')
 const testGemmaInput = document.getElementById('test-gemma-input')
+const testGemmaPromptSent = document.getElementById('test-gemma-prompt-sent')
+const testGemmaRaw = document.getElementById('test-gemma-raw')
 const testGemmaOutput = document.getElementById('test-gemma-output')
 const testGemmaErrorWrap = document.getElementById('test-gemma-error-wrap')
 const testGemmaError = document.getElementById('test-gemma-error')
@@ -2045,6 +2047,8 @@ async function runGemmaTest(ev) {
         keyUsed: payload?.keyUsed || null,
         elapsedMs: clientMs,
         input: payload?.input || descriptive || '(no input)',
+        promptSent: payload?.promptSent || null,
+        rawOutput: payload?.rawOutput || null,
         output: null,
         error: msg,
       })
@@ -2086,6 +2090,8 @@ async function runGemmaTest(ev) {
       keyUsed,
       elapsedMs: serverMs,
       input: payload?.input || '(no input)',
+      promptSent: payload?.promptSent || null,
+      rawOutput: payload?.rawOutput || null,
       output: payload?.output || null,
       error: payload?.error || null,
     })
@@ -2099,6 +2105,8 @@ async function runGemmaTest(ev) {
       keyUsed: null,
       elapsedMs: Math.round(performance.now() - started),
       input: descriptive || '(no input)',
+      promptSent: null,
+      rawOutput: null,
       output: null,
       error: msg,
     })
@@ -2125,6 +2133,8 @@ function renderTestGemmaResult(r) {
   testGemmaModelChip.textContent = `model: ${r.model}`
   testGemmaTimeChip.textContent = `${r.elapsedMs} ms`
   testGemmaInput.textContent = r.input || ''
+  if (testGemmaPromptSent) testGemmaPromptSent.textContent = r.promptSent || '(not captured)'
+  if (testGemmaRaw) testGemmaRaw.textContent = r.rawOutput || '(not captured)'
   testGemmaOutput.textContent = r.output || '(no output)'
   if (r.error) {
     testGemmaErrorWrap.hidden = false

@@ -766,6 +766,8 @@ export function createApp() {
       elapsedMs,
       input: descriptive,
       output: outcome.text,
+      rawOutput: outcome.rawText,
+      promptSent: outcome.promptSent,
       error: outcome.error,
       haveFreeKey: Boolean((c.env.GOOGLE_AI_FREE_API_KEY || '').trim()),
       havePaidKey: Boolean((c.env.GOOGLE_AI_API_KEY || '').trim()),
