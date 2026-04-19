@@ -1631,6 +1631,7 @@ canvas.slice-image {
     cursor: pointer;
     transition: opacity 0.3s 0.1s;
     overflow: hidden;
+    touch-action: none;
   }
 
   .ls-default .slice-more.active .more-card--music {
@@ -1987,6 +1988,7 @@ canvas.slice-image {
     overflow: hidden;
     writing-mode: vertical-lr;
     direction: rtl;
+    touch-action: none;
   }
 
   .ls-default .slice-more.active .more-card-volume {

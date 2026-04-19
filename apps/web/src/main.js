@@ -263,9 +263,31 @@ function ensureMusicAudio() {
   musicAudio = new Audio(MUSIC_TRACKS[lastTrackIndex])
   musicAudio.loop = false
   musicAudio.volume = getMusicVolume()
+  musicAudio.preload = 'auto'
   nextTrackIndex = pickRandomTrackIndex(lastTrackIndex)
   prefetchTrack(nextTrackIndex)
+  let recentEndedCount = 0
+  let recentEndedTimer = null
   musicAudio.addEventListener('ended', () => {
+    // Detect 'ended'-loops: iOS can fire spurious end events while the
+    // Web Audio graph is warming up, and our src-swap + replay here would
+    // cascade into a fraction-of-a-second stutter. Bail if we see too
+    // many ends in a short window.
+    recentEndedCount++
+    if (recentEndedTimer) clearTimeout(recentEndedTimer)
+    recentEndedTimer = setTimeout(() => { recentEndedCount = 0 }, 5000)
+    if (recentEndedCount > 4) {
+      musicShouldPlay = false
+      return
+    }
+    // Guard against a single spurious end: if playback barely advanced
+    // past the start, the element probably didn't actually finish.
+    if (musicAudio.currentTime < 1) {
+      if (musicShouldPlay) {
+        setTimeout(() => musicAudio.play().catch(() => {}), 300)
+      }
+      return
+    }
     lastTrackIndex = nextTrackIndex
     musicAudio.src = MUSIC_TRACKS[lastTrackIndex]
     if (musicShouldPlay) musicAudio.play().catch(() => {})
