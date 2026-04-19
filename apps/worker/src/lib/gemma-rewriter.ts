@@ -33,22 +33,17 @@ export type GemmaRewriteOutcome = {
   error: string | null
 }
 
-// Gemma IT models don't accept a `systemInstruction` role and tend to echo
-// long preambles back to the user. Keep instructions short and use an
-// "Input: … Rewritten paragraph:" continuation frame — the model fills
-// the blank line directly instead of restating the rubric or drafting.
-const INSTRUCTION_LINE =
-  'Rewrite the image-generation scene below into a single vivid paragraph (one paragraph only; no bullets, labels, drafts, or preamble). The image is full-bleed with no borders or frames — describe only what lives inside the scene.'
-
-function buildUserPrompt(descriptive: string, context: GemmaRewriteContext): string {
-  const hints: string[] = []
-  if (context.theme) hints.push(`Theme: ${context.theme}`)
-  if (Array.isArray(context.keywords) && context.keywords.length > 0) {
-    hints.push(`Keywords: ${context.keywords.join(', ')}`)
-  }
-  const hintBlock = hints.length > 0 ? `\n${hints.join('\n')}\n` : ''
-
-  return `${INSTRUCTION_LINE}\n${hintBlock}\nInput:\n${descriptive}\n\nRewritten paragraph:\n`
+// Keep the wrapper as small as physically possible — Gemma IT variants
+// echo anything structural (Theme:/Keywords:/Input:/Output: labels, meta
+// rules, rubrics) back as "content to describe". The full-bleed / no-text
+// constraints live in the technical half we re-attach after rewrite, so
+// Gemma doesn't need to be told about them here. Theme + keywords are
+// already implicit in the descriptive text (it was generated from them).
+//
+// This matches what a clean AI-Studio-chat rewrite looks like: a one-line
+// ask followed by the text, nothing else.
+function buildUserPrompt(descriptive: string, _context: GemmaRewriteContext): string {
+  return `Rewrite the following image scene as a single vivid descriptive paragraph. Add sensory texture and concrete detail. Output only the paragraph.\n\n${descriptive}`
 }
 
 function isQuotaError(status: number, body: GenerateContentResponse | null): boolean {
