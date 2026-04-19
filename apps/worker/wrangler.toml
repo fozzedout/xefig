@@ -34,6 +34,7 @@ name = "SEND_EMAIL"
 
 [vars]
 OPENROUTER_MODEL = "mistralai/ministral-3-3b"
+GEMMA_REWRITE_MODEL = "gemma-4-31b-it"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
 
 # ─── Beta environment ────────────────────────────────────────────────
@@ -92,4 +93,5 @@ name = "SEND_EMAIL"
 IS_BETA = "true"
 UPSTREAM_PUZZLE_ORIGIN = "https://xefig.com"
 OPENROUTER_MODEL = "mistralai/ministral-3-3b"
+GEMMA_REWRITE_MODEL = "gemma-4-31b-it"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
