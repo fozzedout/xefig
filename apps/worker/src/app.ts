@@ -722,6 +722,51 @@ export function createApp() {
     }
   })
 
+  app.get('/api/admin/prompts/list-gemma-models', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const freeKey = (c.env.GOOGLE_AI_FREE_API_KEY || '').trim()
+    const paidKey = (c.env.GOOGLE_AI_API_KEY || '').trim()
+    const key = freeKey || paidKey
+    if (!key) {
+      return c.json({ error: 'No Google AI API key configured.' }, 500)
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${key}`
+    const r = await fetch(url)
+    const body = await r.text()
+    if (!r.ok) {
+      return c.json({ error: `HTTP ${r.status}`, body: body.slice(0, 2000) }, 502)
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(body)
+    } catch {
+      return c.json({ error: 'non-JSON response', body: body.slice(0, 2000) }, 502)
+    }
+
+    const models = (parsed as { models?: Array<Record<string, unknown>> })?.models ?? []
+    const filtered = models
+      .map((m) => ({
+        name: typeof m.name === 'string' ? m.name.replace(/^models\//, '') : '',
+        displayName: typeof m.displayName === 'string' ? m.displayName : '',
+        methods: Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [],
+      }))
+      .filter(
+        (m) =>
+          /gemma|gemini/i.test(m.name) &&
+          (m.methods as string[]).includes('generateContent'),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return c.json({ ok: true, keyUsed: freeKey ? 'free' : 'paid', count: filtered.length, models: filtered })
+  })
+
   app.post('/api/admin/prompts/test-gemma', async (c) => {
     const token = getCookie(c, ADMIN_SESSION_COOKIE)
     if (!(await hasAdminSession(c.env, token))) {
