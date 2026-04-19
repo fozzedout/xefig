@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v5'
+const CACHE_NAME = 'xefig-v6'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -10,11 +10,21 @@ self.addEventListener('install', (event) => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  )
+  event.waitUntil((async () => {
+    const keys = await caches.keys()
+    const current = await caches.open(CACHE_NAME)
+    await Promise.all(keys.filter((k) => k !== CACHE_NAME).map(async (oldKey) => {
+      const oldCache = await caches.open(oldKey)
+      const reqs = await oldCache.keys()
+      await Promise.all(reqs.map(async (req) => {
+        if (new URL(req.url).pathname.startsWith('/music/')) {
+          const res = await oldCache.match(req)
+          if (res) await current.put(req, res)
+        }
+      }))
+      await caches.delete(oldKey)
+    }))
+  })())
   self.clients.claim()
 })
 

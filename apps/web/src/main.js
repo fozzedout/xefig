@@ -55,6 +55,7 @@ const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
 // is completable under a second, so anything below is a bug artifact.
 const MIN_PLAUSIBLE_ELAPSED_MS = 1000
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
+const MUSIC_ENABLED_KEY = 'xefig:music-enabled:v1'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
 const PUZZLE_FETCH_TIMEOUT_MS = 8000
@@ -91,6 +92,14 @@ function getGlobalBoardColorIndex() {
 
 function setGlobalBoardColorIndex(index) {
   localStorage.setItem(BOARD_COLOR_KEY, String(index))
+}
+
+function getMusicEnabled() {
+  return localStorage.getItem(MUSIC_ENABLED_KEY) === '1'
+}
+
+function setMusicEnabled(enabled) {
+  localStorage.setItem(MUSIC_ENABLED_KEY, enabled ? '1' : '0')
 }
 
 function applyLandscapeLayout() {
@@ -162,6 +171,94 @@ let autosaveIntervalId = null
 let gameVisibilityBound = false
 const playerGuid = getPlayerGuid()
 cleanupBadCompletedRuns()
+
+const MUSIC_TRACKS = [
+  '/music/evening-homecoming.mp3',
+  '/music/weightless.mp3',
+  '/music/fireside.mp3',
+  '/music/morning-window.mp3',
+  '/music/gentle-wandering.mp3',
+  '/music/wool-sweater.mp3',
+  '/music/village-lights.mp3',
+  '/music/snow-globe.mp3',
+  '/music/afternoon-tea.mp3',
+  '/music/old-photographs.mp3',
+  '/music/dusk.mp3',
+  '/music/last-embers.mp3',
+]
+
+let musicAudio = null
+let musicShouldPlay = false
+let lastTrackIndex = -1
+let nextTrackIndex = -1
+
+function pickRandomTrackIndex(excluding) {
+  if (MUSIC_TRACKS.length <= 1) return 0
+  let i = excluding
+  while (i === excluding) {
+    i = Math.floor(Math.random() * MUSIC_TRACKS.length)
+  }
+  return i
+}
+
+function prefetchTrack(idx) {
+  fetch(MUSIC_TRACKS[idx]).then((r) => r.arrayBuffer()).catch(() => {})
+}
+
+function ensureMusicAudio() {
+  if (musicAudio) return musicAudio
+  lastTrackIndex = pickRandomTrackIndex(-1)
+  musicAudio = new Audio(MUSIC_TRACKS[lastTrackIndex])
+  musicAudio.loop = false
+  musicAudio.volume = 0.35
+  nextTrackIndex = pickRandomTrackIndex(lastTrackIndex)
+  prefetchTrack(nextTrackIndex)
+  musicAudio.addEventListener('ended', () => {
+    lastTrackIndex = nextTrackIndex
+    musicAudio.src = MUSIC_TRACKS[lastTrackIndex]
+    if (musicShouldPlay) musicAudio.play().catch(() => {})
+    nextTrackIndex = pickRandomTrackIndex(lastTrackIndex)
+    prefetchTrack(nextTrackIndex)
+  })
+  return musicAudio
+}
+
+function startMusic() {
+  musicShouldPlay = true
+  ensureMusicAudio().play().catch(() => {})
+}
+
+function stopMusic() {
+  musicShouldPlay = false
+  if (musicAudio) musicAudio.pause()
+}
+
+function pauseMusicTemporary() {
+  if (musicAudio && !musicAudio.paused) musicAudio.pause()
+}
+
+function resumeMusicIfEnabled() {
+  if (!musicShouldPlay) return
+  ensureMusicAudio().play().catch(() => {})
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseMusicTemporary()
+  else resumeMusicIfEnabled()
+})
+window.addEventListener('blur', pauseMusicTemporary)
+window.addEventListener('focus', resumeMusicIfEnabled)
+
+if (getMusicEnabled()) {
+  musicShouldPlay = true
+  const onFirstGesture = () => {
+    ensureMusicAudio().play().catch(() => {})
+    document.removeEventListener('pointerdown', onFirstGesture)
+    document.removeEventListener('keydown', onFirstGesture)
+  }
+  document.addEventListener('pointerdown', onFirstGesture, { once: true })
+  document.addEventListener('keydown', onFirstGesture, { once: true })
+}
 
 function apiUrl(path) {
   return `${API_BASE}${path}`
@@ -988,6 +1085,16 @@ function renderLauncher() {
                 </div>
                 <span class="more-card-label">Archive</span>
               </button>
+              <button class="more-card" data-action="toggle-music">
+                <div class="more-card-img">
+                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
+                    <ellipse cx="22" cy="44" rx="6" ry="4"/>
+                    <ellipse cx="42" cy="40" rx="6" ry="4"/>
+                  </svg>
+                </div>
+                <span class="more-card-label">Music: ${getMusicEnabled() ? 'On' : 'Off'}</span>
+              </button>
               <button class="more-card" data-page="settings">
                 <div class="more-card-img">
                   <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.7">
@@ -1110,6 +1217,15 @@ function renderLauncher() {
         slice.querySelectorAll('.more-card').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
+            if (btn.dataset.action === 'toggle-music') {
+              const nowEnabled = !getMusicEnabled()
+              setMusicEnabled(nowEnabled)
+              if (nowEnabled) startMusic()
+              else stopMusic()
+              const label = btn.querySelector('.more-card-label')
+              if (label) label.textContent = `Music: ${nowEnabled ? 'On' : 'Off'}`
+              return
+            }
             if (btn.dataset.action === 'continue') {
               const resumeMode = btn.dataset.mode
               const resumeDate = btn.dataset.date
