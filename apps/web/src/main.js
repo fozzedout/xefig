@@ -207,6 +207,43 @@ let lastTrackIndex = -1
 let nextTrackIndex = -1
 let lastNonZeroVolume = getMusicVolume() || MUSIC_DEFAULT_VOLUME
 
+// iOS Safari makes HTMLMediaElement.volume read-only. Route playback
+// through a Web Audio GainNode so the slider actually attenuates on
+// iPhone/iPad. All other platforms benefit too — gain is sample-accurate.
+let audioContext = null
+let audioGainNode = null
+let audioSourceNode = null
+let audioGraphFailed = false
+
+function tryEnsureAudioGraph() {
+  if (audioGainNode || audioGraphFailed) return audioGainNode
+  if (!musicAudio) return null
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext
+    if (!AC) { audioGraphFailed = true; return null }
+    if (!audioContext) audioContext = new AC()
+    if (!audioSourceNode) audioSourceNode = audioContext.createMediaElementSource(musicAudio)
+    audioGainNode = audioContext.createGain()
+    audioGainNode.gain.value = getMusicVolume()
+    audioSourceNode.connect(audioGainNode)
+    audioGainNode.connect(audioContext.destination)
+    // Element output is now driven by the graph; keep it at full amplitude
+    // so the GainNode is the sole attenuation stage (avoids double-attenuate
+    // on browsers where setting element.volume still works).
+    musicAudio.volume = 1
+    return audioGainNode
+  } catch (e) {
+    audioGraphFailed = true
+    return null
+  }
+}
+
+function resumeAudioContextIfNeeded() {
+  if (audioContext && audioContext.state === 'suspended') {
+    audioContext.resume().catch(() => {})
+  }
+}
+
 function pickRandomTrackIndex(excluding) {
   if (MUSIC_TRACKS.length <= 1) return 0
   let i = excluding
@@ -244,7 +281,13 @@ function applyMusicVolume() {
     lastNonZeroVolume = vol
     musicShouldPlay = true
     const audio = ensureMusicAudio()
-    audio.volume = vol
+    const gain = tryEnsureAudioGraph()
+    if (gain) {
+      gain.gain.value = vol
+    } else {
+      audio.volume = vol
+    }
+    resumeAudioContextIfNeeded()
     audio.play().catch(() => {})
   } else {
     musicShouldPlay = false
@@ -258,6 +301,7 @@ function pauseMusicTemporary() {
 
 function resumeMusicIfEnabled() {
   if (!musicShouldPlay) return
+  resumeAudioContextIfNeeded()
   ensureMusicAudio().play().catch(() => {})
 }
 
@@ -272,7 +316,13 @@ if (getMusicVolume() > 0) {
   musicShouldPlay = true
   const onFirstGesture = () => {
     const audio = ensureMusicAudio()
-    audio.volume = getMusicVolume()
+    const gain = tryEnsureAudioGraph()
+    if (gain) {
+      gain.gain.value = getMusicVolume()
+    } else {
+      audio.volume = getMusicVolume()
+    }
+    resumeAudioContextIfNeeded()
     audio.play().catch(() => {})
     document.removeEventListener('pointerdown', onFirstGesture)
     document.removeEventListener('keydown', onFirstGesture)
