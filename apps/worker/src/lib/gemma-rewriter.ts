@@ -33,17 +33,36 @@ export type GemmaRewriteOutcome = {
   error: string | null
 }
 
-// Keep the wrapper as small as physically possible — Gemma IT variants
-// echo anything structural (Theme:/Keywords:/Input:/Output: labels, meta
-// rules, rubrics) back as "content to describe". The full-bleed / no-text
-// constraints live in the technical half we re-attach after rewrite, so
-// Gemma doesn't need to be told about them here. Theme + keywords are
-// already implicit in the descriptive text (it was generated from them).
-//
-// This matches what a clean AI-Studio-chat rewrite looks like: a one-line
-// ask followed by the text, nothing else.
-function buildUserPrompt(descriptive: string, _context: GemmaRewriteContext): string {
-  return `Rewrite the following image scene as a single vivid descriptive paragraph. Add sensory texture and concrete detail. Output only the paragraph.\n\n${descriptive}`
+// Instructions the model should follow. For Gemini models this goes in
+// the top-level `systemInstruction` field (matching the two-role shape
+// the existing OpenRouter rewriter uses for instruction-following
+// models). For Gemma models — which don't accept `systemInstruction` —
+// we inline this as a prefix on the user turn.
+const SYSTEM_RUBRIC = [
+  'You are a creative writer specializing in vivid scene descriptions.',
+  'Transform the given image scene into a single cohesive paragraph that reads as a concrete visual description.',
+  'Invent concrete sensory details, textures, and atmosphere. Do not just reword the input.',
+  'Return ONLY the rewritten descriptive paragraph. No preamble, no explanation, no markdown, no bullet points, no drafts.',
+].join(' ')
+
+function isGeminiModel(model: string): boolean {
+  return /^gemini[-\s]/i.test(model.trim())
+}
+
+function buildUserTurn(descriptive: string, context: GemmaRewriteContext, inlineSystem: boolean): string {
+  const hints: string[] = []
+  if (context.theme) hints.push(`Theme: ${context.theme}`)
+  if (Array.isArray(context.keywords) && context.keywords.length > 0) {
+    hints.push(`Keywords: ${context.keywords.join(', ')}`)
+  }
+  const hintBlock = hints.length > 0 ? `${hints.join('\n')}\n\n` : ''
+
+  // Gemini: system rubric sits in systemInstruction, user turn is just
+  // the brief. Gemma: user turn has to include the rubric.
+  if (inlineSystem) {
+    return `Rewrite the following image scene as a single vivid descriptive paragraph. Output only the paragraph.\n\n${descriptive}`
+  }
+  return `${hintBlock}${descriptive}`
 }
 
 function isQuotaError(status: number, body: GenerateContentResponse | null): boolean {
@@ -197,22 +216,30 @@ async function callGemmaOnce(
 ): Promise<{ text: string | null; status: number; body: GenerateContentResponse | null; rawBody: string }> {
   const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
 
-  const userPrompt = buildUserPrompt(descriptive, context)
+  const useSystemInstruction = isGeminiModel(model)
+  const userText = useSystemInstruction
+    ? buildUserTurn(descriptive, context, false)
+    : // Gemma: inline the rubric + hints in the user turn.
+      `${SYSTEM_RUBRIC}\n\n${buildUserTurn(descriptive, context, true)}`
+
+  const requestBody: Record<string, unknown> = {
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: {
+      // Keep temperature high (1.0) for creative variety per request —
+      // the "one paragraph only" discipline is enforced by the rubric
+      // and by the post-processor that strips any scratchpad leakage.
+      temperature: 1,
+      maxOutputTokens: 500,
+    },
+  }
+  if (useSystemInstruction) {
+    requestBody.systemInstruction = { parts: [{ text: SYSTEM_RUBRIC }] }
+  }
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        // Keep temperature high (1.0) for creative variety per request —
-        // the "one paragraph only" discipline is enforced by the tighter
-        // continuation frame ("Rewritten paragraph:") and by the
-        // post-processor that strips any Gemma scratchpad leakage.
-        temperature: 1,
-        maxOutputTokens: 500,
-      },
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   const rawBody = await response.text()
