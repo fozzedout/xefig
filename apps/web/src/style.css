@@ -1603,6 +1603,20 @@ canvas.slice-image {
     margin-left: 0.6rem;
   }
 
+  /* Music on/off indicator: diagonal slash over the icon when off, plus
+     a colored accent when on. Visible in both collapsed and active state. */
+  .ls-default .more-card--music .music-off-slash {
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .ls-default .more-card--music.is-off .music-off-slash {
+    opacity: 1;
+    stroke: rgba(232,230,224,0.55);
+  }
+  .ls-default .more-card--music.is-on {
+    color: #8ad0a0;
+  }
+
   /* Music volume slider — hidden when collapsed (like the label), shown when
      the More slice is active. Horizontal, fills remaining card width. */
   .ls-default .more-card-volume {

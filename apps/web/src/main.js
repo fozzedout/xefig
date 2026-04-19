@@ -1106,12 +1106,13 @@ function renderLauncher() {
                 </div>
                 <span class="more-card-label">Archive</span>
               </button>
-              <div class="more-card more-card--music" data-action="toggle-music" role="button" tabindex="0">
+              <div class="more-card more-card--music ${getMusicEnabled() ? 'is-on' : 'is-off'}" data-action="toggle-music" role="button" tabindex="0">
                 <div class="more-card-img">
                   <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
                     <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
                     <ellipse cx="22" cy="44" rx="6" ry="4"/>
                     <ellipse cx="42" cy="40" rx="6" ry="4"/>
+                    <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round"/>
                   </svg>
                 </div>
                 <span class="more-card-label">Music: ${getMusicEnabled() ? 'On' : 'Off'}</span>
@@ -1251,6 +1252,10 @@ function renderLauncher() {
             const card = musicSlider.closest('.more-card--music')
             const label = card?.querySelector('.more-card-label')
             if (label) label.textContent = `Music: ${vol > 0 ? 'On' : 'Off'}`
+            if (card) {
+              card.classList.toggle('is-on', vol > 0)
+              card.classList.toggle('is-off', vol <= 0)
+            }
           })
         }
         slice.querySelectorAll('.more-card').forEach(btn => {
@@ -1269,6 +1274,8 @@ function renderLauncher() {
               if (label) label.textContent = `Music: ${nowEnabled ? 'On' : 'Off'}`
               const slider = btn.querySelector('.more-card-volume')
               if (slider) slider.value = String(nextVol)
+              btn.classList.toggle('is-on', nowEnabled)
+              btn.classList.toggle('is-off', !nowEnabled)
               return
             }
             if (btn.dataset.action === 'continue') {
