@@ -3545,7 +3545,16 @@ canvas.slice-image {
 
 @media (orientation: portrait) {
   .game-shell--immersive .polygram-root {
+    grid-template-rows: auto minmax(0, 1fr);
     padding-top: calc(0.5rem + var(--sai-top) + 48px);
+  }
+
+  .game-shell--immersive .polygram-tray {
+    grid-row: 1;
+  }
+
+  .game-shell--immersive .polygram-board-wrap {
+    grid-row: 2;
   }
 }
 

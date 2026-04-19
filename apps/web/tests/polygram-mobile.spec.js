@@ -160,8 +160,8 @@ test('dragging a shard onto the board places it and shows rotation ring', async 
 
   const piece = await getVisiblePieceLocator(page)
 
-  // Drag piece well above the tray area onto the board and release
-  const dragResult = await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -400 }, { release: true })
+  // Drag piece down from the top tray onto the board and release
+  const dragResult = await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 400 }, { release: true })
 
   // Verify the drag actually worked (class set inside evaluate)
   expect(dragResult.className + ' | ' + dragResult.parentClass).toContain('is-placed')
@@ -176,15 +176,15 @@ test('dragging a placed shard back to the tray returns it', async ({ page }) => 
 
   const piece = await getVisiblePieceLocator(page)
 
-  // Place piece on the board
-  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -400 }, { release: true })
+  // Place piece on the board (drag down from top tray)
+  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 400 }, { release: true })
   await page.waitForTimeout(50)
   await expect(piece).toHaveClass(/is-placed/)
 
   // Tap the placed piece to pick it back up, then tap the tray area to return it
   // In the current implementation, tapping a placed piece toggles the ring;
   // dragging picks it up and dropping over tray returns it
-  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 400 }, { release: true })
+  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -400 }, { release: true })
   await page.waitForTimeout(50)
 
   // Should be back in the tray
@@ -199,7 +199,7 @@ test('dragging a tray piece picks it up as held', async ({ page }) => {
   const piece = await getVisiblePieceLocator(page)
 
   // In the current implementation, dragging a tray piece holds it
-  const dragResult = await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -200 }, { release: false })
+  const dragResult = await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 200 }, { release: false })
   expect(dragResult.className).toContain('is-held')
 })
 
@@ -208,8 +208,8 @@ test('dragging a piece onto the board results in placed or locked state', async 
 
   const piece = await getVisiblePieceLocator(page)
 
-  // Drag piece onto the board
-  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: -400 }, { release: true })
+  // Drag piece down from the top tray onto the board
+  await dragVisiblePieceWithTouch(page, piece, { x: 0, y: 400 }, { release: true })
   await page.waitForTimeout(50)
 
   // The piece should either snap-lock (if rotation and position happen to be correct)
