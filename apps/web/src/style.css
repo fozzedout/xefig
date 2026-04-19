@@ -3572,26 +3572,31 @@ canvas.slice-image {
 @media (orientation: landscape) {
   .game-shell--immersive .polygram-root {
     grid-template-rows: minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
+    grid-template-columns: minmax(0, 1fr) 88px;
     gap: 0;
   }
 
   .game-shell--immersive .polygram-tray {
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
     mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
-    padding: 0.45rem 0 0.45rem 0.45rem;
+    padding: 0.35rem 0.2rem;
     height: 100%;
     min-height: 0;
   }
 
+  /* Force fixed cross-axis width (like the portrait fixed row height):
+     shards keep natural widthPx/heightPx, so align-items: center lets
+     them overflow and get clipped by the tray's overflow: hidden. */
   .game-shell--immersive .polygram-tray-grid {
     flex-direction: column;
     align-items: center;
     height: 100%;
+    width: 100%;
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
     touch-action: pan-y;
+    gap: 0.2rem;
   }
 }
 
