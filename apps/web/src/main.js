@@ -23,6 +23,7 @@ import {
   markCompletedRunDirty,
   markActiveRunDirty,
   markActiveRunDeleted,
+  pullOnForeground,
 } from './sync.js'
 // Puzzle engines are loaded on demand in renderGame() via dynamic import()
 // to keep the homepage bundle free of gameplay code.
@@ -328,11 +329,18 @@ function resumeMusicIfEnabled() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) pauseMusicTemporary()
-  else resumeMusicIfEnabled()
+  if (document.hidden) {
+    pauseMusicTemporary()
+  } else {
+    resumeMusicIfEnabled()
+    pullOnForeground()
+  }
 })
 window.addEventListener('blur', pauseMusicTemporary)
-window.addEventListener('focus', resumeMusicIfEnabled)
+window.addEventListener('focus', () => {
+  resumeMusicIfEnabled()
+  pullOnForeground()
+})
 
 if (getMusicVolume() > 0) {
   musicShouldPlay = true

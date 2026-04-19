@@ -903,3 +903,17 @@ export async function initSync() {
 
   startSyncTimer()
 }
+
+// Throttled pull for use when the page regains focus — catches
+// completions pushed from another device while this one was backgrounded.
+// The 5-minute interval timer alone is too coarse for "I just finished
+// on my laptop, why is my phone still showing partial?".
+let lastForegroundPullAt = 0
+export async function pullOnForeground() {
+  if (!syncEnabled || syncInFlight) return
+  if (!isJournalEmpty()) return
+  const now = Date.now()
+  if (now - lastForegroundPullAt < 30_000) return
+  lastForegroundPullAt = now
+  try { await pullAllRemoteChanges() } catch {}
+}
