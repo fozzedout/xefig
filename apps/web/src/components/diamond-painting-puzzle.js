@@ -821,7 +821,7 @@ function getCanvasRenderScale(width, height) {
 
 // ─── Color Quantization (Median Cut) ────────────────────────
 
-function sampleCellRegions(image, cols, rows, sampleGrid) {
+export function sampleCellRegions(image, cols, rows, sampleGrid) {
   const canvas = document.createElement('canvas')
   canvas.width = cols * sampleGrid
   canvas.height = rows * sampleGrid
@@ -875,7 +875,7 @@ function sampleCellRegions(image, cols, rows, sampleGrid) {
   return regions
 }
 
-function createDistinctPalette(pixels, targetColors) {
+export function createDistinctPalette(pixels, targetColors) {
   const boxes = medianCutBoxes(pixels, targetColors * 4)
   const candidates = boxes.map((box) => {
     const color = boxAvg(box)
@@ -1043,7 +1043,7 @@ function boxAvg(box) {
   return [Math.round(r / n), Math.round(g / n), Math.round(b / n)]
 }
 
-function assignCellColors(cellSamples, palette) {
+export function assignCellColors(cellSamples, palette) {
   const result = new Uint8Array(cellSamples.length)
   const paletteLabs = palette.map((color) => rgbToOklab(color))
 
@@ -1122,7 +1122,7 @@ function srgbToLinear(value) {
   return ((value + 0.055) / 1.055) ** 2.4
 }
 
-function sortPaletteDarkToLight(palette) {
+export function sortPaletteDarkToLight(palette) {
   const luminances = palette.map((c) => rgbToOklab(c)[0])
   const indices = palette.map((_, i) => i)
   indices.sort((a, b) => luminances[a] - luminances[b])

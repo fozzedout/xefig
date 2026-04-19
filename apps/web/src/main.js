@@ -865,6 +865,26 @@ const SLICE_TAGS = {
 }
 
 
+function renderDiamondGridThumbnails(container, puzzleDate) {
+  const canvases = container.querySelectorAll('.diamond-grid-canvas')
+  if (canvases.length === 0) return
+
+  import('./components/diamond-grid-thumbnail.js').then(({ renderDiamondSliceThumbnail }) => {
+    for (const canvas of canvases) {
+      const date = canvas.dataset.date || puzzleDate
+      const imageUrl = canvas.dataset.imageUrl
+      const run = getRunForMode(date, GAME_MODE_DIAMOND)
+      const isCompleted = getCompletedModesForDate(date).has(GAME_MODE_DIAMOND)
+
+      renderDiamondSliceThumbnail(canvas, {
+        imageUrl,
+        savedState: run?.puzzleState || null,
+        isCompleted,
+      })
+    }
+  })
+}
+
 function computeSliceCenter(container) {
   requestAnimationFrame(() => {
     const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
@@ -900,6 +920,7 @@ function renderLauncher() {
     return modes
       .map((mode, index) => {
         const imageUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
+        const fullImageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
         const isPick = mode === pickMode
         const isActive = mode === defaultFocus
         const title = (mode === GAME_MODE_DIAMOND && !isActive) ? 'Paint' : MODE_LABELS[mode]
@@ -909,9 +930,14 @@ function renderLauncher() {
         const flex = isActive ? ACTIVE_FLEX : INACTIVE_FLEX
         const isLCP = index === 0
 
+        const isDiamond = mode === GAME_MODE_DIAMOND
+        const sliceImageHtml = isDiamond
+          ? `<canvas class="slice-image diamond-grid-canvas" data-image-url="${fullImageUrl}" data-date="${puzzleDate}"></canvas>`
+          : `<img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />`
+
         return `
           <div class="slice${isActive ? ' active' : ''}" data-mode="${mode}" style="--flex: ${flex};">
-            <img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />
+            ${sliceImageHtml}
             <div class="slice-overlay"></div>
             <div class="slice-icon">${SLICE_ICONS[mode]}</div>
             <div class="slice-accent" style="background:${ACCENT_MAP_FULL[mode]}"></div>
@@ -1164,9 +1190,11 @@ function renderLauncher() {
       })
 
       // Progressive image upgrade: swap thumbnails for full-size images once loaded
+      // (skip diamond — it uses a canvas grid thumbnail instead)
       const sliceImages = container.querySelectorAll('.slice-image')
       sliceImages.forEach((img, index) => {
         const mode = modes[index]
+        if (mode === GAME_MODE_DIAMOND) return
         const fullUrl = resolvePuzzleImageUrl(payload, mode)
         const thumbUrl = img.src
         if (fullUrl === thumbUrl) return
@@ -1177,6 +1205,9 @@ function renderLauncher() {
           if (img.isConnected) img.src = fullUrl
         }
       })
+
+      // Render diamond grid thumbnails
+      renderDiamondGridThumbnails(container, payload?.date || todayDate)
     } catch {
       container.innerHTML = `
         <div style="flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;">
@@ -1286,9 +1317,15 @@ function renderArchivePage() {
           statusLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '\u2713'
         }
 
+        const isDiamond = mode === GAME_MODE_DIAMOND
+        const fullImageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+        const thumbImageHtml = isDiamond
+          ? `<div class="thumb-image"><canvas class="diamond-grid-canvas thumb-grid-canvas" data-image-url="${fullImageUrl}" data-date="${dateKey}"></canvas></div>`
+          : `<div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>`
+
         return `<div class="puzzle-thumb" data-mode="${mode}" data-date="${dateKey}">
           <div class="thumb-accent" style="background:${accent}"></div>
-          <div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>
+          ${thumbImageHtml}
           <div class="thumb-info">
             <div class="thumb-mode" style="color:${accent}">${title}</div>
             <div class="thumb-right">
@@ -1379,6 +1416,7 @@ function renderArchivePage() {
     }
 
     timeline.insertBefore(fragment, sentinel)
+    renderDiamondGridThumbnails(timeline)
     loadedCount += loaded
 
     if (exhausted || loaded === 0) {

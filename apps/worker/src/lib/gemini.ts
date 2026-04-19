@@ -15,7 +15,10 @@ export type BatchRequest = {
 type BatchInlineRequest = {
   request: {
     contents: Array<{ parts: Array<{ text: string }> }>
-    generationConfig: { responseModalities: string[] }
+    generationConfig: {
+      responseModalities: string[]
+      imageConfig?: { imageSize?: string; aspectRatio?: string }
+    }
   }
   metadata: { key: string }
 }
@@ -89,7 +92,7 @@ export async function submitImageBatch(
       generationConfig: {
         responseModalities: ['IMAGE'],
         imageConfig: {
-          imageSize: '2K',
+          imageSize: r.category === 'diamond' ? '512' : '2K',
           aspectRatio: '4:3',
         },
       },
