@@ -19,8 +19,7 @@ Opt-in background music toggle in the "More" menu of the launcher. Off by defaul
 
 ## Asset
 
-- Staging: `potential_assets/Coloring Book Music Cues.mp3`
-- Ship to: `apps/web/public/music/coloring-book-cues.mp3`
+- Shipped location: `apps/web/public/music/coloring-book-cues.mp3` (already in place)
 - Later: additional AI-generated tracks via Lyria 3 Pro, prompts in `potential_assets/soundtrack-prompts.md`.
 
 ## Code changes
@@ -151,10 +150,7 @@ if (getMusicEnabled()) {
 
 ### 7. Move the audio file
 
-```bash
-mkdir -p apps/web/public/music
-git mv "potential_assets/Coloring Book Music Cues.mp3" apps/web/public/music/coloring-book-cues.mp3
-```
+✅ **Done.** File already at `apps/web/public/music/coloring-book-cues.mp3`.
 
 ## Testing checklist
 
@@ -188,7 +184,7 @@ git mv "potential_assets/Coloring Book Music Cues.mp3" apps/web/public/music/col
 - `apps/web/src/main.js:2770` — Settings page (future volume slider home)
 - `apps/web/src/components/jigsaw-puzzle.js:1388-1422` — existing WebAudio sound code (for reference, don't touch)
 - `apps/web/public/` — static asset dir where mp3 will live
-- `potential_assets/Coloring Book Music Cues.mp3` — source file, needs moving (step 7)
+- `apps/web/public/music/coloring-book-cues.mp3` — initial soundtrack file (already in ship location)
 - `potential_assets/soundtrack-prompts.md` — later album generation plan
 
 ## Design conversation context (why these choices)
