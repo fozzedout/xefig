@@ -1896,6 +1896,196 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   color: #4ade80;
 }
 
+/* ─── Test tab (Gemma rewriter probe) ─── */
+.test-page-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  max-width: 980px;
+}
+.test-gemma-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2, #121218);
+}
+.test-gemma-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.test-gemma-row--full { width: 100%; }
+.test-gemma-row label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.test-gemma-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
+  font-weight: 400;
+  margin-left: 0.4rem;
+}
+.test-gemma-form select,
+.test-gemma-form textarea {
+  background: #0a0a0f;
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 0.82rem;
+}
+.test-gemma-form textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+.test-gemma-row--actions {
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+}
+.test-gemma-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2, #121218);
+}
+.test-gemma-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.test-gemma-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  color: var(--text-2);
+  background: #0a0a0f;
+}
+.test-gemma-chip--ok {
+  border-color: #14532d;
+  background: #052e16;
+  color: #4ade80;
+}
+.test-gemma-chip--warn {
+  border-color: #78350f;
+  background: #27170a;
+  color: #fbbf24;
+}
+.test-gemma-chip--err {
+  border-color: #7f1d1d;
+  background: #2a0a0a;
+  color: #fca5a5;
+}
+.test-gemma-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.test-gemma-column label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.test-gemma-pre {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  background: #0a0a0f;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.test-gemma-pre--error {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+  background: #1a0707;
+}
+.test-gemma-console {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0a0a0f;
+  min-height: 220px;
+  max-height: 360px;
+  overflow: hidden;
+}
+.test-gemma-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.test-gemma-console-hint {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
+  font-weight: 400;
+}
+.test-gemma-log {
+  flex: 1;
+  overflow-y: auto;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 0.74rem;
+}
+.test-gemma-log-empty {
+  padding: 0.75rem 0.85rem;
+  color: var(--text-3);
+  font-style: italic;
+}
+.test-gemma-log-row {
+  display: grid;
+  grid-template-columns: 72px 56px 1fr;
+  gap: 0.5rem;
+  padding: 0.3rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.test-gemma-log-row:last-child { border-bottom: none; }
+.test-gemma-log-time { color: var(--text-3); }
+.test-gemma-log-level {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.test-gemma-log-msg {
+  color: var(--text-2);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.test-gemma-log-row--ok .test-gemma-log-level { color: #4ade80; }
+.test-gemma-log-row--warn .test-gemma-log-level { color: #fbbf24; }
+.test-gemma-log-row--error .test-gemma-log-level { color: #fca5a5; }
+.test-gemma-log-row--error .test-gemma-log-msg { color: #fca5a5; }
+
 /* ── Manual workflow actions ─────────────────────────── */
 .manual-actions {
   display: flex;

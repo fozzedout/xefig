@@ -121,6 +121,13 @@
         <span>Messages</span>
         <span class="page-nav-badge page-nav-badge--muted" id="msg-count"></span>
       </button>
+      <button type="button" class="page-nav-btn" data-page="test" role="tab" aria-selected="false">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M5 2v4l-3 5a1 1 0 0 0 .87 1.5h8.26A1 1 0 0 0 12 11l-3-5V2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 2h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span>Test</span>
+      </button>
     </nav>
 
     <!-- ─── DASHBOARD ─── -->
@@ -528,6 +535,74 @@
           </header>
           <div id="messages-list" class="messages-list">
             <div class="msg-empty">Click "Load Messages" to fetch contact submissions.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ TEST PAGE ═══ -->
+      <section class="admin-page admin-page--test" id="page-test" data-page="test" role="tabpanel" hidden>
+        <header class="page-header">
+          <h1 class="page-header-title">Gemma rewriter test</h1>
+          <p class="page-header-sub">
+            Exercises the same code path the daily cron will take: generate a descriptor-pool scene
+            for the chosen category, push it through Gemma (free key first, paid on quota exhaustion),
+            and log the outcome. Use this to verify the free-tier key + model name before midnight.
+          </p>
+        </header>
+
+        <div class="test-page-layout">
+          <form id="test-gemma-form" class="test-gemma-form">
+            <div class="test-gemma-row">
+              <label for="test-gemma-category">Category</label>
+              <select id="test-gemma-category">
+                <option value="jigsaw">jigsaw</option>
+                <option value="slider">slider</option>
+                <option value="swap">swap</option>
+                <option value="polygram">polygram</option>
+                <option value="diamond">diamond</option>
+              </select>
+            </div>
+            <div class="test-gemma-row test-gemma-row--full">
+              <label for="test-gemma-descriptive">
+                Descriptive text <span class="test-gemma-hint">(leave empty to sample one from the descriptor pool)</span>
+              </label>
+              <textarea id="test-gemma-descriptive" rows="3" placeholder="Leave empty to sample"></textarea>
+            </div>
+            <div class="test-gemma-row test-gemma-row--actions">
+              <button type="submit" id="test-gemma-run-btn" class="btn-primary">Run test</button>
+              <button type="button" id="test-gemma-clear-btn" class="btn-secondary">Clear log</button>
+            </div>
+          </form>
+
+          <div class="test-gemma-result" id="test-gemma-result" hidden>
+            <div class="test-gemma-meta">
+              <span class="test-gemma-chip" id="test-gemma-status-chip">—</span>
+              <span class="test-gemma-chip" id="test-gemma-key-chip">key: —</span>
+              <span class="test-gemma-chip" id="test-gemma-model-chip">model: —</span>
+              <span class="test-gemma-chip" id="test-gemma-time-chip">— ms</span>
+            </div>
+            <div class="test-gemma-column">
+              <label>Input (descriptive half)</label>
+              <pre class="test-gemma-pre" id="test-gemma-input"></pre>
+            </div>
+            <div class="test-gemma-column">
+              <label>Output (rewritten paragraph)</label>
+              <pre class="test-gemma-pre" id="test-gemma-output"></pre>
+            </div>
+            <div class="test-gemma-column" id="test-gemma-error-wrap" hidden>
+              <label>Error</label>
+              <pre class="test-gemma-pre test-gemma-pre--error" id="test-gemma-error"></pre>
+            </div>
+          </div>
+
+          <div class="test-gemma-console">
+            <div class="test-gemma-console-header">
+              <span>Activity log</span>
+              <span class="test-gemma-console-hint">Most recent at top</span>
+            </div>
+            <div id="test-gemma-log" class="test-gemma-log">
+              <div class="test-gemma-log-empty">No runs yet.</div>
+            </div>
           </div>
         </div>
       </section>

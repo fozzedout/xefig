@@ -1,6 +1,7 @@
 import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
+import { makeGemmaRewriter } from './gemma-rewriter'
 import { detectBorder, processPngImage } from './image'
 
 const BORDER_PROMPT_ADDENDUM =
@@ -112,7 +113,7 @@ export async function handleBatchSubmit(
   if (opts.prompts && CATEGORIES.every((c) => opts.prompts![c]?.prompt)) {
     categoryPrompts = opts.prompts as typeof categoryPrompts
   } else {
-    const [pack] = await generatePromptPacks(env.DB, 1)
+    const [pack] = await generatePromptPacks(env.DB, 1, makeGemmaRewriter(env) ?? undefined)
     if (!pack) {
       return { submitted: false, message: 'Failed to generate prompt pack.' }
     }
@@ -424,7 +425,11 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
     const tempObject = await env.assets.get(tempKey)
     if (!tempObject) {
       if (env.GOOGLE_AI_API_KEY) {
-        const details = await generateSingleCategoryPrompt(env.DB, category)
+        const details = await generateSingleCategoryPrompt(
+          env.DB,
+          category,
+          makeGemmaRewriter(env) ?? undefined,
+        )
         // Border-flagged regens need the extra nudge; other "missing temp"
         // situations (e.g. R2 hiccup) get the plain prompt back.
         const borderedBefore = (job.validationFailures?.[category] ?? 0) > 0

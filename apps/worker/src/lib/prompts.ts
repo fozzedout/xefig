@@ -412,7 +412,19 @@ type DescriptorSet = Record<DescriptorRole, string>
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function generatePromptPacks(db: D1Database, count: number): Promise<PromptPack[]> {
+// Optional async callback that expands the descriptive half of a prompt
+// into richer prose. When provided, the pack/single-prompt generators
+// call it per category and re-attach the technical half verbatim.
+export type PromptRewriter = (
+  descriptive: string,
+  context: { category: PuzzleCategory; theme: string; keywords: string[] },
+) => Promise<string>
+
+export async function generatePromptPacks(
+  db: D1Database,
+  count: number,
+  rewriter?: PromptRewriter,
+): Promise<PromptPack[]> {
   validatePoolSizes()
   await ensurePuzzleTables(db)
   const history = await getPromptHistoryD1(db)
@@ -422,6 +434,12 @@ export async function generatePromptPacks(db: D1Database, count: number): Promis
   for (let index = 0; index < count; index += 1) {
     const pack = buildPromptPack(history)
     packs.push(pack)
+  }
+
+  if (rewriter) {
+    for (const pack of packs) {
+      await applyRewriterToPack(pack, rewriter)
+    }
   }
 
   // Persist all new history items appended by buildPromptPack
@@ -434,6 +452,7 @@ export async function generatePromptPacks(db: D1Database, count: number): Promis
 export async function generateSingleCategoryPrompt(
   db: D1Database,
   category: PuzzleCategory,
+  rewriter?: PromptRewriter,
 ): Promise<{ prompt: string; theme: string; keywords: string[] }> {
   validatePoolSizes()
   await ensurePuzzleTables(db)
@@ -442,13 +461,61 @@ export async function generateSingleCategoryPrompt(
   const set = pickDescriptorSet(history, new Set(), category)
   const details = buildCategoryPromptDetails(category, set)
 
+  let prompt = details.prompt
+  if (rewriter) {
+    const rewritten = await rewriter(details.descriptive, {
+      category,
+      theme: details.theme,
+      keywords: details.keywords,
+    })
+    const expanded = (rewritten || '').trim()
+    if (expanded) {
+      prompt = `${expanded} ${details.technical}`
+    }
+  }
+
   const item: PromptHistoryItem = {
     descriptors: [...new Set(Object.values(set))],
     createdAt: new Date().toISOString(),
   }
   await appendPromptHistory(db, item)
 
-  return details
+  return {
+    prompt,
+    theme: details.theme,
+    keywords: details.keywords,
+  }
+}
+
+async function applyRewriterToPack(pack: PromptPack, rewriter: PromptRewriter): Promise<void> {
+  await Promise.all(
+    CATEGORIES.map(async (category) => {
+      const entry = pack.categories[category]
+      // Safe lookup: buildCategoryPromptDetails writes `descriptive` and
+      // `technical` alongside `prompt`, but if we're ever handed a pack
+      // shaped only as {prompt, theme, keywords} (e.g. from an admin
+      // client) just leave the prompt as-is.
+      const extra = entry as unknown as { descriptive?: string; technical?: string }
+      if (!extra.descriptive || !extra.technical) return
+
+      try {
+        const rewritten = await rewriter(extra.descriptive, {
+          category,
+          theme: entry.theme,
+          keywords: entry.keywords,
+        })
+        const expanded = (rewritten || '').trim()
+        if (expanded) {
+          entry.prompt = `${expanded} ${extra.technical}`
+        }
+      } catch (err) {
+        console.warn(
+          `[prompts] rewriter threw for ${category}; keeping raw prompt`,
+          err instanceof Error ? err.message : err,
+        )
+      }
+    }),
+  )
 }
 
 
@@ -492,8 +559,11 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
 }
 
 function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet) {
+  const parts = buildImagePromptParts(category, set)
   return {
-    prompt: buildImagePrompt(category, set),
+    prompt: `${parts.descriptive} ${parts.technical}`,
+    descriptive: parts.descriptive,
+    technical: parts.technical,
     theme: `${capitalizeWords(set.state)} ${capitalizeWords(set.concept)} ${capitalizeWords(set.location)} — ${capitalizeWords(set.mood)}`,
     keywords: [...new Set(Object.values(set))].map(v => v.trim()).filter(Boolean).slice(0, 12),
   }
@@ -506,7 +576,15 @@ function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet
 // model doesn't need a procedure, it needs a scene description.
 // ---------------------------------------------------------------------------
 
-function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string {
+// Split into a "descriptive" half (scene / mood / style — the half a scene
+// rewriter can expand) and a "technical" half (quality target + 4:3 output
+// + no-border / no-text rules) that must survive verbatim. Callers that
+// rewrite prompts through an LLM only send the descriptive half and
+// re-attach technical as-is.
+export function buildImagePromptParts(
+  category: PuzzleCategory,
+  set: DescriptorSet,
+): { descriptive: string; technical: string } {
   const intent = CATEGORY_PROMPT_INTENTS[category]
 
   const subjectLine = `${intent.composition} Use ${vowelArticle(set.camera)} ${set.camera}.`
@@ -533,7 +611,10 @@ function buildImagePrompt(category: PuzzleCategory, set: DescriptorSet): string 
     ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
     : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
-  return [subjectLine, narrativeLine, qualityLine, outputLine].join(' ')
+  return {
+    descriptive: [subjectLine, narrativeLine].join(' '),
+    technical: [qualityLine, outputLine].join(' '),
+  }
 }
 
 function vowelArticle(word: string): string {

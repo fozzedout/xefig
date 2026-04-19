@@ -9,6 +9,8 @@ export type Bindings = {
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   GOOGLE_AI_API_KEY?: string
+  GOOGLE_AI_FREE_API_KEY?: string
+  GEMMA_REWRITE_MODEL?: string
   CONTACT_EMAIL?: string
   // Beta-environment flags. When IS_BETA is set, the puzzle-content
   // endpoints proxy reads to UPSTREAM_PUZZLE_ORIGIN (live) so beta

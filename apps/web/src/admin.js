@@ -50,7 +50,7 @@ const ribbonCountEl = document.getElementById('ribbon-count')
 // ─── Admin page switching (Editor / Batch / Messages) ──
 const pageNavButtons = document.querySelectorAll('.page-nav-btn')
 const adminPages = document.querySelectorAll('.admin-page')
-const VALID_PAGES = new Set(['editor', 'trigger', 'queue', 'messages'])
+const VALID_PAGES = new Set(['editor', 'trigger', 'queue', 'messages', 'test'])
 
 function switchAdminPage(name) {
   const target = VALID_PAGES.has(name) ? name : 'editor'
@@ -1968,6 +1968,182 @@ gateLoginForm.addEventListener('submit', async (e) => {
     gateError.textContent = 'Network error.'
   }
 })
+
+// ─── Test tab: Gemma rewriter probe ───
+const testGemmaForm = document.getElementById('test-gemma-form')
+const testGemmaCategory = document.getElementById('test-gemma-category')
+const testGemmaDescriptive = document.getElementById('test-gemma-descriptive')
+const testGemmaRunBtn = document.getElementById('test-gemma-run-btn')
+const testGemmaClearBtn = document.getElementById('test-gemma-clear-btn')
+const testGemmaResult = document.getElementById('test-gemma-result')
+const testGemmaStatusChip = document.getElementById('test-gemma-status-chip')
+const testGemmaKeyChip = document.getElementById('test-gemma-key-chip')
+const testGemmaModelChip = document.getElementById('test-gemma-model-chip')
+const testGemmaTimeChip = document.getElementById('test-gemma-time-chip')
+const testGemmaInput = document.getElementById('test-gemma-input')
+const testGemmaOutput = document.getElementById('test-gemma-output')
+const testGemmaErrorWrap = document.getElementById('test-gemma-error-wrap')
+const testGemmaError = document.getElementById('test-gemma-error')
+const testGemmaLog = document.getElementById('test-gemma-log')
+
+function appendTestGemmaLog(level, message, detail) {
+  if (!testGemmaLog) return
+  const emptyEl = testGemmaLog.querySelector('.test-gemma-log-empty')
+  if (emptyEl) emptyEl.remove()
+  const row = document.createElement('div')
+  row.className = `test-gemma-log-row test-gemma-log-row--${level}`
+  const time = new Date().toLocaleTimeString([], { hour12: false })
+  row.innerHTML = `
+    <span class="test-gemma-log-time">${time}</span>
+    <span class="test-gemma-log-level">${level.toUpperCase()}</span>
+    <span class="test-gemma-log-msg"></span>
+  `
+  row.querySelector('.test-gemma-log-msg').textContent =
+    detail ? `${message} — ${detail}` : message
+  testGemmaLog.prepend(row)
+}
+
+async function runGemmaTest(ev) {
+  ev?.preventDefault?.()
+  if (!testGemmaRunBtn) return
+
+  const category = testGemmaCategory?.value || 'jigsaw'
+  const descriptive = (testGemmaDescriptive?.value || '').trim()
+
+  testGemmaRunBtn.disabled = true
+  testGemmaRunBtn.textContent = 'Running…'
+  appendTestGemmaLog(
+    'info',
+    `request → category=${category}`,
+    descriptive ? `custom descriptive (${descriptive.length} chars)` : 'auto-sample from pool',
+  )
+
+  const started = performance.now()
+  try {
+    const response = await fetch(apiUrl('/api/admin/prompts/test-gemma'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, descriptive: descriptive || undefined }),
+    })
+    const clientMs = Math.round(performance.now() - started)
+
+    let payload = null
+    try {
+      payload = await response.json()
+    } catch {
+      payload = null
+    }
+
+    if (!response.ok) {
+      const msg = payload?.error || `HTTP ${response.status}`
+      appendTestGemmaLog('error', `response ← HTTP ${response.status}`, msg)
+      renderTestGemmaResult({
+        ok: false,
+        category,
+        model: payload?.model || '—',
+        keyUsed: payload?.keyUsed || null,
+        elapsedMs: clientMs,
+        input: payload?.input || descriptive || '(no input)',
+        output: null,
+        error: msg,
+      })
+      return
+    }
+
+    const ok = Boolean(payload?.ok)
+    const keyUsed = payload?.keyUsed
+    const serverMs = typeof payload?.elapsedMs === 'number' ? payload.elapsedMs : clientMs
+
+    if (ok) {
+      appendTestGemmaLog(
+        'ok',
+        `response ← ok via ${keyUsed} key`,
+        `model=${payload.model} · server ${serverMs}ms · output ${payload.output?.length || 0} chars`,
+      )
+    } else {
+      appendTestGemmaLog('error', `response ← failed`, payload?.error || 'unknown error')
+    }
+
+    if (keyUsed === 'paid') {
+      appendTestGemmaLog(
+        'warn',
+        'free-tier key fell back to paid key',
+        'check quota — daily cron at 00:00 UTC will do the same',
+      )
+    }
+    if (!payload?.haveFreeKey) {
+      appendTestGemmaLog('warn', 'GOOGLE_AI_FREE_API_KEY is not configured', 'rewriter will only ever use paid key')
+    }
+    if (!payload?.havePaidKey) {
+      appendTestGemmaLog('warn', 'GOOGLE_AI_API_KEY is not configured', 'no paid-key fallback available')
+    }
+
+    renderTestGemmaResult({
+      ok,
+      category: payload?.category || category,
+      model: payload?.model || '—',
+      keyUsed,
+      elapsedMs: serverMs,
+      input: payload?.input || '(no input)',
+      output: payload?.output || null,
+      error: payload?.error || null,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    appendTestGemmaLog('error', 'request threw', msg)
+    renderTestGemmaResult({
+      ok: false,
+      category,
+      model: '—',
+      keyUsed: null,
+      elapsedMs: Math.round(performance.now() - started),
+      input: descriptive || '(no input)',
+      output: null,
+      error: msg,
+    })
+  } finally {
+    testGemmaRunBtn.disabled = false
+    testGemmaRunBtn.textContent = 'Run test'
+  }
+}
+
+function renderTestGemmaResult(r) {
+  if (!testGemmaResult) return
+  testGemmaResult.hidden = false
+  testGemmaStatusChip.textContent = r.ok ? 'OK' : 'FAIL'
+  testGemmaStatusChip.className =
+    'test-gemma-chip ' + (r.ok ? 'test-gemma-chip--ok' : 'test-gemma-chip--err')
+  testGemmaKeyChip.textContent = `key: ${r.keyUsed || '—'}`
+  testGemmaKeyChip.className =
+    'test-gemma-chip ' +
+    (r.keyUsed === 'free'
+      ? 'test-gemma-chip--ok'
+      : r.keyUsed === 'paid'
+        ? 'test-gemma-chip--warn'
+        : '')
+  testGemmaModelChip.textContent = `model: ${r.model}`
+  testGemmaTimeChip.textContent = `${r.elapsedMs} ms`
+  testGemmaInput.textContent = r.input || ''
+  testGemmaOutput.textContent = r.output || '(no output)'
+  if (r.error) {
+    testGemmaErrorWrap.hidden = false
+    testGemmaError.textContent = r.error
+  } else {
+    testGemmaErrorWrap.hidden = true
+    testGemmaError.textContent = ''
+  }
+}
+
+if (testGemmaForm) testGemmaForm.addEventListener('submit', runGemmaTest)
+if (testGemmaClearBtn) {
+  testGemmaClearBtn.addEventListener('click', () => {
+    if (testGemmaLog) {
+      testGemmaLog.innerHTML = '<div class="test-gemma-log-empty">No runs yet.</div>'
+    }
+    if (testGemmaResult) testGemmaResult.hidden = true
+  })
+}
 
 // ─── Init ───
 

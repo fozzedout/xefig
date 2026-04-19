@@ -35,6 +35,7 @@ import {
   rewriteSinglePromptWithOpenRouter,
 } from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
+import { rewriteWithGemma } from './lib/gemma-rewriter'
 import { ensurePuzzleTables, getScheduledDatesInRange } from './lib/puzzle-db'
 import {
   handleBatchSubmit,
@@ -719,6 +720,56 @@ export function createApp() {
       console.error('Single category generation failed', error)
       return c.json({ error: 'Failed to generate category prompt.' }, 500)
     }
+  })
+
+  app.post('/api/admin/prompts/test-gemma', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    let body: { category?: string; descriptive?: string; theme?: string; keywords?: string[] } | null = null
+    try {
+      body = (await c.req.json().catch(() => ({}))) as typeof body
+    } catch {
+      body = null
+    }
+
+    const categoryRaw = typeof body?.category === 'string' ? body.category.trim() : 'jigsaw'
+    const category = CATEGORIES.find((c) => c === categoryRaw) ?? 'jigsaw'
+
+    // If the caller didn't supply a descriptive string, generate one via the
+    // real descriptor pipeline so we're testing against realistic input.
+    let descriptive = typeof body?.descriptive === 'string' ? body.descriptive.trim() : ''
+    let theme = typeof body?.theme === 'string' ? body.theme : ''
+    let keywords = Array.isArray(body?.keywords) ? body!.keywords! : []
+    if (!descriptive) {
+      const sample = await generateSingleCategoryPrompt(c.env.DB, category)
+      // generateSingleCategoryPrompt returns the fully-assembled prompt; the
+      // Gemma rewriter only needs the descriptive half but the assembled
+      // prompt is fine as a test input — it's still a scene description.
+      descriptive = sample.prompt
+      theme = sample.theme
+      keywords = sample.keywords
+    }
+
+    const started = Date.now()
+    const outcome = await rewriteWithGemma(c.env, descriptive, { category, theme, keywords })
+    const elapsedMs = Date.now() - started
+
+    return c.json({
+      ok: outcome.text !== null,
+      category,
+      model: c.env.GEMMA_REWRITE_MODEL || 'gemma-4-26b-a4b-it',
+      keyUsed: outcome.keyUsed,
+      elapsedMs,
+      input: descriptive,
+      output: outcome.text,
+      error: outcome.error,
+      haveFreeKey: Boolean((c.env.GOOGLE_AI_FREE_API_KEY || '').trim()),
+      havePaidKey: Boolean((c.env.GOOGLE_AI_API_KEY || '').trim()),
+    })
   })
 
   app.post('/api/admin/prompts/rewrite-one', async (c) => {
