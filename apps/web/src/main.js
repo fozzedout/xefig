@@ -56,6 +56,8 @@ const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
 const MIN_PLAUSIBLE_ELAPSED_MS = 1000
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
 const MUSIC_ENABLED_KEY = 'xefig:music-enabled:v1'
+const MUSIC_VOLUME_KEY = 'xefig:music-volume:v1'
+const MUSIC_DEFAULT_VOLUME = 0.35
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
 const PUZZLE_FETCH_TIMEOUT_MS = 8000
@@ -94,12 +96,24 @@ function setGlobalBoardColorIndex(index) {
   localStorage.setItem(BOARD_COLOR_KEY, String(index))
 }
 
-function getMusicEnabled() {
-  return localStorage.getItem(MUSIC_ENABLED_KEY) === '1'
+function getMusicVolume() {
+  const raw = localStorage.getItem(MUSIC_VOLUME_KEY)
+  if (raw !== null) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 0 && n <= 1) return n
+  }
+  // Migrate legacy on/off key
+  if (localStorage.getItem(MUSIC_ENABLED_KEY) === '1') return MUSIC_DEFAULT_VOLUME
+  return 0
 }
 
-function setMusicEnabled(enabled) {
-  localStorage.setItem(MUSIC_ENABLED_KEY, enabled ? '1' : '0')
+function setMusicVolume(v) {
+  const clamped = Math.max(0, Math.min(1, v))
+  localStorage.setItem(MUSIC_VOLUME_KEY, String(clamped))
+}
+
+function getMusicEnabled() {
+  return getMusicVolume() > 0
 }
 
 function applyLandscapeLayout() {
@@ -191,6 +205,7 @@ let musicAudio = null
 let musicShouldPlay = false
 let lastTrackIndex = -1
 let nextTrackIndex = -1
+let lastNonZeroVolume = getMusicVolume() || MUSIC_DEFAULT_VOLUME
 
 function pickRandomTrackIndex(excluding) {
   if (MUSIC_TRACKS.length <= 1) return 0
@@ -210,7 +225,7 @@ function ensureMusicAudio() {
   lastTrackIndex = pickRandomTrackIndex(-1)
   musicAudio = new Audio(MUSIC_TRACKS[lastTrackIndex])
   musicAudio.loop = false
-  musicAudio.volume = 0.35
+  musicAudio.volume = getMusicVolume()
   nextTrackIndex = pickRandomTrackIndex(lastTrackIndex)
   prefetchTrack(nextTrackIndex)
   musicAudio.addEventListener('ended', () => {
@@ -223,14 +238,18 @@ function ensureMusicAudio() {
   return musicAudio
 }
 
-function startMusic() {
-  musicShouldPlay = true
-  ensureMusicAudio().play().catch(() => {})
-}
-
-function stopMusic() {
-  musicShouldPlay = false
-  if (musicAudio) musicAudio.pause()
+function applyMusicVolume() {
+  const vol = getMusicVolume()
+  if (vol > 0) {
+    lastNonZeroVolume = vol
+    musicShouldPlay = true
+    const audio = ensureMusicAudio()
+    audio.volume = vol
+    audio.play().catch(() => {})
+  } else {
+    musicShouldPlay = false
+    if (musicAudio) musicAudio.pause()
+  }
 }
 
 function pauseMusicTemporary() {
@@ -249,10 +268,12 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('blur', pauseMusicTemporary)
 window.addEventListener('focus', resumeMusicIfEnabled)
 
-if (getMusicEnabled()) {
+if (getMusicVolume() > 0) {
   musicShouldPlay = true
   const onFirstGesture = () => {
-    ensureMusicAudio().play().catch(() => {})
+    const audio = ensureMusicAudio()
+    audio.volume = getMusicVolume()
+    audio.play().catch(() => {})
     document.removeEventListener('pointerdown', onFirstGesture)
     document.removeEventListener('keydown', onFirstGesture)
   }
@@ -1085,7 +1106,7 @@ function renderLauncher() {
                 </div>
                 <span class="more-card-label">Archive</span>
               </button>
-              <button class="more-card" data-action="toggle-music">
+              <div class="more-card more-card--music" data-action="toggle-music" role="button" tabindex="0">
                 <div class="more-card-img">
                   <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
                     <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
@@ -1094,7 +1115,8 @@ function renderLauncher() {
                   </svg>
                 </div>
                 <span class="more-card-label">Music: ${getMusicEnabled() ? 'On' : 'Off'}</span>
-              </button>
+                <input type="range" class="more-card-volume" min="0" max="1" step="0.01" value="${getMusicVolume()}" aria-label="Music volume">
+              </div>
               <button class="more-card" data-page="settings">
                 <div class="more-card-img">
                   <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.7">
@@ -1214,16 +1236,39 @@ function renderLauncher() {
 
       // More slice — expands on click, nav buttons switch page
       if (slice.classList.contains('slice-more')) {
+        const musicSlider = slice.querySelector('.more-card--music .more-card-volume')
+        if (musicSlider) {
+          const stop = (e) => e.stopPropagation()
+          musicSlider.addEventListener('click', stop)
+          musicSlider.addEventListener('pointerdown', stop)
+          musicSlider.addEventListener('mousedown', stop)
+          musicSlider.addEventListener('touchstart', stop, { passive: true })
+          musicSlider.addEventListener('input', (e) => {
+            e.stopPropagation()
+            const vol = Number(musicSlider.value)
+            setMusicVolume(vol)
+            applyMusicVolume()
+            const card = musicSlider.closest('.more-card--music')
+            const label = card?.querySelector('.more-card-label')
+            if (label) label.textContent = `Music: ${vol > 0 ? 'On' : 'Off'}`
+          })
+        }
         slice.querySelectorAll('.more-card').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
             if (btn.dataset.action === 'toggle-music') {
+              // In expanded view, the slider is the control — clicks elsewhere on
+              // the card are ignored so users dragging the slider don't accidentally
+              // toggle.
+              if (slice.classList.contains('active')) return
               const nowEnabled = !getMusicEnabled()
-              setMusicEnabled(nowEnabled)
-              if (nowEnabled) startMusic()
-              else stopMusic()
+              const nextVol = nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0
+              setMusicVolume(nextVol)
+              applyMusicVolume()
               const label = btn.querySelector('.more-card-label')
               if (label) label.textContent = `Music: ${nowEnabled ? 'On' : 'Off'}`
+              const slider = btn.querySelector('.more-card-volume')
+              if (slider) slider.value = String(nextVol)
               return
             }
             if (btn.dataset.action === 'continue') {
