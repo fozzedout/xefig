@@ -2266,7 +2266,11 @@ function renderGame({ resumeRun = null } = {}) {
   const showPieceCount = gameMode !== GAME_MODE_DIAMOND
   const useImmersiveJigsawChrome = gameMode === GAME_MODE_JIGSAW
   const useImmersiveDiamondChrome = gameMode === GAME_MODE_DIAMOND
-  const useImmersiveChrome = useImmersiveJigsawChrome || useImmersiveDiamondChrome
+  const useImmersivePolygramChrome = gameMode === GAME_MODE_POLYGRAM
+  const useImmersiveSlidingChrome = gameMode === GAME_MODE_SLIDING
+  const useImmersiveSwapChrome = gameMode === GAME_MODE_SWAP
+  const useImmersiveMenuChrome = useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome
+  const useImmersiveChrome = useImmersiveMenuChrome || useImmersiveDiamondChrome
   const viewButtonMarkup = gameMode !== GAME_MODE_DIAMOND
     ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
@@ -2325,7 +2329,7 @@ function renderGame({ resumeRun = null } = {}) {
 
       <section class="workspace${useImmersiveChrome ? ' workspace--immersive' : ''}">
         <div id="puzzle-mount" class="puzzle-mount"></div>
-        ${useImmersiveJigsawChrome ? `
+        ${useImmersiveMenuChrome ? `
           <button id="back-btn" class="diamond-floating-btn diamond-floating-btn--back" type="button" aria-label="Back to puzzles" title="Back">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
@@ -2335,6 +2339,7 @@ function renderGame({ resumeRun = null } = {}) {
                 <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
+                ${useImmersiveJigsawChrome ? `
                 <button id="highlight-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
                   Highlight loose
@@ -2343,6 +2348,7 @@ function renderGame({ resumeRun = null } = {}) {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
                   Edges only
                 </button>
+                ` : ''}
                 ${viewButtonMarkup}
                 ${restartButtonMarkup}
               </div>
@@ -2457,7 +2463,7 @@ function renderGame({ resumeRun = null } = {}) {
     const show = open ?? menuPanel.hidden
     menuPanel.hidden = !show
     menuBtn.setAttribute('aria-expanded', show ? 'true' : 'false')
-    if (useImmersiveJigsawChrome) {
+    if (useImmersiveMenuChrome) {
       setImmersiveControlsVisible(true, { persist: show })
     }
   }
@@ -2474,7 +2480,7 @@ function renderGame({ resumeRun = null } = {}) {
     }
   }
   const setImmersiveControlsVisible = (visible, { persist = false } = {}) => {
-    if (!useImmersiveJigsawChrome || !workspaceEl) return
+    if (!useImmersiveMenuChrome || !workspaceEl) return
     workspaceEl.classList.toggle('workspace--controls-hidden', !visible)
     clearImmersiveControlsTimer()
     if (visible && !persist) {
@@ -2484,9 +2490,9 @@ function renderGame({ resumeRun = null } = {}) {
       }, 2600)
     }
   }
-  if (useImmersiveJigsawChrome && workspaceEl) {
+  if (useImmersiveMenuChrome && workspaceEl) {
     const wakeImmersiveControls = (event) => {
-      if (event?.target?.closest?.('.floating-game-controls, .jigsaw-carousel, .jigsaw-tray-tools, .gt-menu')) {
+      if (event?.target?.closest?.('.floating-game-controls, .jigsaw-carousel, .jigsaw-tray-tools, .polygram-tray, .gt-menu')) {
         setImmersiveControlsVisible(true, { persist: !menuPanel.hidden })
         return
       }

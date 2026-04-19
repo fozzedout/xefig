@@ -3198,6 +3198,16 @@ canvas.slice-image {
   touch-action: none;
 }
 
+.game-shell--immersive .sliding-board-frame {
+  padding: 0;
+}
+
+.game-shell--immersive .sliding-board {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .sliding-reference {
   position: absolute;
   inset: 0;
@@ -3282,6 +3292,16 @@ canvas.slice-image {
   border-radius: 0.8rem;
   overflow: hidden;
   background: var(--surface-2);
+}
+
+.game-shell--immersive .picture-swap-board-frame {
+  padding: 0;
+}
+
+.game-shell--immersive .picture-swap-board {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .picture-swap-reference {
@@ -3459,13 +3479,11 @@ canvas.slice-image {
 .polygram-tray {
   min-height: 0;
   min-width: 0;
-  background: rgba(10, 10, 15, 0.65);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  background: rgba(10, 10, 15, 0.45);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
   overflow: hidden;
-  padding: 0.5rem 0.4rem 0.4rem;
+  padding: 0.4rem;
 }
 
 .polygram-tray-grid {
@@ -3477,6 +3495,70 @@ canvas.slice-image {
   overflow-y: hidden;
   touch-action: pan-x;
   overscroll-behavior: contain;
+}
+
+/* Menu-style immersive modes (polygram, slider, swap): back button owns
+   top-left, so float the menu at top-right to avoid stacking. Jigsaw has
+   its own override (higher specificity via .jigsaw-root > ...). */
+.game-shell--polygram .floating-game-controls,
+.game-shell--sliding .floating-game-controls,
+.game-shell--swap .floating-game-controls {
+  top: calc(0.5rem + var(--sai-top));
+  right: calc(0.5rem + var(--sai-right));
+  left: auto;
+}
+
+.game-shell--polygram .floating-game-controls .gt-menu--floating,
+.game-shell--sliding .floating-game-controls .gt-menu--floating,
+.game-shell--swap .floating-game-controls .gt-menu--floating {
+  left: auto;
+  right: 0;
+}
+
+/* Zen/immersive polygram: orientation-aware tray that mirrors jigsaw.
+   Portrait = tray pinned at bottom; landscape = tray as right sidebar.
+   Floating back+menu overlay the canvas; top strip is reserved. */
+.game-shell--immersive .polygram-tray {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
+  mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
+}
+
+@media (orientation: portrait) {
+  .game-shell--immersive .polygram-root {
+    padding-top: calc(0.5rem + var(--sai-top) + 48px);
+  }
+}
+
+@media (orientation: landscape) {
+  .game-shell--immersive .polygram-root {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
+    gap: 0;
+  }
+
+  .game-shell--immersive .polygram-tray {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+    padding: 0.45rem 0 0.45rem 0.45rem;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .game-shell--immersive .polygram-tray-grid {
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+  }
+}
+
+@media (display-mode: standalone) and (orientation: portrait) {
+  .game-shell--immersive .polygram-root {
+    padding-top: calc(var(--sai-top) + 48px);
+  }
 }
 
 .polygram-held-layer {

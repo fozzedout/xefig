@@ -182,12 +182,25 @@ test('diamond board can pan far enough to reveal the bottom-right edge after zoo
   await panDiamondBoard(page, -2000, -2000)
 
   const metrics = await readDiamondViewportMetrics(page)
+  const paletteInset = await page.evaluate(() => {
+    const frame = document.querySelector('.diamond-board-frame')
+    const palette = document.querySelector('.diamond-palette-bar')
+    if (!frame || !palette) return { right: 0, bottom: 0 }
+    const f = frame.getBoundingClientRect()
+    const p = palette.getBoundingClientRect()
+    if (p.width === 0 || p.height === 0) return { right: 0, bottom: 0 }
+    if (p.width >= f.width - 2) return { right: 0, bottom: p.height }
+    if (p.height >= f.height - 2) return { right: p.width, bottom: 0 }
+    return { right: 0, bottom: 0 }
+  })
 
   expect(metrics).not.toBeNull()
   expect(metrics.contentWidth).toBeGreaterThan(metrics.viewportWidth)
   expect(metrics.contentHeight).toBeGreaterThan(metrics.viewportHeight)
-  expect(Math.abs(metrics.rightGap)).toBeLessThanOrEqual(2)
-  expect(Math.abs(metrics.bottomGap)).toBeLessThanOrEqual(2)
+  // Pan clamp reserves the palette's footprint so cells hidden beneath it
+  // stop flush with the palette's inner edge rather than the frame edge.
+  expect(Math.abs(metrics.rightGap - paletteInset.right)).toBeLessThanOrEqual(2)
+  expect(Math.abs(metrics.bottomGap - paletteInset.bottom)).toBeLessThanOrEqual(2)
 })
 
 test('diamond board can zoom back out to a fully visible fitted view', async ({ page }) => {
