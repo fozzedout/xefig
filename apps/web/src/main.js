@@ -2568,9 +2568,13 @@ function renderGame({ resumeRun = null } = {}) {
     renderGame()
   })
 
-  // Double-tap/click on puzzle board to toggle reference image
-  // Ignores buttons, trays, and other interactive UI controls
+  // Double-tap/click on puzzle board to toggle reference image.
+  // Ignores chrome buttons and trays, but slider/swap tiles (rendered
+  // as <button>) must still count as board targets.
   function isBoardTarget(target) {
+    if (target.closest('.sliding-tile, .picture-swap-tile')) {
+      return mount.contains(target)
+    }
     if (target.closest('button, input, select, [role="button"], .polygram-tray, .polygram-rotate-dock, .diamond-palette-bar, .gt-menu')) {
       return false
     }
