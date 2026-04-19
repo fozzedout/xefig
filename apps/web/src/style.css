@@ -1971,8 +1971,9 @@ canvas.slice-image {
     opacity: 1;
   }
 
-  /* Music volume slider in portrait — vertical-oriented so it fits the
-     column-aligned cards. Hidden when collapsed, shown when active. */
+  /* Music volume slider in portrait — vertical-oriented via writing-mode
+     so it sits below the icon like the rotated label. Hidden when the
+     More slice is collapsed, shown as a tall vertical bar when active. */
   .ls-default .more-card-volume {
     opacity: 0;
     height: 0;
@@ -1983,12 +1984,16 @@ canvas.slice-image {
     cursor: pointer;
     transition: opacity 0.3s 0.1s;
     overflow: hidden;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    appearance: slider-vertical;
+    -webkit-appearance: slider-vertical;
   }
 
   .ls-default .slice-more.active .more-card-volume {
     opacity: 1;
-    width: 80%;
-    height: 18px;
+    width: 18px;
+    height: 70px;
     margin-top: 0.6rem;
   }
 }
