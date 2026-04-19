@@ -868,13 +868,9 @@ const SLICE_TAGS = {
 function computeSliceCenter(container) {
   requestAnimationFrame(() => {
     const collapsed = container.querySelector('.slice:not(.active):not(.slice-more)')
-    const active = container.querySelector('.slice.active:not(.slice-more)')
     if (collapsed) {
       container.style.setProperty('--slice-center', collapsed.offsetWidth / 2 + 'px')
       container.style.setProperty('--slice-middle', collapsed.offsetHeight / 2 + 'px')
-    }
-    if (active && collapsed) {
-      container.style.setProperty('--info-width', (active.offsetWidth - collapsed.offsetWidth / 2 - 19) + 'px')
     }
   })
 }
