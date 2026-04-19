@@ -1614,7 +1614,8 @@ canvas.slice-image {
     opacity: 1 !important;
     stroke: rgba(232,230,224,0.55);
   }
-  .more-card--music.is-on {
+  .ls-default .more-card--music.is-on,
+  .ls-default .more-card--music.is-on:hover {
     color: #8ad0a0;
   }
 

@@ -1106,7 +1106,7 @@ function renderLauncher() {
                 </div>
                 <span class="more-card-label">Archive</span>
               </button>
-              <div class="more-card more-card--music ${getMusicEnabled() ? 'is-on' : 'is-off'}" data-action="toggle-music" role="button" tabindex="0">
+              <div class="more-card more-card--music ${getMusicEnabled() ? 'is-on' : 'is-off'}" data-action="toggle-music" role="button" tabindex="0" aria-label="Music: ${getMusicEnabled() ? 'On' : 'Off'}">
                 <div class="more-card-img">
                   <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
                     <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
@@ -1115,7 +1115,6 @@ function renderLauncher() {
                     <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round" opacity="0"/>
                   </svg>
                 </div>
-                <span class="more-card-label">Music: ${getMusicEnabled() ? 'On' : 'Off'}</span>
                 <input type="range" class="more-card-volume" min="0" max="1" step="0.01" value="${getMusicVolume()}" aria-label="Music volume">
               </div>
               <button class="more-card" data-page="settings">
@@ -1250,11 +1249,10 @@ function renderLauncher() {
             setMusicVolume(vol)
             applyMusicVolume()
             const card = musicSlider.closest('.more-card--music')
-            const label = card?.querySelector('.more-card-label')
-            if (label) label.textContent = `Music: ${vol > 0 ? 'On' : 'Off'}`
             if (card) {
               card.classList.toggle('is-on', vol > 0)
               card.classList.toggle('is-off', vol <= 0)
+              card.setAttribute('aria-label', `Music: ${vol > 0 ? 'On' : 'Off'}`)
             }
           })
         }
@@ -1262,20 +1260,17 @@ function renderLauncher() {
           btn.addEventListener('click', (e) => {
             e.stopPropagation()
             if (btn.dataset.action === 'toggle-music') {
-              // In expanded view, the slider is the control — clicks elsewhere on
-              // the card are ignored so users dragging the slider don't accidentally
-              // toggle.
-              if (slice.classList.contains('active')) return
+              // Card click toggles whether the slice is collapsed or active.
+              // Slider interactions stopPropagation so they never reach here.
               const nowEnabled = !getMusicEnabled()
               const nextVol = nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0
               setMusicVolume(nextVol)
               applyMusicVolume()
-              const label = btn.querySelector('.more-card-label')
-              if (label) label.textContent = `Music: ${nowEnabled ? 'On' : 'Off'}`
               const slider = btn.querySelector('.more-card-volume')
               if (slider) slider.value = String(nextVol)
               btn.classList.toggle('is-on', nowEnabled)
               btn.classList.toggle('is-off', !nowEnabled)
+              btn.setAttribute('aria-label', `Music: ${nowEnabled ? 'On' : 'Off'}`)
               return
             }
             if (btn.dataset.action === 'continue') {
