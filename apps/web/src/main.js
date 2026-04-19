@@ -1150,12 +1150,18 @@ function renderLauncher() {
       bindSliceEvents()
       computeSliceCenter(container)
 
-      // Recompute on orientation change (portrait widths differ from landscape)
+      // Recompute on any container resize so --slice-center / --slice-middle /
+      // --info-width track the live geometry (window resize, devtools dock,
+      // orientation change, virtual keyboard, etc.).
+      const ro = new ResizeObserver(() => computeSliceCenter(container))
+      ro.observe(container)
+
+      // Orientation flips swap which dimension is the "spine" — briefly
+      // suppress text transitions while the new layout settles.
       const orientationMQ = window.matchMedia('(orientation: landscape)')
       orientationMQ.addEventListener('change', () => {
         container.classList.add('slice-recompute')
         computeSliceCenter(container)
-        // Fade text back in after position is resolved
         requestAnimationFrame(() => requestAnimationFrame(() => {
           container.classList.remove('slice-recompute')
         }))

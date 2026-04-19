@@ -64,6 +64,11 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // Non-GET requests outside /api (e.g. Cloudflare RUM beacons,
+  // challenge-platform POSTs) can't be stored in the Cache API — let them
+  // pass straight through to the network.
+  if (request.method !== 'GET') return
+
   // CDN images: key by the full URL (including ?v=<timestamp>) so a regenerated
   // image served at a new version is a cache miss and gets re-fetched, rather
   // than being served forever from the first cached copy.
