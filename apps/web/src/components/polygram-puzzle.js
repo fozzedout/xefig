@@ -859,13 +859,10 @@ export class PolygramPuzzle {
     const isLandscapeDesktop = rootWidth > rootHeight
     const isPortrait = rootHeight > rootWidth
 
-    if (isLandscapeDesktop) {
-      // Tray is a right sidebar — CSS handles the width via grid column
-      this.tray.style.height = ''
-    } else {
-      const trayHeight = Math.round(clamp(rootHeight * (isPortrait ? 0.18 : 0.22), 100, 200))
-      this.tray.style.height = `${trayHeight}px`
-    }
+    // Let CSS drive tray size (auto-sized to shard content in portrait,
+    // grid-column width in landscape). Forcing a fixed portrait height
+    // padded empty space above/below the shards.
+    this.tray.style.height = ''
 
     // Let CSS grid handle sizing, then read the actual board dimensions
     this.board.style.width = '100%'

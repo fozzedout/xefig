@@ -3510,7 +3510,7 @@ canvas.slice-image {
   display: flex;
   gap: 0.3rem;
   align-items: center;
-  min-height: 82px;
+  min-height: 64px;
   overflow-x: auto;
   overflow-y: hidden;
   touch-action: pan-x;
@@ -3546,11 +3546,12 @@ canvas.slice-image {
 @media (orientation: portrait) {
   .game-shell--immersive .polygram-root {
     grid-template-rows: auto minmax(0, 1fr);
-    padding-top: calc(0.5rem + var(--sai-top) + 48px);
+    padding-top: calc(var(--sai-top) + 44px);
   }
 
   .game-shell--immersive .polygram-tray {
     grid-row: 1;
+    padding: 0.25rem 0.4rem;
   }
 
   .game-shell--immersive .polygram-board-wrap {
@@ -3586,7 +3587,7 @@ canvas.slice-image {
 
 @media (display-mode: standalone) and (orientation: portrait) {
   .game-shell--immersive .polygram-root {
-    padding-top: calc(var(--sai-top) + 48px);
+    padding-top: calc(var(--sai-top) + 44px);
   }
 }
 
