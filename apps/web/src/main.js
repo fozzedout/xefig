@@ -2587,7 +2587,6 @@ function renderGame({ resumeRun = null } = {}) {
   let dblHandled = false
   mount.addEventListener('pointerup', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
-    if (e.target.closest('.sliding-tile, .picture-swap-tile')) return
     const now = Date.now()
     if (now - lastTapTime > 0 && now - lastTapTime < 500) {
       dblHandled = true

@@ -2987,33 +2987,53 @@ canvas.slice-image {
   }
 }
 
-/* Jigsaw's workspace background is mostly plain dark (no photo behind
-   the back button), so the diamond subtlety disappears. Bump contrast
-   on the back button when the active mode is jigsaw. */
-.game-shell--jigsaw .diamond-floating-btn--back {
+/* Jigsaw/polygram/slider/swap workspaces are mostly plain dark (no
+   photo behind the back button), so the diamond subtlety disappears.
+   Bump contrast on the back button to match the menu button's weight. */
+.game-shell--jigsaw .diamond-floating-btn--back,
+.game-shell--polygram .diamond-floating-btn--back,
+.game-shell--sliding .diamond-floating-btn--back,
+.game-shell--swap .diamond-floating-btn--back {
   opacity: 0.75;
   background: rgba(30, 30, 40, 0.75);
   border-color: rgba(255, 255, 255, 0.18);
 }
 .game-shell--jigsaw .diamond-floating-btn--back:hover,
 .game-shell--jigsaw .diamond-floating-btn--back:focus-visible,
-.game-shell--jigsaw .diamond-floating-btn--back:active {
+.game-shell--jigsaw .diamond-floating-btn--back:active,
+.game-shell--polygram .diamond-floating-btn--back:hover,
+.game-shell--polygram .diamond-floating-btn--back:focus-visible,
+.game-shell--polygram .diamond-floating-btn--back:active,
+.game-shell--sliding .diamond-floating-btn--back:hover,
+.game-shell--sliding .diamond-floating-btn--back:focus-visible,
+.game-shell--sliding .diamond-floating-btn--back:active,
+.game-shell--swap .diamond-floating-btn--back:hover,
+.game-shell--swap .diamond-floating-btn--back:focus-visible,
+.game-shell--swap .diamond-floating-btn--back:active {
   opacity: 1;
   background: rgba(40, 40, 50, 0.88);
 }
 
-/* When the jigsaw workspace enters the idle "controls-hidden" state,
-   the back button should dim like the tray tools and menu dots.
-   This needs higher specificity than the .game-shell--jigsaw rule
-   above, otherwise the opacity: 0.75 override would win. */
-.game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back {
+/* When the workspace enters the idle "controls-hidden" state, the back
+   button should dim like the tray tools and menu dots. Needs higher
+   specificity than the rule above, otherwise opacity: 0.75 would win. */
+.game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back,
+.game-shell--polygram .workspace--controls-hidden .diamond-floating-btn--back,
+.game-shell--sliding .workspace--controls-hidden .diamond-floating-btn--back,
+.game-shell--swap .workspace--controls-hidden .diamond-floating-btn--back {
   opacity: 0.22;
 }
 @media (hover: hover) and (pointer: fine) {
-  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back {
+  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back,
+  .game-shell--polygram .workspace--controls-hidden .diamond-floating-btn--back,
+  .game-shell--sliding .workspace--controls-hidden .diamond-floating-btn--back,
+  .game-shell--swap .workspace--controls-hidden .diamond-floating-btn--back {
     opacity: 0.28;
   }
-  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back:hover {
+  .game-shell--jigsaw .workspace--controls-hidden .diamond-floating-btn--back:hover,
+  .game-shell--polygram .workspace--controls-hidden .diamond-floating-btn--back:hover,
+  .game-shell--sliding .workspace--controls-hidden .diamond-floating-btn--back:hover,
+  .game-shell--swap .workspace--controls-hidden .diamond-floating-btn--back:hover {
     opacity: 1;
   }
 }
