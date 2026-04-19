@@ -137,9 +137,18 @@ export type BorderDetectionOptions = {
   // Per-channel std below this means the strip is considered uniform.
   uniformStdMax?: number
   // Euclidean RGB distance between outer and inner means above which
-  // the two bands are considered visibly different.
+  // the two bands are considered visibly different. Used together with
+  // the uniformity check — catches solid coloured frames.
   meanDistanceMin?: number
+  // Stronger distance threshold that flags an edge regardless of outer
+  // strip uniformity — catches textured frames (e.g. a thin dark line
+  // plus a cream paper margin) where the outer band itself has high std
+  // but is clearly a different region from the picture content.
+  meanDistanceLarge?: number
   // Number of edges that must flag before we call the image bordered.
+  // Borders almost always span multiple edges; raising this to 2 keeps a
+  // single naturally high-contrast edge (e.g. a horizon line) from
+  // tripping a false positive.
   minFlaggedEdges?: number
 }
 
@@ -147,7 +156,8 @@ const DEFAULTS: Required<BorderDetectionOptions> = {
   stripRatio: 0.02,
   uniformStdMax: 5,
   meanDistanceMin: 20,
-  minFlaggedEdges: 1,
+  meanDistanceLarge: 60,
+  minFlaggedEdges: 2,
 }
 
 function stripBounds(width: number, height: number, edge: BorderEdge, depth: number, outer: boolean) {
@@ -204,7 +214,8 @@ function rgbDistance(a: [number, number, number], b: [number, number, number]): 
 }
 
 export function detectBorder(imageBytes: Uint8Array, opts: BorderDetectionOptions = {}): BorderDetection {
-  const { stripRatio, uniformStdMax, meanDistanceMin, minFlaggedEdges } = { ...DEFAULTS, ...opts }
+  const { stripRatio, uniformStdMax, meanDistanceMin, meanDistanceLarge, minFlaggedEdges } =
+    { ...DEFAULTS, ...opts }
   const rgba = decodeImage(imageBytes)
   const depth = Math.max(1, Math.round(Math.min(rgba.width, rgba.height) * stripRatio))
 
@@ -213,7 +224,14 @@ export function detectBorder(imageBytes: Uint8Array, opts: BorderDetectionOption
     const outer = stripStats(rgba, edge, true, depth)
     const inner = stripStats(rgba, edge, false, depth)
     const meanDistance = rgbDistance(outer.mean, inner.mean)
-    const flagged = outer.std < uniformStdMax && meanDistance > meanDistanceMin
+    // Either signal is enough: a uniform outer band that's noticeably
+    // different from the inner band (solid frame), OR a very large
+    // outer/inner mean gap regardless of texture (a textured frame —
+    // paper margin, woodcut border, etc. — still produces a sharp
+    // colour discontinuity at the picture's edge).
+    const flagged =
+      (outer.std < uniformStdMax && meanDistance > meanDistanceMin) ||
+      meanDistance > meanDistanceLarge
     return {
       edge,
       outerMean: outer.mean,
