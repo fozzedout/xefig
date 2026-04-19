@@ -3554,6 +3554,16 @@ canvas.slice-image {
     padding: 0.25rem 0.4rem;
   }
 
+  /* Fixed row height: piece elements keep their natural (board-sized)
+     widthPx/heightPx, so flex auto-sizing would balloon the tray to
+     the tallest shard. Force the row height and let overflow:hidden on
+     .polygram-tray clip the off-row layout. The visible shard is
+     centred by transform-origin and stays in view. */
+  .game-shell--immersive .polygram-tray-grid {
+    height: 82px;
+    min-height: 0;
+  }
+
   .game-shell--immersive .polygram-board-wrap {
     grid-row: 2;
   }
