@@ -494,6 +494,22 @@ function applyFullSync(data) {
     })
   }
   applyActiveEntries(remoteActiveEntries, { preserveLocalOnly: true })
+
+  // Tombstones for active runs deleted on other devices (e.g. laptop
+  // dismissed the completion overlay, which deletes the active run).
+  // Without this the phone could hold onto a stale partial run long
+  // after the completion has been synced.
+  const remoteDeletedActive = []
+  for (const [storageKey, deletedAt] of Object.entries(data.deletedActiveRuns || {})) {
+    const parts = storageKey.replace(ACTIVE_RUN_PREFIX, '').split(':')
+    if (!parts[0] || !parts[1]) continue
+    remoteDeletedActive.push({
+      puzzleDate: parts[0],
+      gameMode: parts[1],
+      deletedAt: typeof deletedAt === 'string' ? deletedAt : (deletedAt?.deletedAt || ''),
+    })
+  }
+  if (remoteDeletedActive.length) applyDeletedActiveEntries(remoteDeletedActive)
 }
 
 function buildPushBatch(limit = DEFAULT_PUSH_LIMIT) {
@@ -761,8 +777,11 @@ export function onStatusChange(cb) {
 }
 
 export async function forcePush() {
-  if (!syncEnabled) return
+  if (!syncEnabled) return { ran: false }
+  const revBefore = getSyncRevision()
   await syncNow()
+  const revAfter = getSyncRevision()
+  return { ran: true, revBefore, revAfter, pulledChanges: revAfter !== revBefore }
 }
 
 export function hasPendingChanges() {

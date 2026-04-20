@@ -2668,17 +2668,27 @@ function renderGame({ resumeRun = null } = {}) {
   }
 
   let lastTapTime = 0
+  let lastTapTile = null
   let dblHandled = false
   mount.addEventListener('pointerup', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
+    const tile = e.target.closest('.sliding-tile, .picture-swap-tile') || null
     const now = Date.now()
-    if (now - lastTapTime > 0 && now - lastTapTime < 500) {
+    const quickRepeat = now - lastTapTime > 0 && now - lastTapTime < 500
+    // Tile targets require the second tap on the *same* tile so legitimate
+    // two-tile swaps (swap mode) don't accidentally reveal the reference.
+    // Board/piece targets (jigsaw, polygram, diamond) still reveal on any
+    // quick double-tap anywhere.
+    const sameTarget = tile ? tile === lastTapTile : true
+    if (quickRepeat && sameTarget) {
       dblHandled = true
       toggleReference()
       lastTapTime = 0
+      lastTapTile = null
     } else {
       dblHandled = false
       lastTapTime = now
+      lastTapTile = tile
     }
   })
 
@@ -3210,8 +3220,14 @@ function renderSyncSettings() {
       syncStatusEl.textContent = ''
       syncStatusEl.className = 'sync-status'
       try {
-        await forcePush()
-        syncStatusEl.textContent = 'Synced.'
+        const result = await forcePush()
+        if (result && result.pulledChanges) {
+          syncStatusEl.textContent = `Synced. Pulled changes (rev ${result.revAfter}).`
+        } else if (result && result.ran) {
+          syncStatusEl.textContent = `Synced. No new remote changes (rev ${result.revAfter}).`
+        } else {
+          syncStatusEl.textContent = 'Synced.'
+        }
         syncStatusEl.className = 'sync-status sync-status-ok'
         // Re-render the launcher on next home-page visit so any newly-pulled
         // completions show up. Triggering it now is safe because settings is
