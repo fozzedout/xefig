@@ -4436,8 +4436,8 @@ canvas.slice-image {
    the text is readable against any puzzle image. */
 .completed-screen-topbar {
   position: absolute;
-  top: 0.8rem;
-  left: 1rem;
+  top: calc(0.8rem + var(--sai-top));
+  left: calc(1rem + var(--sai-left));
   z-index: 2;
   display: flex;
   align-items: center;
@@ -4491,8 +4491,8 @@ canvas.slice-image {
 
 .completed-screen-pill {
   position: absolute;
-  top: 0.8rem;
-  right: 1rem;
+  top: calc(0.8rem + var(--sai-top));
+  right: calc(1rem + var(--sai-right));
   z-index: 2;
   display: flex;
   gap: 1.2rem;
