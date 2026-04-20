@@ -643,6 +643,16 @@ function getRunForMode(puzzleDate, gameMode) {
   if (!run || typeof run !== 'object') return null
   if (run.completed) return null
   if (!run.puzzleDate || !run.imageUrl || !run.difficulty) return null
+  // Self-heal: if a completion for this key arrived via sync (another
+  // device finished it) but this device's local active run is still
+  // sitting in storage — maybe the game tab was autosaving on top of the
+  // sync removal, or the removal somehow missed — treat the completion
+  // as authoritative, clean up the stale active, and return null. Keeps
+  // the launcher from showing "Resume" over "Done".
+  if (getCompletionEntry(puzzleDate, gameMode)) {
+    try { localStorage.removeItem(key) } catch {}
+    return null
+  }
   return { ...run, gameMode: normalizeGameMode(run.gameMode), _storageKey: key }
 }
 
@@ -817,6 +827,14 @@ function persistActiveRun(progressState) {
   // Don't save until the player has actually interacted (timer started)
   const elapsed = getActiveElapsedMs()
   if (elapsed === 0 && !progressState) {
+    return
+  }
+
+  // If a completion for this puzzle/mode arrived via sync (another device
+  // finished it) while this client is mid-game, stop autosaving. Otherwise
+  // the 5-second autosave keeps re-writing the stale active run on top of
+  // the sync's removal, making the launcher show "Resume" forever.
+  if (getCompletionEntry(currentRun.puzzleDate, currentRun.gameMode)) {
     return
   }
 
