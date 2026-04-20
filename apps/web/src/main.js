@@ -3323,8 +3323,8 @@ await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
 
 initAppShell()
 
-onConflict(() => {
-  showSyncConflictModal()
+onConflict((conflicts) => {
+  showSyncConflictModal(Array.isArray(conflicts) ? conflicts : [])
 })
 
 // When a background pull brings in new remote data (another device's
@@ -3336,33 +3336,53 @@ onRemoteChanged(() => {
   if (currentPage === 'play') renderLauncher()
 })
 
-function showSyncConflictModal() {
+function showSyncConflictModal(conflicts = []) {
   const existing = document.querySelector('#sync-conflict-modal')
   if (existing) existing.remove()
+
+  const formatRun = (run) => {
+    if (!run) return '—'
+    const elapsed = Number(run.elapsedActiveMs) || 0
+    const when = run.updatedAt ? new Date(run.updatedAt).toLocaleString() : 'unknown'
+    return `${formatDuration(elapsed)} elapsed · last saved ${when}`
+  }
+
+  const puzzleSummaries = conflicts.length
+    ? conflicts
+        .map((c) => `
+          <li class="sync-conflict-item">
+            <div class="sync-conflict-item-title">${MODE_LABELS[c.gameMode] || c.gameMode} · ${c.puzzleDate}</div>
+            <div class="sync-conflict-item-row"><strong>This device:</strong> ${formatRun(c.local)}</div>
+            <div class="sync-conflict-item-row"><strong>Other device:</strong> ${formatRun(c.remote)}</div>
+          </li>
+        `)
+        .join('')
+    : ''
 
   const overlay = document.createElement('div')
   overlay.id = 'sync-conflict-modal'
   overlay.className = 'sync-conflict-overlay'
   overlay.innerHTML = `
     <div class="sync-conflict-dialog">
-      <h3 class="sync-conflict-title">Sync Conflict</h3>
-      <p class="sync-conflict-text">Your progress was updated on another device. Which version would you like to keep?</p>
+      <h3 class="sync-conflict-title">Progress conflict</h3>
+      <p class="sync-conflict-text">Another device has different progress on ${conflicts.length > 1 ? 'these puzzles' : 'this puzzle'}. Which version do you want to keep?</p>
+      ${puzzleSummaries ? `<ul class="sync-conflict-list">${puzzleSummaries}</ul>` : ''}
       <div class="sync-conflict-actions">
-        <button type="button" class="sync-conflict-btn sync-conflict-btn-local" id="sync-keep-local">Keep This Device</button>
-        <button type="button" class="sync-conflict-btn sync-conflict-btn-remote" id="sync-use-remote">Use Other Device</button>
+        <button type="button" class="sync-conflict-btn sync-conflict-btn-local" id="sync-keep-local">Keep this device</button>
+        <button type="button" class="sync-conflict-btn sync-conflict-btn-remote" id="sync-use-remote">Use other device</button>
       </div>
     </div>
   `
   document.body.appendChild(overlay)
 
   overlay.querySelector('#sync-keep-local').addEventListener('click', async () => {
-    await resolveConflict('local')
     overlay.remove()
+    await resolveConflict('local')
   })
 
   overlay.querySelector('#sync-use-remote').addEventListener('click', async () => {
-    await resolveConflict('remote')
     overlay.remove()
+    await resolveConflict('remote')
     if (typeof window.switchToPage === 'function') {
       window.switchToPage('play')
     }

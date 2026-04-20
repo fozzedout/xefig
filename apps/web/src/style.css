@@ -697,7 +697,45 @@ h1 {
   font-size: 0.8rem;
   line-height: 1.6;
   color: rgba(232, 230, 224, 0.7);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.sync-conflict-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.sync-conflict-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+
+.sync-conflict-item-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e8e6e0;
+  margin-bottom: 0.3rem;
+}
+
+.sync-conflict-item-row {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: rgba(232, 230, 224, 0.75);
+}
+
+.sync-conflict-item-row strong {
+  color: #e8e6e0;
+  font-weight: 700;
+  margin-right: 0.3rem;
 }
 
 .sync-conflict-actions {

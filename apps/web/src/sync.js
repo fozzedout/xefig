@@ -386,6 +386,21 @@ function applyCompletedEntries(entries, { preserveLocalOnly = false } = {}) {
   persistJournal()
 }
 
+// Active-run conflicts waiting for user resolution. A conflict is only
+// recorded when BOTH sides have progress and the local copy has unpushed
+// edits (dirty journal entry) — otherwise the remote is simply the newer
+// version of a clean base and should be adopted silently.
+// Key format is `${puzzleDate}:${gameMode}`, same as entityKey().
+const pendingActiveConflicts = new Map()
+
+function clearPendingActiveConflict(key) {
+  pendingActiveConflicts.delete(key)
+}
+
+export function getPendingActiveConflicts() {
+  return [...pendingActiveConflicts.values()]
+}
+
 function applyActiveEntries(entries, { preserveLocalOnly = false } = {}) {
   const remoteMap = {}
   for (const entry of entries || []) {
@@ -404,6 +419,7 @@ function applyActiveEntries(entries, { preserveLocalOnly = false } = {}) {
       removeActiveRun(key)
       clearActiveSync(key)
       clearDeletedActiveSync(key)
+      clearPendingActiveConflict(key)
       continue
     }
 
@@ -416,6 +432,26 @@ function applyActiveEntries(entries, { preserveLocalOnly = false } = {}) {
       }
       continue
     }
+
+    // Both local and remote have progress. If the local copy has unpushed
+    // edits AND differs from remote, it's a genuine divergence — preserve
+    // both versions and let the user choose. Otherwise, take remote when
+    // it's newer (another device pushed), or keep local if it's newer.
+    if (localRun) {
+      const localTok = activeRunToken(localRun)
+      const remoteTok = activeRunToken(remoteRun)
+      const localIsDirty = Boolean(dirtyJournal.activeRuns[key])
+      if (localTok !== remoteTok && localIsDirty) {
+        const [puzzleDate, gameMode] = key.split(':')
+        pendingActiveConflicts.set(key, { puzzleDate, gameMode, local: localRun, remote: remoteRun })
+        // Keep local in storage for now; decision deferred to the user.
+        continue
+      }
+    }
+
+    // Clear any previously-pending conflict for this key — once reconciled
+    // we shouldn't prompt about it again.
+    clearPendingActiveConflict(key)
 
     let chosen = remoteRun
     let keepLocalDirty = false
@@ -510,6 +546,10 @@ function applyFullSync(data) {
     })
   }
   if (remoteDeletedActive.length) applyDeletedActiveEntries(remoteDeletedActive)
+
+  if (pendingActiveConflicts.size > 0 && typeof conflictCallback === 'function') {
+    try { conflictCallback(getPendingActiveConflicts()) } catch {}
+  }
 }
 
 function buildPushBatch(limit = DEFAULT_PUSH_LIMIT) {
@@ -809,7 +849,30 @@ export function onRemoteChanged(cb) {
   remoteChangedCallback = typeof cb === 'function' ? cb : null
 }
 
-export async function resolveConflict() {
+// Resolve active-run conflicts with a user choice.
+//   choice === 'local'  → keep our device's version, re-queue for push so
+//                          the server adopts it on next sync.
+//   choice === 'remote' → overwrite local with the other device's version
+//                          and drop the dirty flag.
+// Applied to every pending conflict — v1 keeps the UI simple. We can
+// split per-conflict later if that becomes a real need.
+export async function resolveConflict(choice = 'remote') {
+  if (pendingActiveConflicts.size === 0) {
+    await syncNow()
+    return
+  }
+  for (const [key, info] of pendingActiveConflicts.entries()) {
+    if (choice === 'local') {
+      // Local already in storage; just ensure the push queue picks it up.
+      queueActiveSync(key, activeRunToken(info.local))
+    } else {
+      setActiveRun(key, info.remote)
+      clearActiveSync(key)
+      clearDeletedActiveSync(key)
+    }
+  }
+  pendingActiveConflicts.clear()
+  persistJournal()
   await syncNow()
 }
 
