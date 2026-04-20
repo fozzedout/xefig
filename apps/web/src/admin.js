@@ -27,6 +27,7 @@ const autoGenerateBtn = document.getElementById('auto-generate-btn')
 const batchPollBtn = document.getElementById('batch-poll-btn')
 const cronSubmitBtn = document.getElementById('cron-submit-btn')
 const cronPollBtn = document.getElementById('cron-poll-btn')
+const pipelinePauseBtn = document.getElementById('pipeline-pause-btn')
 const submitBtn = document.getElementById('submit-btn')
 const submitLabel = document.getElementById('submit-label')
 const statusBar = document.getElementById('status')
@@ -151,6 +152,7 @@ function setAuthState(authenticated) {
 
   if (authenticated) {
     startBatchAutoRefresh()
+    refreshPauseState()
   } else {
     stopBatchAutoRefresh()
   }
@@ -1589,6 +1591,60 @@ cronPollBtn.addEventListener('click', async () => {
     cronPollBtn.disabled = false
   }
 })
+
+// ─── Pipeline pause toggle ───
+// Writes a flag into app_settings that handleBatchSubmit + handleBatchPoll
+// check on every tick (cron + manual). Use when the pipeline is misbehaving
+// so cron doesn't keep piling on batches while you investigate.
+
+function applyPauseButtonState(paused) {
+  if (!pipelinePauseBtn) return
+  pipelinePauseBtn.dataset.paused = paused ? 'true' : 'false'
+  const label = pipelinePauseBtn.querySelector('.pipeline-pause-label')
+  if (label) label.textContent = paused ? 'Resume pipeline' : 'Pause pipeline'
+  pipelinePauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false')
+}
+
+async function refreshPauseState() {
+  if (!pipelinePauseBtn) return
+  try {
+    const { response, payload } = await adminFetch('/api/admin/pipeline/paused')
+    if (response.ok) applyPauseButtonState(Boolean(payload.paused))
+  } catch {
+    // Non-fatal — keep whatever local state we already have.
+  }
+}
+
+if (pipelinePauseBtn) {
+  pipelinePauseBtn.addEventListener('click', async () => {
+    if (!requireAuth()) return
+    const currentlyPaused = pipelinePauseBtn.dataset.paused === 'true'
+    const nextPaused = !currentlyPaused
+    pipelinePauseBtn.disabled = true
+    setStatus(nextPaused ? 'Pausing pipeline...' : 'Resuming pipeline...', 'working')
+    try {
+      const { response, payload } = await adminFetch('/api/admin/pipeline/paused', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paused: nextPaused }),
+      })
+      if (response.status === 401) {
+        setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+        return
+      }
+      if (!response.ok) {
+        setStatus(payload.error || 'Failed to update pipeline state.', 'error')
+        return
+      }
+      applyPauseButtonState(Boolean(payload.paused))
+      setStatus(payload.paused ? 'Pipeline paused. Cron will skip until resumed.' : 'Pipeline resumed.', 'ok')
+    } catch {
+      setStatus('Network error updating pipeline state.', 'error')
+    } finally {
+      pipelinePauseBtn.disabled = false
+    }
+  })
+}
 
 // ─── Copy ───
 

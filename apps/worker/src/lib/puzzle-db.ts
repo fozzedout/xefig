@@ -40,6 +40,9 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
     db.prepare(
       `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
     ),
+    db.prepare(
+      `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    ),
   ])
 
   // Migration path — covers two older schemas:
@@ -345,4 +348,22 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
 
 export async function deleteBatchJob(db: D1Database, batchName: string): Promise<void> {
   await db.prepare('DELETE FROM batch_jobs WHERE batch_name = ?').bind(batchName).run()
+}
+
+export async function getAppSetting(db: D1Database, key: string): Promise<string | null> {
+  const row = await db
+    .prepare('SELECT value FROM app_settings WHERE key = ?')
+    .bind(key)
+    .first<{ value: string }>()
+  return row?.value ?? null
+}
+
+export async function setAppSetting(db: D1Database, key: string, value: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    )
+    .bind(key, value)
+    .run()
 }

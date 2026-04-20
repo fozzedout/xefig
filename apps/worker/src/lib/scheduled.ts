@@ -14,8 +14,16 @@ import {
   getAllPendingBatchJobs,
   saveBatchJob,
   deleteBatchJob,
+  getAppSetting,
   type PendingBatchJob,
 } from './puzzle-db'
+
+export const PIPELINE_PAUSED_KEY = 'pipeline_paused'
+
+export async function isPipelinePaused(db: D1Database): Promise<boolean> {
+  const value = await getAppSetting(db, PIPELINE_PAUSED_KEY)
+  return value === '1'
+}
 
 export type BatchSubmitResult = {
   submitted: boolean
@@ -57,6 +65,10 @@ export async function handleBatchSubmit(
   }
 
   await ensurePuzzleTables(env.DB)
+
+  if (await isPipelinePaused(env.DB)) {
+    return { submitted: false, message: 'Pipeline is paused. Resume it in admin settings to submit new batches.' }
+  }
   const queuedJobs = await getAllPendingBatchJobs(env.DB)
   // A full-pack submit covers every category, so it only collides with
   // a date if any job for that date exists — single-category rows
@@ -271,6 +283,11 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   }
 
   await ensurePuzzleTables(env.DB)
+
+  if (await isPipelinePaused(env.DB)) {
+    return { found: false, message: 'Pipeline is paused. Resume it in admin settings to continue polling.' }
+  }
+
   const jobs = await getAllPendingBatchJobs(env.DB)
   if (jobs.length === 0) {
     return { found: false, message: 'No pending batch job.' }

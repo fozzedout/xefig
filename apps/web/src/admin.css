@@ -669,6 +669,16 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   font-weight: 600;
 }
 
+#pipeline-pause-btn[data-paused='true'] {
+  border-color: rgba(240, 96, 80, 0.55);
+  color: #f06050;
+  background: rgba(240, 96, 80, 0.08);
+}
+
+#pipeline-pause-btn[data-paused='true']:hover {
+  background: rgba(240, 96, 80, 0.16);
+}
+
 /* Messages page */
 .admin-page--messages {
   padding: 1.5rem 2rem;

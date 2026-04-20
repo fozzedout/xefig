@@ -43,7 +43,10 @@ import {
   handleBatchPoll,
   getBatchJobStatus,
   cancelBatchJob,
+  isPipelinePaused,
+  PIPELINE_PAUSED_KEY,
 } from './lib/scheduled'
+import { ensurePuzzleTables, setAppSetting } from './lib/puzzle-db'
 import {
   CATEGORIES,
   type Bindings,
@@ -598,6 +601,30 @@ export function createApp() {
 
     const status = await getBatchJobStatus(c.env)
     return c.json({ ok: true, ...status })
+  })
+
+  app.get('/api/admin/pipeline/paused', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    await ensurePuzzleTables(c.env.DB)
+    const paused = await isPipelinePaused(c.env.DB)
+    return c.json({ ok: true, paused })
+  })
+
+  app.post('/api/admin/pipeline/paused', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { paused?: boolean }
+    const paused = body.paused === true
+    await ensurePuzzleTables(c.env.DB)
+    await setAppSetting(c.env.DB, PIPELINE_PAUSED_KEY, paused ? '1' : '0')
+    return c.json({ ok: true, paused })
   })
 
   app.post('/api/admin/generate-images/cancel', async (c) => {
