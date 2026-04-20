@@ -607,6 +607,10 @@ function buildPushBatch(limit = DEFAULT_PUSH_LIMIT) {
   for (const key of Object.keys(dirtyJournal.activeRuns).sort()) {
     if (budget <= 0) break
     if (ack.completedRuns[key]) continue
+    // Skip keys with an unresolved conflict — pushing them would just bounce
+    // back as a server-side conflict, causing pushPendingBatches to spin up
+    // to its attempts=20 cap before yielding. Wait for the user's choice.
+    if (pendingActiveConflicts.has(key)) continue
     const run = getActiveRun(key)
     if (!run) {
       clearActiveSync(key)
@@ -975,10 +979,12 @@ export function onGameExit() {
         { type: 'application/json' },
       ),
     )
-    // Optimistically acknowledge — beacon is fire-and-forget so we can't
-    // wait for a response.  The next syncNow() will reconcile if the push
-    // actually failed (conflict path will re-pull).
-    acknowledgeBatch(payload.ack)
+    // Deliberately DO NOT acknowledgeBatch here. The beacon is fire-and-
+    // forget, so we have no proof it landed — and even if it did, the
+    // other device may have pushed a different version first. Leaving the
+    // journal dirty means the next syncNow() (on re-entry) can still see
+    // localIsDirty and raise a real conflict when its tokens diverge from
+    // the remote. Server dedupes by token, so the re-push is harmless.
   } catch {}
 }
 
