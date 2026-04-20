@@ -438,9 +438,17 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
           { category, prompt },
         ])
 
+        // saveBatchJob upserts on batch_name (UNIQUE). Rewriting job.batchName
+        // without deleting the old row leaves a duplicate behind, so the next
+        // poll tick sees two pending jobs for the same date and both keep
+        // submitting regens — the infinite-loop bug. Delete the old row first.
+        const previousBatchName = job.batchName
         job.categories[category] = { theme: details.theme, keywords: details.keywords }
         job.phase = 'submitted'
         job.batchName = newBatch
+        if (previousBatchName && previousBatchName !== newBatch) {
+          await deleteBatchJob(env.DB, previousBatchName)
+        }
         await saveBatchJob(env.DB, job)
 
         return {
