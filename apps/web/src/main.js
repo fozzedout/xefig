@@ -2302,43 +2302,71 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     }).catch(() => {})
   }
 
+  const renderBoard = (lb) => {
+    const entries = lb.entries || []
+    const myEntry = entries.find((e) => e.playerGuid === playerGuid)
+    const rankEl = document.querySelector('#completed-rank')
+    if (rankEl && myEntry) {
+      rankEl.textContent = `#${myEntry.rank}`
+    }
+
+    const container = document.querySelector('#completed-leaderboard')
+    if (!container) return
+
+    if (entries.length === 0) {
+      container.innerHTML = `<p class="sheet-leaderboard-empty">No times recorded yet.</p>`
+      return
+    }
+
+    const rowsHtml = entries.map((e) => renderLeaderboardRow({
+      rank: e.rank,
+      elapsedMs: e.elapsedMs,
+      playerGuid: e.playerGuid,
+      profileName: e.profileName,
+      isMe: e.playerGuid === playerGuid,
+      isBest: e.playerGuid === playerGuid,
+    })).join('')
+
+    // Sheet-body already scrolls — don't wrap in .lb-scroll (the inner
+    // cap would clip the list at 15rem in landscape).
+    container.innerHTML = `
+      <table class="lb-table">
+        <colgroup>
+          <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
+        </colgroup>
+        <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `
+  }
+
   fetchLeaderboard(puzzleDate, gameMode, 100)
-    .then((lb) => {
+    .then(async (lb) => {
       const entries = lb.entries || []
       const myEntry = entries.find((e) => e.playerGuid === playerGuid)
-      const rankEl = document.querySelector('#completed-rank')
-      if (rankEl && myEntry) {
-        rankEl.textContent = `#${myEntry.rank}`
+
+      // Self-heal: if the player has a local completion for this puzzle
+      // but no leaderboard row (e.g. an earlier submit failed silently or
+      // the completion arrived via cross-device sync), upsert now and
+      // refetch. The server dedupes by MIN elapsed so resubmitting is
+      // idempotent for players already ranked.
+      const localBest = Number(entry?.bestElapsedMs)
+      if (!myEntry && Number.isFinite(localBest) && localBest >= MIN_PLAUSIBLE_ELAPSED_MS) {
+        try {
+          await submitLeaderboard({
+            puzzleDate,
+            gameMode: normalizeGameMode(gameMode),
+            elapsedActiveMs: localBest,
+          })
+          const refreshed = await fetchLeaderboard(puzzleDate, gameMode, 100)
+          renderBoard(refreshed)
+          return
+        } catch {
+          // Fall through to render whatever we had
+        }
       }
 
-      const container = document.querySelector('#completed-leaderboard')
-      if (!container) return
-
-      if (entries.length === 0) {
-        container.innerHTML = `<p class="sheet-leaderboard-empty">No times recorded yet.</p>`
-        return
-      }
-
-      const rowsHtml = entries.map((e) => renderLeaderboardRow({
-        rank: e.rank,
-        elapsedMs: e.elapsedMs,
-        playerGuid: e.playerGuid,
-        profileName: e.profileName,
-        isMe: e.playerGuid === playerGuid,
-        isBest: e.playerGuid === playerGuid,
-      })).join('')
-
-      // Sheet-body already scrolls — don't wrap in .lb-scroll (the inner
-      // cap would clip the list at 15rem in landscape).
-      container.innerHTML = `
-        <table class="lb-table">
-          <colgroup>
-            <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
-          </colgroup>
-          <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      `
+      renderBoard(lb)
     })
     .catch(() => {
       // Non-fatal
