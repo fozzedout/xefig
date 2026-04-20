@@ -3294,14 +3294,12 @@ canvas.slice-image {
   background: transparent;
 }
 
-/* Portrait: pad the top so tiles sit below the notch + the floating
-   back/menu button strip (matches the JS reservation in
-   SlidingTilePuzzle.getAvailableSpace). Bottom runs to the viewport
-   edge — iOS's home indicator is semi-transparent. */
-@media (orientation: portrait) {
-  .game-shell--immersive .sliding-root {
-    padding-top: calc(var(--sai-top) + 44px);
-  }
+/* Reserve only the top safe-area (notch / dynamic island). The floating
+   back/menu buttons are translucent and are allowed to overlay the top
+   of the board — same behaviour as landscape — so the board can centre
+   in the full viewport rather than being pushed down below the buttons. */
+.game-shell--immersive .sliding-root {
+  padding-top: var(--sai-top);
 }
 
 .sliding-reference {
@@ -3400,14 +3398,12 @@ canvas.slice-image {
   background: transparent;
 }
 
-/* Portrait: pad the top so tiles sit below the notch + the floating
-   back/menu button strip (matches the JS reservation in
-   PictureSwapPuzzle.getAvailableSpace). Bottom runs to the viewport
-   edge — iOS's home indicator is semi-transparent. */
-@media (orientation: portrait) {
-  .game-shell--immersive .picture-swap-root {
-    padding-top: calc(var(--sai-top) + 44px);
-  }
+/* Reserve only the top safe-area (notch / dynamic island). The floating
+   back/menu buttons are translucent and are allowed to overlay the top
+   of the board, so the board centres in the full viewport rather than
+   being pushed down below the buttons. */
+.game-shell--immersive .picture-swap-root {
+  padding-top: var(--sai-top);
 }
 
 .picture-swap-reference {

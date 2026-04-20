@@ -7,6 +7,31 @@ const TARGET_TILE_COUNTS = { easy: 24, medium: 42, hard: 72 }
 const SWAP_COMPLETION_STORAGE_KEY = 'xefig:picture-swap:completion:v1'
 const CONFETTI_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#118ab2', '#ef476f', '#8338ec']
 
+// Pick the (cols, rows) shape near targetTotal that maximises the area
+// covered by square tiles in availW × availH. Square tiles always leave
+// some slack in one dimension; this picks the shape that minimises that
+// slack while staying close to the difficulty count. The image is then
+// cover-cropped to the chosen board rect by getCoverMetrics.
+function pickBestGrid(availW, availH, targetTotal) {
+  const minTotal = Math.max(MIN_COLS * MIN_ROWS, Math.floor(targetTotal * 0.7))
+  const maxTotal = Math.ceil(targetTotal * 1.4)
+  let best = null
+  for (let cols = MIN_COLS; cols <= 24; cols += 1) {
+    for (let rows = MIN_ROWS; rows <= 24; rows += 1) {
+      const total = cols * rows
+      if (total < minTotal || total > maxTotal) continue
+      const tileSize = Math.min(availW / cols, availH / rows)
+      const area = total * tileSize * tileSize
+      if (!best || area > best.area) best = { cols, rows, area }
+    }
+  }
+  if (best) return { cols: best.cols, rows: best.rows }
+  const aspect = availW / availH
+  const cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+  const rows = Math.max(MIN_ROWS, Math.round(targetTotal / cols))
+  return { cols, rows }
+}
+
 export class PictureSwapPuzzle {
   constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress }) {
     if (!container) {
@@ -95,12 +120,13 @@ export class PictureSwapPuzzle {
     const saiTop = this.getSafeAreaInset('top')
     const saiLeft = this.getSafeAreaInset('left')
     const saiRight = this.getSafeAreaInset('right')
-    // Portrait: reserve the 44px strip at the top for the floating
-    // back + menu buttons. Bottom is intentionally NOT reserved — iOS's
-    // home indicator is semi-transparent so tiles can run to the
-    // viewport edge.
+    // Only the native safe-area insets are reserved. The floating
+    // back/menu buttons are translucent and overlay the board (same as
+    // landscape behaviour) — letting the board centre naturally in the
+    // viewport. Bottom is intentionally NOT reserved; iOS's home
+    // indicator is semi-transparent so tiles can run to the viewport edge.
     const isPortrait = window.innerHeight >= window.innerWidth
-    const topReserve = isPortrait ? saiTop + 44 : saiTop
+    const topReserve = saiTop
     const horizReserve = isPortrait ? 0 : saiLeft + saiRight
     return {
       availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
@@ -111,13 +137,13 @@ export class PictureSwapPuzzle {
   calculateGrid() {
     const { availW, availH } = this.getAvailableSpace()
 
-    // Only pick cols/rows from aspect on a fresh puzzle. After tiles
-    // exist the grid shape is fixed except for transpose-on-rotation.
+    // Only pick cols/rows on a fresh puzzle. After tiles exist the grid
+    // shape is fixed except for transpose-on-rotation.
     if (!this.tiles || this.tiles.length === 0) {
-      const aspect = availW / availH
       const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-      this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
-      this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+      const picked = pickBestGrid(availW, availH, targetTotal)
+      this.cols = picked.cols
+      this.rows = picked.rows
     }
 
     // Tile size is uniform square — sized to fit the narrower axis
@@ -132,7 +158,10 @@ export class PictureSwapPuzzle {
     this.tileHeight = this.tileSize
   }
 
-  transposeGrid() {
+  // Portrait→landscape rotates CCW 90°; landscape→portrait rotates CW 90°,
+  // so the board tracks the physical device rotation on a typical
+  // back-camera-down flip.
+  transposeGrid(direction = 'ccw') {
     const oldCols = this.cols
     const oldRows = this.rows
     if (!oldCols || !oldRows) return
@@ -143,7 +172,12 @@ export class PictureSwapPuzzle {
       if (index == null || index < 0) return index
       const r = Math.floor(index / oldCols)
       const c = index % oldCols
-      return c * newCols + r
+      if (direction === 'cw') {
+        // CW: (r, c) → (c, oldRows - 1 - r)
+        return c * newCols + (oldRows - 1 - r)
+      }
+      // CCW: (r, c) → (oldCols - 1 - c, r)
+      return (oldCols - 1 - c) * newCols + r
     }
 
     for (const tile of this.tiles) {
@@ -258,9 +292,8 @@ export class PictureSwapPuzzle {
       newOrientation !== this.lastOrientation &&
       this.tiles.length > 0
     ) {
-      // Rotation: transpose the grid and remap tile positions so tiles
-      // don't shrink to a tiny size when the aspect flips.
-      this.transposeGrid()
+      const direction = this.lastOrientation === 'portrait' ? 'ccw' : 'cw'
+      this.transposeGrid(direction)
     }
     this.lastOrientation = newOrientation
     this.applyBoardSize()

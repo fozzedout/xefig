@@ -4,6 +4,32 @@ const MIN_COLS = 3
 const MIN_ROWS = 3
 const TARGET_TILE_COUNTS = { easy: 20, medium: 35, hard: 56 }
 
+// Pick the (cols, rows) shape near targetTotal that maximises the area
+// covered by square tiles in availW × availH. Square tiles always leave
+// some slack in one dimension (width or height); this picks the shape
+// that minimises that slack while staying close to the difficulty count.
+// The image is then cover-cropped to the chosen board rect by
+// getCoverMetrics, so no picture area is wasted.
+function pickBestGrid(availW, availH, targetTotal) {
+  const minTotal = Math.max(MIN_COLS * MIN_ROWS, Math.floor(targetTotal * 0.7))
+  const maxTotal = Math.ceil(targetTotal * 1.4)
+  let best = null
+  for (let cols = MIN_COLS; cols <= 24; cols += 1) {
+    for (let rows = MIN_ROWS; rows <= 24; rows += 1) {
+      const total = cols * rows
+      if (total < minTotal || total > maxTotal) continue
+      const tileSize = Math.min(availW / cols, availH / rows)
+      const area = total * tileSize * tileSize
+      if (!best || area > best.area) best = { cols, rows, area }
+    }
+  }
+  if (best) return { cols: best.cols, rows: best.rows }
+  const aspect = availW / availH
+  const cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+  const rows = Math.max(MIN_ROWS, Math.round(targetTotal / cols))
+  return { cols, rows }
+}
+
 const SWIPE_MIN_DISTANCE = 22
 const TAP_MAX_DISTANCE = 10
 const TAP_MAX_DURATION_MS = 350
@@ -92,14 +118,14 @@ export class SlidingTilePuzzle {
     const saiTop = this.getSafeAreaInset('top')
     const saiLeft = this.getSafeAreaInset('left')
     const saiRight = this.getSafeAreaInset('right')
-    // Portrait: reserve the 44px strip at the top for the floating
-    // back + menu buttons (they sit at sai-top and are ~42px tall).
-    // Landscape: those buttons hug the top-left corner and don't eat
-    // the board row, so only the horizontal insets matter. Bottom is
-    // intentionally NOT reserved — iOS's home indicator is
-    // semi-transparent so tiles can run to the viewport edge.
+    // Only the native safe-area insets are reserved. The floating
+    // back/menu buttons are translucent and overlay the board (same as
+    // landscape behaviour) — letting the board centre naturally in the
+    // viewport with equal slack top and bottom. Bottom is intentionally
+    // NOT reserved; iOS's home indicator is semi-transparent so tiles
+    // can run to the viewport edge.
     const isPortrait = window.innerHeight >= window.innerWidth
-    const topReserve = isPortrait ? saiTop + 44 : saiTop
+    const topReserve = saiTop
     const horizReserve = isPortrait ? 0 : saiLeft + saiRight
     return {
       availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
@@ -110,14 +136,14 @@ export class SlidingTilePuzzle {
   calculateGrid() {
     const { availW, availH } = this.getAvailableSpace()
 
-    // Only pick cols/rows from aspect on a fresh puzzle. After tiles
-    // exist the grid shape is fixed except for transpose-on-rotation
-    // (see transposeGrid), so a plain resize just rescales tileSize.
+    // Only pick cols/rows on a fresh puzzle. After tiles exist the grid
+    // shape is fixed except for transpose-on-rotation (see transposeGrid),
+    // so a plain resize just rescales tileSize.
     if (!this.tiles || this.tiles.length === 0) {
-      const aspect = availW / availH
       const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-      this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
-      this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+      const picked = pickBestGrid(availW, availH, targetTotal)
+      this.cols = picked.cols
+      this.rows = picked.rows
     }
 
     this.tileSize = Math.min(availW / this.cols, availH / this.rows)
@@ -125,7 +151,11 @@ export class SlidingTilePuzzle {
     this.boardHeight = this.tileSize * this.rows
   }
 
-  transposeGrid() {
+  // Rotate the grid 90° counter-clockwise on orientation change. We pick
+  // Portrait→landscape rotates CCW 90°; landscape→portrait rotates CW 90°,
+  // so the board tracks the physical device rotation on a typical
+  // back-camera-down flip.
+  transposeGrid(direction = 'ccw') {
     const oldCols = this.cols
     const oldRows = this.rows
     if (!oldCols || !oldRows) return
@@ -136,7 +166,12 @@ export class SlidingTilePuzzle {
       if (index == null || index < 0) return index
       const r = Math.floor(index / oldCols)
       const c = index % oldCols
-      return c * newCols + r
+      if (direction === 'cw') {
+        // CW: (r, c) → (c, oldRows - 1 - r)
+        return c * newCols + (oldRows - 1 - r)
+      }
+      // CCW: (r, c) → (oldCols - 1 - c, r)
+      return (oldCols - 1 - c) * newCols + r
     }
 
     for (const tile of this.tiles) {
@@ -299,11 +334,8 @@ export class SlidingTilePuzzle {
       newOrientation !== this.lastOrientation &&
       this.tiles.length > 0
     ) {
-      // Rotating the device transposes the grid rather than squeezing
-      // the old cols×rows into the new aspect (which just shrinks tiles
-      // to a tiny size). Tile slot/home indices are remapped so puzzle
-      // progress is preserved through the orientation change.
-      this.transposeGrid()
+      const direction = this.lastOrientation === 'portrait' ? 'ccw' : 'cw'
+      this.transposeGrid(direction)
     }
     this.lastOrientation = newOrientation
     this.applyBoardSize()
