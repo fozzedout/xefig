@@ -3253,6 +3253,16 @@ canvas.slice-image {
   background: transparent;
 }
 
+/* Portrait: pad the top (and bottom) so tiles don't render under the
+   notch / dynamic island / home indicator. Floating back + menu
+   buttons already use safe-area in their own top/left offsets. */
+@media (orientation: portrait) {
+  .game-shell--immersive .sliding-root {
+    padding-top: var(--sai-top);
+    padding-bottom: var(--sai-bottom);
+  }
+}
+
 .sliding-reference {
   position: absolute;
   inset: 0;
@@ -3347,6 +3357,14 @@ canvas.slice-image {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* Portrait: keep tiles clear of the notch / home indicator. */
+@media (orientation: portrait) {
+  .game-shell--immersive .picture-swap-root {
+    padding-top: var(--sai-top);
+    padding-bottom: var(--sai-bottom);
+  }
 }
 
 .picture-swap-reference {
