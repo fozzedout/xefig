@@ -11,6 +11,7 @@ import {
   linkSync,
   disableSync,
   onConflict,
+  getPendingActiveConflicts,
   resolveConflict,
   startSyncTimer,
   stopSyncTimer,
@@ -3364,15 +3365,10 @@ function renderSyncSettings() {
 
 // ─── Sync initialization (must complete before rendering so pulled state is visible) ───
 
-await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
-
-initAppShell()
-
 let pendingSyncConflicts = null
 
-onConflict((conflicts) => {
-  const list = Array.isArray(conflicts) ? conflicts : []
-  if (list.length === 0) return
+function handleSyncConflicts(list) {
+  if (!Array.isArray(list) || list.length === 0) return
   // Mid-gameplay is the wrong time to prompt the user to choose a save —
   // they'd have to abandon their current run to look at a blocking modal
   // about a different (or the same) puzzle. Defer until they're back at
@@ -3383,14 +3379,34 @@ onConflict((conflicts) => {
     return
   }
   showSyncConflictModal(list)
-})
+}
+
+// Register BEFORE initSync so conflicts detected during the first pull
+// are not dropped — sync.js only fires the callback after a pull, so a
+// late subscription misses the opening round entirely.
+onConflict(handleSyncConflicts)
+
+await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
+
+initAppShell()
 
 function flushPendingSyncConflicts() {
-  if (!pendingSyncConflicts || pendingSyncConflicts.length === 0) return
-  const list = pendingSyncConflicts
+  // Prefer the live pending set from sync.js — it catches conflicts that
+  // were registered before any callback fired (e.g. during initSync, or
+  // while currentPage was 'game' and we stashed nothing yet because the
+  // callback was rate-limited).
+  const live = typeof getPendingActiveConflicts === 'function'
+    ? getPendingActiveConflicts()
+    : []
+  const stashed = pendingSyncConflicts || []
   pendingSyncConflicts = null
+  const list = live.length ? live : stashed
+  if (list.length === 0) return
   showSyncConflictModal(list)
 }
+
+// Surface any conflicts that existed before the callback was registered.
+flushPendingSyncConflicts()
 
 // When a background pull brings in new remote data (another device's
 // completion, etc.), refresh the launcher so freshly-synced pills are
