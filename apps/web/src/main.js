@@ -24,6 +24,7 @@ import {
   markActiveRunDirty,
   markActiveRunDeleted,
   pullOnForeground,
+  onRemoteChanged,
 } from './sync.js'
 // Puzzle engines are loaded on demand in renderGame() via dynamic import()
 // to keep the homepage bundle free of gameplay code.
@@ -3324,6 +3325,15 @@ initAppShell()
 
 onConflict(() => {
   showSyncConflictModal()
+})
+
+// When a background pull brings in new remote data (another device's
+// completion, etc.), refresh the launcher so freshly-synced pills are
+// visible without the user having to hit Sync Now or navigate away and
+// back. Guarded to currentPage === 'play' so we don't clobber a game
+// in progress or a settings view the user is editing.
+onRemoteChanged(() => {
+  if (currentPage === 'play') renderLauncher()
 })
 
 function showSyncConflictModal() {

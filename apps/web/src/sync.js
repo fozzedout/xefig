@@ -665,6 +665,7 @@ async function pullAllRemoteChanges() {
   if (result.fullSync) {
     applyFullSync(result)
     if (typeof result.revision === 'number') setSyncRevision(result.revision)
+    notifyRemoteChanged()
   }
 }
 
@@ -796,6 +797,16 @@ export function notifyIfPending() {
 
 export function onConflict(cb) {
   conflictCallback = typeof cb === 'function' ? cb : null
+}
+
+let remoteChangedCallback = null
+function notifyRemoteChanged() {
+  if (typeof remoteChangedCallback === 'function') {
+    try { remoteChangedCallback() } catch {}
+  }
+}
+export function onRemoteChanged(cb) {
+  remoteChangedCallback = typeof cb === 'function' ? cb : null
 }
 
 export async function resolveConflict() {
