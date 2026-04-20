@@ -52,6 +52,7 @@ export class SlidingTilePuzzle {
     this.setReferenceVisible(false)
     this.emitProgress()
 
+    this.lastOrientation = this.getOrientation()
     window.addEventListener('resize', this.handleWindowResize)
   }
 
@@ -75,26 +76,89 @@ export class SlidingTilePuzzle {
     this.container.innerHTML = ''
   }
 
-  calculateGrid() {
+  getSafeAreaInset(side) {
+    const el = document.createElement('div')
+    el.style.cssText = `position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-${side}, 0px);visibility:hidden;pointer-events:none`
+    document.body.appendChild(el)
+    const val = el.offsetHeight
+    el.remove()
+    return val
+  }
+
+  getAvailableSpace() {
     const containerWidth = this.container.clientWidth || window.innerWidth
     const containerHeight = this.container.clientHeight || window.innerHeight
     const padding = 6
+    const saiTop = this.getSafeAreaInset('top')
+    const saiBottom = this.getSafeAreaInset('bottom')
+    const saiLeft = this.getSafeAreaInset('left')
+    const saiRight = this.getSafeAreaInset('right')
+    // Portrait: reserve the 44px strip at the top for the floating
+    // back + menu buttons (they sit at sai-top and are ~42px tall).
+    // Landscape: those buttons hug the top-left corner and don't eat
+    // the board row, so only the horizontal insets matter.
+    const isPortrait = window.innerHeight >= window.innerWidth
+    const topReserve = isPortrait ? saiTop + 44 : saiTop
+    const bottomReserve = saiBottom
+    const horizReserve = isPortrait ? 0 : saiLeft + saiRight
+    return {
+      availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
+      availH: Math.max(180, containerHeight - padding * 2 - topReserve - bottomReserve),
+    }
+  }
 
-    const availW = Math.max(240, containerWidth - padding * 2)
-    const availH = Math.max(180, containerHeight - padding * 2)
-    const aspect = availW / availH
+  calculateGrid() {
+    const { availW, availH } = this.getAvailableSpace()
 
-    // Target a fixed tile count regardless of screen size
-    const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-    // Distribute tiles to match the viewport aspect ratio
-    // cols/rows ≈ aspect, cols*rows ≈ targetTotal
-    // cols ≈ sqrt(targetTotal * aspect), rows ≈ targetTotal / cols
-    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
-    this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+    // Only pick cols/rows from aspect on a fresh puzzle. After tiles
+    // exist the grid shape is fixed except for transpose-on-rotation
+    // (see transposeGrid), so a plain resize just rescales tileSize.
+    if (!this.tiles || this.tiles.length === 0) {
+      const aspect = availW / availH
+      const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
+      this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+      this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+    }
 
     this.tileSize = Math.min(availW / this.cols, availH / this.rows)
     this.boardWidth = this.tileSize * this.cols
     this.boardHeight = this.tileSize * this.rows
+  }
+
+  transposeGrid() {
+    const oldCols = this.cols
+    const oldRows = this.rows
+    if (!oldCols || !oldRows) return
+    const newCols = oldRows
+    const newRows = oldCols
+
+    const remap = (index) => {
+      if (index == null || index < 0) return index
+      const r = Math.floor(index / oldCols)
+      const c = index % oldCols
+      return c * newCols + r
+    }
+
+    for (const tile of this.tiles) {
+      tile.homeIndex = remap(tile.homeIndex)
+      tile.slotIndex = remap(tile.slotIndex)
+    }
+
+    const newSlots = new Array(oldCols * oldRows).fill(null)
+    for (let i = 0; i < this.slots.length; i += 1) {
+      const val = this.slots[i]
+      if (val != null) newSlots[remap(i)] = val
+    }
+    this.slots = newSlots
+
+    if (typeof this.emptyIndex === 'number') {
+      this.emptyIndex = remap(this.emptyIndex)
+    }
+
+    this.cols = newCols
+    this.rows = newRows
+    this._initialCols = newCols
+    this._initialRows = newRows
   }
 
   createLayout() {
@@ -206,22 +270,6 @@ export class SlidingTilePuzzle {
   applyBoardSize() {
     this.calculateGrid()
 
-    const newTotal = this.cols * this.rows
-    if (this.tiles.length > 0 && newTotal !== this.tiles.length + 1) {
-      this.cols = this._initialCols
-      this.rows = this._initialRows
-
-      const containerWidth = this.container.clientWidth || window.innerWidth
-      const containerHeight = this.container.clientHeight || window.innerHeight
-      const padding = 6
-      const availW = Math.max(240, containerWidth - padding * 2)
-      const availH = Math.max(180, containerHeight - padding * 2)
-
-      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
-      this.boardWidth = this.tileSize * this.cols
-      this.boardHeight = this.tileSize * this.rows
-    }
-
     if (this.board) {
       this.board.style.width = `${this.boardWidth}px`
       this.board.style.height = `${this.boardHeight}px`
@@ -237,10 +285,27 @@ export class SlidingTilePuzzle {
     }
   }
 
+  getOrientation() {
+    return window.innerHeight >= window.innerWidth ? 'portrait' : 'landscape'
+  }
+
   onWindowResize() {
     if (!this.board) {
       return
     }
+    const newOrientation = this.getOrientation()
+    if (
+      this.lastOrientation &&
+      newOrientation !== this.lastOrientation &&
+      this.tiles.length > 0
+    ) {
+      // Rotating the device transposes the grid rather than squeezing
+      // the old cols×rows into the new aspect (which just shrinks tiles
+      // to a tiny size). Tile slot/home indices are remapped so puzzle
+      // progress is preserved through the orientation change.
+      this.transposeGrid()
+    }
+    this.lastOrientation = newOrientation
     this.applyBoardSize()
   }
 

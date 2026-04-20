@@ -56,6 +56,7 @@ export class PictureSwapPuzzle {
     this.setReferenceVisible(false)
     this.emitProgress()
 
+    this.lastOrientation = this.getOrientation()
     window.addEventListener('resize', this.handleWindowResize)
   }
 
@@ -78,19 +79,46 @@ export class PictureSwapPuzzle {
     this.container.innerHTML = ''
   }
 
-  calculateGrid() {
+  getSafeAreaInset(side) {
+    const el = document.createElement('div')
+    el.style.cssText = `position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-${side}, 0px);visibility:hidden;pointer-events:none`
+    document.body.appendChild(el)
+    const val = el.offsetHeight
+    el.remove()
+    return val
+  }
+
+  getAvailableSpace() {
     const containerWidth = this.container.clientWidth || window.innerWidth
     const containerHeight = this.container.clientHeight || window.innerHeight
     const padding = 6
+    const saiTop = this.getSafeAreaInset('top')
+    const saiBottom = this.getSafeAreaInset('bottom')
+    const saiLeft = this.getSafeAreaInset('left')
+    const saiRight = this.getSafeAreaInset('right')
+    // Portrait: reserve the 44px strip at the top for the floating
+    // back + menu buttons that overlay the workspace.
+    const isPortrait = window.innerHeight >= window.innerWidth
+    const topReserve = isPortrait ? saiTop + 44 : saiTop
+    const bottomReserve = saiBottom
+    const horizReserve = isPortrait ? 0 : saiLeft + saiRight
+    return {
+      availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
+      availH: Math.max(180, containerHeight - padding * 2 - topReserve - bottomReserve),
+    }
+  }
 
-    const availW = Math.max(240, containerWidth - padding * 2)
-    const availH = Math.max(180, containerHeight - padding * 2)
-    const aspect = availW / availH
+  calculateGrid() {
+    const { availW, availH } = this.getAvailableSpace()
 
-    // Target a fixed tile count regardless of screen size
-    const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
-    this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+    // Only pick cols/rows from aspect on a fresh puzzle. After tiles
+    // exist the grid shape is fixed except for transpose-on-rotation.
+    if (!this.tiles || this.tiles.length === 0) {
+      const aspect = availW / availH
+      const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
+      this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
+      this.rows = Math.max(MIN_ROWS, Math.round(targetTotal / this.cols))
+    }
 
     // Tile size is uniform square — sized to fit the narrower axis
     const tileFromW = availW / this.cols
@@ -102,6 +130,38 @@ export class PictureSwapPuzzle {
     this.boardHeight = this.tileSize * this.rows
     this.tileWidth = this.tileSize
     this.tileHeight = this.tileSize
+  }
+
+  transposeGrid() {
+    const oldCols = this.cols
+    const oldRows = this.rows
+    if (!oldCols || !oldRows) return
+    const newCols = oldRows
+    const newRows = oldCols
+
+    const remap = (index) => {
+      if (index == null || index < 0) return index
+      const r = Math.floor(index / oldCols)
+      const c = index % oldCols
+      return c * newCols + r
+    }
+
+    for (const tile of this.tiles) {
+      tile.homeIndex = remap(tile.homeIndex)
+      tile.slotIndex = remap(tile.slotIndex)
+    }
+
+    const newSlots = new Array(this.slots.length)
+    for (let i = 0; i < this.slots.length; i += 1) {
+      const tileId = this.slots[i]
+      newSlots[remap(i)] = tileId
+    }
+    this.slots = newSlots
+
+    this.cols = newCols
+    this.rows = newRows
+    this._initialCols = newCols
+    this._initialRows = newRows
   }
 
   createLayout() {
@@ -163,27 +223,6 @@ export class PictureSwapPuzzle {
   applyBoardSize() {
     this.calculateGrid()
 
-    // If tile count changed on resize we can't just reposition — need full rebuild.
-    // For now, keep the original grid and just rescale.
-    const newTotal = this.cols * this.rows
-    if (this.tiles.length > 0 && newTotal !== this.tiles.length) {
-      // Grid count changed but we can't rebuild mid-game — keep aspect, just resize
-      this.cols = this._initialCols
-      this.rows = this._initialRows
-
-      const containerWidth = this.container.clientWidth || window.innerWidth
-      const containerHeight = this.container.clientHeight || window.innerHeight
-      const padding = 6
-      const availW = Math.max(240, containerWidth - padding * 2)
-      const availH = Math.max(180, containerHeight - padding * 2)
-
-      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
-      this.boardWidth = this.tileSize * this.cols
-      this.boardHeight = this.tileSize * this.rows
-      this.tileWidth = this.tileSize
-      this.tileHeight = this.tileSize
-    }
-
     if (!this._initialCols) {
       this._initialCols = this.cols
       this._initialRows = this.rows
@@ -205,10 +244,25 @@ export class PictureSwapPuzzle {
     }
   }
 
+  getOrientation() {
+    return window.innerHeight >= window.innerWidth ? 'portrait' : 'landscape'
+  }
+
   onWindowResize() {
     if (!this.board) {
       return
     }
+    const newOrientation = this.getOrientation()
+    if (
+      this.lastOrientation &&
+      newOrientation !== this.lastOrientation &&
+      this.tiles.length > 0
+    ) {
+      // Rotation: transpose the grid and remap tile positions so tiles
+      // don't shrink to a tiny size when the aspect flips.
+      this.transposeGrid()
+    }
+    this.lastOrientation = newOrientation
     this.applyBoardSize()
   }
 

@@ -3294,12 +3294,13 @@ canvas.slice-image {
   background: transparent;
 }
 
-/* Portrait: pad the top (and bottom) so tiles don't render under the
-   notch / dynamic island / home indicator. Floating back + menu
-   buttons already use safe-area in their own top/left offsets. */
+/* Portrait: pad the top so tiles sit below the notch + the floating
+   back/menu button strip (matches the JS reservation in
+   SlidingTilePuzzle.getAvailableSpace). Bottom handles the home
+   indicator inset. */
 @media (orientation: portrait) {
   .game-shell--immersive .sliding-root {
-    padding-top: var(--sai-top);
+    padding-top: calc(var(--sai-top) + 44px);
     padding-bottom: var(--sai-bottom);
   }
 }
@@ -3400,10 +3401,12 @@ canvas.slice-image {
   background: transparent;
 }
 
-/* Portrait: keep tiles clear of the notch / home indicator. */
+/* Portrait: pad the top so tiles sit below the notch + the floating
+   back/menu button strip (matches the JS reservation in
+   PictureSwapPuzzle.getAvailableSpace). */
 @media (orientation: portrait) {
   .game-shell--immersive .picture-swap-root {
-    padding-top: var(--sai-top);
+    padding-top: calc(var(--sai-top) + 44px);
     padding-bottom: var(--sai-bottom);
   }
 }
