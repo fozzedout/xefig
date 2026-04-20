@@ -90,20 +90,20 @@ export class SlidingTilePuzzle {
     const containerHeight = this.container.clientHeight || window.innerHeight
     const padding = 6
     const saiTop = this.getSafeAreaInset('top')
-    const saiBottom = this.getSafeAreaInset('bottom')
     const saiLeft = this.getSafeAreaInset('left')
     const saiRight = this.getSafeAreaInset('right')
     // Portrait: reserve the 44px strip at the top for the floating
     // back + menu buttons (they sit at sai-top and are ~42px tall).
     // Landscape: those buttons hug the top-left corner and don't eat
-    // the board row, so only the horizontal insets matter.
+    // the board row, so only the horizontal insets matter. Bottom is
+    // intentionally NOT reserved — iOS's home indicator is
+    // semi-transparent so tiles can run to the viewport edge.
     const isPortrait = window.innerHeight >= window.innerWidth
     const topReserve = isPortrait ? saiTop + 44 : saiTop
-    const bottomReserve = saiBottom
     const horizReserve = isPortrait ? 0 : saiLeft + saiRight
     return {
       availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
-      availH: Math.max(180, containerHeight - padding * 2 - topReserve - bottomReserve),
+      availH: Math.max(180, containerHeight - padding * 2 - topReserve),
     }
   }
 

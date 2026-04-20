@@ -3296,12 +3296,11 @@ canvas.slice-image {
 
 /* Portrait: pad the top so tiles sit below the notch + the floating
    back/menu button strip (matches the JS reservation in
-   SlidingTilePuzzle.getAvailableSpace). Bottom handles the home
-   indicator inset. */
+   SlidingTilePuzzle.getAvailableSpace). Bottom runs to the viewport
+   edge — iOS's home indicator is semi-transparent. */
 @media (orientation: portrait) {
   .game-shell--immersive .sliding-root {
     padding-top: calc(var(--sai-top) + 44px);
-    padding-bottom: var(--sai-bottom);
   }
 }
 
@@ -3403,11 +3402,11 @@ canvas.slice-image {
 
 /* Portrait: pad the top so tiles sit below the notch + the floating
    back/menu button strip (matches the JS reservation in
-   PictureSwapPuzzle.getAvailableSpace). */
+   PictureSwapPuzzle.getAvailableSpace). Bottom runs to the viewport
+   edge — iOS's home indicator is semi-transparent. */
 @media (orientation: portrait) {
   .game-shell--immersive .picture-swap-root {
     padding-top: calc(var(--sai-top) + 44px);
-    padding-bottom: var(--sai-bottom);
   }
 }
 
