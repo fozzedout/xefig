@@ -4353,8 +4353,14 @@ canvas.slice-image {
 
 .completed-screen {
   position: fixed;
-  inset: 0;
-  height: 100vh;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* iOS Safari's layout viewport extends behind the top/bottom chrome, so
+     100vh pushes bottom-anchored children (the leaderboard peek) offscreen.
+     --app-height is set to window.innerHeight by the inline script in
+     index.html (browser mode only) and tracks chrome show/hide. */
+  height: var(--app-height, 100vh);
   overflow: hidden;
   background: #000;
   color: #fff;
@@ -4529,7 +4535,7 @@ canvas.slice-image {
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-  max-height: 75vh;
+  max-height: calc(var(--app-height, 100vh) * 0.75);
   transform: translateY(calc(100% - var(--sheet-peek, 3.2rem)));
   transition: transform 0.25s ease;
   cursor: pointer;
