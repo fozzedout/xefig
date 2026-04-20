@@ -678,28 +678,58 @@ async function refreshBatchStatus() {
     const { response, payload } = await adminFetch('/api/admin/generate-images/status')
     if (response.ok) {
       renderBatchStatus(payload)
+      // Adaptive polling: hot pace while there's work in the queue, slow
+      // pace while idle. Was a flat 20s interval — that SELECT on
+      // batch_jobs turned into ~40% of D1 usage with admin open all day.
+      const queueLen = Number(payload.queueLength) || 0
+      const active = Boolean(payload.active)
+      const desiredMs = queueLen > 0 || active ? FAST_REFRESH_MS : SLOW_REFRESH_MS
+      if (desiredMs !== batchRefreshIntervalMs) scheduleBatchAutoRefresh(desiredMs)
     }
   } catch {
     // Non-fatal
   }
 }
 
-// Poll the status endpoint every 20s while authenticated so cron-driven
-// transitions (phase changes, category completions, queue removals) show
-// up in the activity log without needing a manual refresh.
+// Poll the status endpoint while authenticated so cron-driven transitions
+// (phase changes, category completions, queue removals) show up in the
+// activity log. Also pauses when the tab is hidden — no point burning D1
+// reads when nobody's looking.
+const FAST_REFRESH_MS = 20_000
+const SLOW_REFRESH_MS = 120_000
 let batchAutoRefreshId = null
-function startBatchAutoRefresh() {
-  if (batchAutoRefreshId || !isAuthenticated) return
+let batchRefreshIntervalMs = FAST_REFRESH_MS
+
+function scheduleBatchAutoRefresh(intervalMs) {
+  if (batchAutoRefreshId) clearInterval(batchAutoRefreshId)
+  batchRefreshIntervalMs = intervalMs
   batchAutoRefreshId = setInterval(() => {
-    if (isAuthenticated) refreshBatchStatus()
-  }, 20_000)
+    if (isAuthenticated && document.visibilityState === 'visible') {
+      refreshBatchStatus()
+    }
+  }, intervalMs)
 }
+
+function startBatchAutoRefresh() {
+  if (!isAuthenticated) return
+  if (batchAutoRefreshId) return
+  scheduleBatchAutoRefresh(FAST_REFRESH_MS)
+}
+
 function stopBatchAutoRefresh() {
   if (batchAutoRefreshId) {
     clearInterval(batchAutoRefreshId)
     batchAutoRefreshId = null
   }
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && isAuthenticated) {
+    // Kick an immediate refresh so the panel catches up to anything that
+    // happened while hidden, and the adaptive logic picks the right pace.
+    refreshBatchStatus()
+  }
+})
 
 // ─── Date Loading ───
 
