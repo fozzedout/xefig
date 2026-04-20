@@ -4437,7 +4437,7 @@ canvas.slice-image {
 .completed-screen-topbar {
   position: absolute;
   top: calc(0.8rem + var(--sai-top));
-  left: calc(1rem + var(--sai-left));
+  left: 1rem;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -4492,7 +4492,7 @@ canvas.slice-image {
 .completed-screen-pill {
   position: absolute;
   top: calc(0.8rem + var(--sai-top));
-  right: calc(1rem + var(--sai-right));
+  right: 1rem;
   z-index: 2;
   display: flex;
   gap: 1.2rem;
