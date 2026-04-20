@@ -3043,6 +3043,7 @@ function initAppShell() {
 
     if (pageName === 'play') {
       renderLauncher()
+      flushPendingSyncConflicts()
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
     } else if (pageName === 'settings') {
@@ -3367,9 +3368,29 @@ await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
 
 initAppShell()
 
+let pendingSyncConflicts = null
+
 onConflict((conflicts) => {
-  showSyncConflictModal(Array.isArray(conflicts) ? conflicts : [])
+  const list = Array.isArray(conflicts) ? conflicts : []
+  if (list.length === 0) return
+  // Mid-gameplay is the wrong time to prompt the user to choose a save —
+  // they'd have to abandon their current run to look at a blocking modal
+  // about a different (or the same) puzzle. Defer until they're back at
+  // the launcher, where "pick which save to resume from" is the natural
+  // next action anyway.
+  if (currentPage === 'game') {
+    pendingSyncConflicts = list
+    return
+  }
+  showSyncConflictModal(list)
 })
+
+function flushPendingSyncConflicts() {
+  if (!pendingSyncConflicts || pendingSyncConflicts.length === 0) return
+  const list = pendingSyncConflicts
+  pendingSyncConflicts = null
+  showSyncConflictModal(list)
+}
 
 // When a background pull brings in new remote data (another device's
 // completion, etc.), refresh the launcher so freshly-synced pills are
@@ -3380,27 +3401,49 @@ onRemoteChanged(() => {
   if (currentPage === 'play') renderLauncher()
 })
 
+function formatSavedAgo(iso) {
+  if (!iso) return 'Saved recently'
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return 'Saved recently'
+  const diffSec = Math.max(0, Math.round((Date.now() - then) / 1000))
+  if (diffSec < 60) return 'Saved just now'
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `Saved ${diffMin} min ago`
+  const diffHr = Math.round(diffMin / 60)
+  if (diffHr < 24) return `Saved ${diffHr} hr ago`
+  const diffDay = Math.round(diffHr / 24)
+  return `Saved ${diffDay} day${diffDay === 1 ? '' : 's'} ago`
+}
+
 function showSyncConflictModal(conflicts = []) {
   const existing = document.querySelector('#sync-conflict-modal')
   if (existing) existing.remove()
+  if (conflicts.length === 0) return
 
-  const formatRun = (run) => {
-    if (!run) return '—'
-    const elapsed = Number(run.elapsedActiveMs) || 0
-    const when = run.updatedAt ? new Date(run.updatedAt).toLocaleString() : 'unknown'
-    return `${formatDuration(elapsed)} elapsed · last saved ${when}`
+  // v1 resolves all conflicts with the same choice, so the card only needs
+  // to show one representative puzzle. Use the first; everything else gets
+  // a small "also affects N more" footer if applicable.
+  const primary = conflicts[0]
+  const localTime = Date.parse(primary.local?.updatedAt || '') || 0
+  const remoteTime = Date.parse(primary.remote?.updatedAt || '') || 0
+  const localIsLatest = localTime >= remoteTime
+
+  const cardHtml = (side, run, label, isLatest) => {
+    const elapsed = formatDuration(Number(run?.elapsedActiveMs) || 0)
+    const savedAgo = formatSavedAgo(run?.updatedAt)
+    return `
+      <button type="button" class="sync-conflict-card${isLatest ? ' sync-conflict-card--latest' : ''}" data-choice="${side}">
+        <div class="sync-conflict-card-label">${label}</div>
+        <div class="sync-conflict-card-saved">${savedAgo}</div>
+        <div class="sync-conflict-card-elapsed">${elapsed} played</div>
+        <div class="sync-conflict-card-use">Use</div>
+        ${isLatest ? `<div class="sync-conflict-card-latest-tag">Latest save</div>` : ''}
+      </button>
+    `
   }
 
-  const puzzleSummaries = conflicts.length
-    ? conflicts
-        .map((c) => `
-          <li class="sync-conflict-item">
-            <div class="sync-conflict-item-title">${MODE_LABELS[c.gameMode] || c.gameMode} · ${c.puzzleDate}</div>
-            <div class="sync-conflict-item-row"><strong>This device:</strong> ${formatRun(c.local)}</div>
-            <div class="sync-conflict-item-row"><strong>Other device:</strong> ${formatRun(c.remote)}</div>
-          </li>
-        `)
-        .join('')
+  const footer = conflicts.length > 1
+    ? `<p class="sync-conflict-footer">Applies to ${conflicts.length} puzzles with unsaved progress.</p>`
     : ''
 
   const overlay = document.createElement('div')
@@ -3408,28 +3451,25 @@ function showSyncConflictModal(conflicts = []) {
   overlay.className = 'sync-conflict-overlay'
   overlay.innerHTML = `
     <div class="sync-conflict-dialog">
-      <h3 class="sync-conflict-title">Progress conflict</h3>
-      <p class="sync-conflict-text">Another device has different progress on ${conflicts.length > 1 ? 'these puzzles' : 'this puzzle'}. Which version do you want to keep?</p>
-      ${puzzleSummaries ? `<ul class="sync-conflict-list">${puzzleSummaries}</ul>` : ''}
-      <div class="sync-conflict-actions">
-        <button type="button" class="sync-conflict-btn sync-conflict-btn-local" id="sync-keep-local">Keep this device</button>
-        <button type="button" class="sync-conflict-btn sync-conflict-btn-remote" id="sync-use-remote">Use other device</button>
+      <h3 class="sync-conflict-title">Choose a save</h3>
+      <div class="sync-conflict-cards">
+        ${cardHtml('local', primary.local, 'This device', localIsLatest)}
+        ${cardHtml('remote', primary.remote, 'On the cloud', !localIsLatest)}
       </div>
+      ${footer}
     </div>
   `
   document.body.appendChild(overlay)
 
-  overlay.querySelector('#sync-keep-local').addEventListener('click', async () => {
-    overlay.remove()
-    await resolveConflict('local')
-  })
-
-  overlay.querySelector('#sync-use-remote').addEventListener('click', async () => {
-    overlay.remove()
-    await resolveConflict('remote')
-    if (typeof window.switchToPage === 'function') {
-      window.switchToPage('play')
-    }
+  overlay.querySelectorAll('.sync-conflict-card').forEach((card) => {
+    card.addEventListener('click', async () => {
+      const choice = card.dataset.choice === 'remote' ? 'remote' : 'local'
+      overlay.remove()
+      await resolveConflict(choice)
+      if (choice === 'remote' && typeof window.switchToPage === 'function') {
+        window.switchToPage('play')
+      }
+    })
   })
 }
 
