@@ -882,7 +882,7 @@ async function submitLeaderboard(run) {
 }
 
 async function fetchLeaderboard(puzzleDate, gameMode, difficulty, limit = 10) {
-  const mode = GAME_MODE_TO_PUZZLE_CATEGORY[normalizeGameMode(gameMode)] || 'jigsaw'
+  const mode = normalizeGameMode(gameMode)
   const response = await fetch(
     apiUrl(`/api/leaderboard/${encodeURIComponent(puzzleDate)}?gameMode=${mode}&difficulty=${difficulty}&limit=${limit}`),
   )
@@ -2303,7 +2303,7 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     }).catch(() => {})
   }
 
-  fetchLeaderboard(puzzleDate, gameMode, state.difficulty, 100)
+  fetchLeaderboard(puzzleDate, gameMode, entry?.difficulty || state.difficulty, 100)
     .then((lb) => {
       const entries = lb.entries || []
       const myEntry = entries.find((e) => e.playerGuid === playerGuid)
