@@ -24,9 +24,6 @@ export const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond'] as
 export type PuzzleCategory = (typeof CATEGORIES)[number]
 export type FormValue = string | File | Array<string | File>
 
-export const LEADERBOARD_DIFFICULTIES = ['easy', 'medium', 'hard', 'extreme'] as const
-export type LeaderboardDifficulty = (typeof LEADERBOARD_DIFFICULTIES)[number]
-
 export const LEADERBOARD_GAME_MODES = ['jigsaw', 'sliding', 'swap', 'polygram', 'diamond'] as const
 export type LeaderboardGameMode = (typeof LEADERBOARD_GAME_MODES)[number]
 

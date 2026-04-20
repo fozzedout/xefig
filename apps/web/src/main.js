@@ -868,7 +868,6 @@ async function submitLeaderboard(run) {
     body: JSON.stringify({
       puzzleDate: run.puzzleDate,
       gameMode: normalizeGameMode(run.gameMode),
-      difficulty: run.difficulty,
       playerGuid: playerGuid,
       elapsedMs: run.elapsedActiveMs,
     }),
@@ -881,10 +880,10 @@ async function submitLeaderboard(run) {
   return payload
 }
 
-async function fetchLeaderboard(puzzleDate, gameMode, difficulty, limit = 10) {
+async function fetchLeaderboard(puzzleDate, gameMode, limit = 10) {
   const mode = normalizeGameMode(gameMode)
   const response = await fetch(
-    apiUrl(`/api/leaderboard/${encodeURIComponent(puzzleDate)}?gameMode=${mode}&difficulty=${difficulty}&limit=${limit}`),
+    apiUrl(`/api/leaderboard/${encodeURIComponent(puzzleDate)}?gameMode=${mode}&limit=${limit}`),
   )
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || 'Failed to fetch leaderboard.')
@@ -2303,7 +2302,7 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     }).catch(() => {})
   }
 
-  fetchLeaderboard(puzzleDate, gameMode, entry?.difficulty || state.difficulty, 100)
+  fetchLeaderboard(puzzleDate, gameMode, 100)
     .then((lb) => {
       const entries = lb.entries || []
       const myEntry = entries.find((e) => e.playerGuid === playerGuid)
@@ -2851,7 +2850,6 @@ function renderGame({ resumeRun = null } = {}) {
             const lb = await fetchLeaderboard(
               currentRun.puzzleDate,
               currentRun.gameMode,
-              currentRun.difficulty,
               100,
             )
             leaderboardEntries = lb.entries || []

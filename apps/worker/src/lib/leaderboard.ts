@@ -1,7 +1,5 @@
 import {
-  LEADERBOARD_DIFFICULTIES,
   LEADERBOARD_GAME_MODES,
-  type LeaderboardDifficulty,
   type LeaderboardGameMode,
 } from '../types'
 
@@ -25,27 +23,38 @@ export async function ensureLeaderboardTable(db: D1Database): Promise<void> {
     await createLeaderboardTable(db)
   } else {
     const columns = await db.prepare(`PRAGMA table_info(puzzle_leaderboard)`).all<{ name: string }>()
-    const hasGameMode = (columns.results || []).some((column) => column.name === 'game_mode')
+    const columnNames = (columns.results || []).map((column) => column.name)
+    const hasGameMode = columnNames.includes('game_mode')
+    const hasDifficulty = columnNames.includes('difficulty')
     const hasModeScopedUnique =
-      /UNIQUE\s*\(\s*puzzle_date\s*,\s*difficulty\s*,\s*game_mode\s*,\s*player_guid\s*\)/i.test(
-        table.sql || '',
-      )
+      /UNIQUE\s*\(\s*puzzle_date\s*,\s*game_mode\s*,\s*player_guid\s*\)/i.test(table.sql || '')
     const hasSwapGameMode = /game_mode\s+IN\s*\([^)]*'swap'/i.test(table.sql || '')
     const hasPolygramGameMode = /game_mode\s+IN\s*\([^)]*'polygram'/i.test(table.sql || '')
     const hasDiamondGameMode = /game_mode\s+IN\s*\([^)]*'diamond'/i.test(table.sql || '')
 
-    if (!hasGameMode || !hasModeScopedUnique || !hasSwapGameMode || !hasPolygramGameMode || !hasDiamondGameMode) {
+    if (
+      !hasGameMode ||
+      hasDifficulty ||
+      !hasModeScopedUnique ||
+      !hasSwapGameMode ||
+      !hasPolygramGameMode ||
+      !hasDiamondGameMode
+    ) {
       await db.prepare(`DROP TABLE IF EXISTS puzzle_leaderboard_next`).run()
       await createLeaderboardTable(db, 'puzzle_leaderboard_next')
       const selectGameModeExpr = hasGameMode ? `COALESCE(game_mode, 'jigsaw')` : `'jigsaw'`
+      // Collapse rows that previously split by difficulty into one best row
+      // per (puzzle_date, game_mode, player_guid) — keep the fastest time.
       await db
         .prepare(
           `INSERT INTO puzzle_leaderboard_next (
-             id, puzzle_date, difficulty, game_mode, player_guid, elapsed_ms, submitted_at
+             puzzle_date, game_mode, player_guid, elapsed_ms, submitted_at
            )
            SELECT
-             id, puzzle_date, difficulty, ${selectGameModeExpr}, player_guid, elapsed_ms, submitted_at
-           FROM puzzle_leaderboard`,
+             puzzle_date, ${selectGameModeExpr}, player_guid,
+             MIN(elapsed_ms), MIN(submitted_at)
+           FROM puzzle_leaderboard
+           GROUP BY puzzle_date, ${selectGameModeExpr}, player_guid`,
         )
         .run()
       await db.prepare(`DROP TABLE puzzle_leaderboard`).run()
@@ -53,18 +62,15 @@ export async function ensureLeaderboardTable(db: D1Database): Promise<void> {
     }
   }
 
+  await db.prepare(`DROP INDEX IF EXISTS idx_puzzle_leaderboard_daily`).run()
   await db
     .prepare(
       `CREATE INDEX IF NOT EXISTS idx_puzzle_leaderboard_daily
-       ON puzzle_leaderboard (puzzle_date, difficulty, game_mode, elapsed_ms, submitted_at)`,
+       ON puzzle_leaderboard (puzzle_date, game_mode, elapsed_ms, submitted_at)`,
     )
     .run()
 
   leaderboardTableReady = true
-}
-
-export function isLeaderboardDifficulty(value: string): value is LeaderboardDifficulty {
-  return LEADERBOARD_DIFFICULTIES.includes(value as LeaderboardDifficulty)
 }
 
 export function isLeaderboardGameMode(value: string): value is LeaderboardGameMode {
@@ -80,12 +86,11 @@ async function createLeaderboardTable(
       `CREATE TABLE IF NOT EXISTS ${tableName} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         puzzle_date TEXT NOT NULL,
-        difficulty TEXT NOT NULL,
         game_mode TEXT NOT NULL DEFAULT 'jigsaw' CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram', 'diamond')),
         player_guid TEXT NOT NULL,
         elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
         submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
-        UNIQUE (puzzle_date, difficulty, game_mode, player_guid)
+        UNIQUE (puzzle_date, game_mode, player_guid)
       )`,
     )
     .run()
@@ -103,7 +108,6 @@ export async function ensureSubmissionsTable(db: D1Database): Promise<void> {
       `CREATE TABLE IF NOT EXISTS puzzle_submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         puzzle_date TEXT NOT NULL,
-        difficulty TEXT NOT NULL,
         game_mode TEXT NOT NULL CHECK (game_mode IN ('jigsaw', 'sliding', 'swap', 'polygram', 'diamond')),
         player_guid TEXT NOT NULL,
         elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms > 0),
@@ -111,16 +115,29 @@ export async function ensureSubmissionsTable(db: D1Database): Promise<void> {
       )`,
     )
     .run()
+
+  // Drop legacy difficulty column from pre-existing tables.
+  try {
+    const columns = await db.prepare(`PRAGMA table_info(puzzle_submissions)`).all<{ name: string }>()
+    const hasDifficulty = (columns.results || []).some((column) => column.name === 'difficulty')
+    if (hasDifficulty) {
+      await db.prepare(`ALTER TABLE puzzle_submissions DROP COLUMN difficulty`).run()
+    }
+  } catch (err) {
+    console.error('puzzle_submissions difficulty drop failed', err)
+  }
+
   await db
     .prepare(
       `CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_player
        ON puzzle_submissions (player_guid, submitted_at DESC)`,
     )
     .run()
+  await db.prepare(`DROP INDEX IF EXISTS idx_puzzle_submissions_puzzle`).run()
   await db
     .prepare(
       `CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_puzzle
-       ON puzzle_submissions (puzzle_date, game_mode, difficulty, submitted_at DESC)`,
+       ON puzzle_submissions (puzzle_date, game_mode, submitted_at DESC)`,
     )
     .run()
   submissionsTableReady = true

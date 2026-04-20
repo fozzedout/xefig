@@ -5,7 +5,6 @@ import { cors } from 'hono/cors'
 import {
   ensureLeaderboardTable,
   ensureSubmissionsTable,
-  isLeaderboardDifficulty,
   isLeaderboardGameMode,
 } from './lib/leaderboard'
 import { ensureContactTable, validateContact as validateContactForm, storeContactMessage } from './lib/contact'
@@ -928,11 +927,6 @@ export function createApp() {
       return c.json({ error: 'Invalid gameMode.' }, 400)
     }
 
-    const difficultyRaw = c.req.query('difficulty') || 'easy'
-    if (!isLeaderboardDifficulty(difficultyRaw)) {
-      return c.json({ error: 'Invalid difficulty.' }, 400)
-    }
-
     const limitRaw = Number(c.req.query('limit') || 20)
     const limit = Math.max(1, Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 20))
 
@@ -943,12 +937,12 @@ export function createApp() {
         SELECT l.player_guid, l.elapsed_ms, l.submitted_at, p.profile_name
         FROM puzzle_leaderboard l
         LEFT JOIN player_profiles p ON p.player_guid = l.player_guid
-        WHERE l.puzzle_date = ? AND l.difficulty = ? AND l.game_mode = ?
+        WHERE l.puzzle_date = ? AND l.game_mode = ?
         ORDER BY l.elapsed_ms ASC, l.submitted_at ASC
         LIMIT ?
         `,
       )
-        .bind(date, difficultyRaw, gameModeRaw, limit)
+        .bind(date, gameModeRaw, limit)
         .all<{
           player_guid: string
           elapsed_ms: number
@@ -966,16 +960,15 @@ export function createApp() {
 
       const totalRow = await c.env.DB.prepare(
         `SELECT COUNT(*) AS total FROM puzzle_leaderboard
-         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ?`,
+         WHERE puzzle_date = ? AND game_mode = ?`,
       )
-        .bind(date, difficultyRaw, gameModeRaw)
+        .bind(date, gameModeRaw)
         .first<{ total: number }>()
 
       return c.json({
         ok: true,
         date,
         gameMode: gameModeRaw,
-        difficulty: difficultyRaw,
         entries,
         totalEntries: Number(totalRow?.total || entries.length),
       })
@@ -990,7 +983,6 @@ export function createApp() {
       | {
           puzzleDate?: string
           gameMode?: string
-          difficulty?: string
           playerGuid?: string
           elapsedMs?: number
         }
@@ -999,7 +991,6 @@ export function createApp() {
       body = (await c.req.json()) as {
         puzzleDate?: string
         gameMode?: string
-        difficulty?: string
         playerGuid?: string
         elapsedMs?: number
       }
@@ -1009,15 +1000,11 @@ export function createApp() {
 
     const puzzleDate = (body?.puzzleDate || '').trim()
     const gameMode = (body?.gameMode || 'jigsaw').trim()
-    const difficulty = (body?.difficulty || '').trim()
     const playerGuid = (body?.playerGuid || '').trim()
     const elapsedMs = Number(body?.elapsedMs)
 
     if (!isValidDateKey(puzzleDate)) {
       return c.json({ error: 'Invalid puzzleDate. Use YYYY-MM-DD.' }, 400)
-    }
-    if (!isLeaderboardDifficulty(difficulty)) {
-      return c.json({ error: 'Invalid difficulty.' }, 400)
     }
     if (!isLeaderboardGameMode(gameMode)) {
       return c.json({ error: 'Invalid gameMode.' }, 400)
@@ -1041,10 +1028,10 @@ export function createApp() {
       // tied, or was off by N seconds.
       const previousBestRow = await c.env.DB.prepare(
         `SELECT elapsed_ms FROM puzzle_leaderboard
-         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND player_guid = ?
+         WHERE puzzle_date = ? AND game_mode = ? AND player_guid = ?
          LIMIT 1`,
       )
-        .bind(puzzleDate, difficulty, gameMode, playerGuid)
+        .bind(puzzleDate, gameMode, playerGuid)
         .first<{ elapsed_ms: number }>()
       const previousBestMs = previousBestRow ? Number(previousBestRow.elapsed_ms) : null
 
@@ -1054,15 +1041,15 @@ export function createApp() {
       // show where *this* attempt would have placed.
       await c.env.DB.prepare(
         `
-        INSERT INTO puzzle_leaderboard (puzzle_date, difficulty, game_mode, player_guid, elapsed_ms)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(puzzle_date, difficulty, game_mode, player_guid)
+        INSERT INTO puzzle_leaderboard (puzzle_date, game_mode, player_guid, elapsed_ms)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(puzzle_date, game_mode, player_guid)
         DO UPDATE SET
           elapsed_ms = MIN(excluded.elapsed_ms, puzzle_leaderboard.elapsed_ms),
           submitted_at = datetime('now')
         `,
       )
-        .bind(puzzleDate, difficulty, gameMode, playerGuid, Math.round(elapsedMs))
+        .bind(puzzleDate, gameMode, playerGuid, Math.round(elapsedMs))
         .run()
 
       // Append to the per-attempt log (insert-only, not read on the
@@ -1070,10 +1057,10 @@ export function createApp() {
       // leaderboard submission still succeeds.
       try {
         await c.env.DB.prepare(
-          `INSERT INTO puzzle_submissions (puzzle_date, difficulty, game_mode, player_guid, elapsed_ms)
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO puzzle_submissions (puzzle_date, game_mode, player_guid, elapsed_ms)
+           VALUES (?, ?, ?, ?)`,
         )
-          .bind(puzzleDate, difficulty, gameMode, playerGuid, Math.round(elapsedMs))
+          .bind(puzzleDate, gameMode, playerGuid, Math.round(elapsedMs))
           .run()
       } catch (submissionErr) {
         console.error('puzzle_submissions insert failed', submissionErr)
@@ -1083,11 +1070,11 @@ export function createApp() {
         `
         SELECT elapsed_ms
         FROM puzzle_leaderboard
-        WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND player_guid = ?
+        WHERE puzzle_date = ? AND game_mode = ? AND player_guid = ?
         LIMIT 1
         `,
       )
-        .bind(puzzleDate, difficulty, gameMode, playerGuid)
+        .bind(puzzleDate, gameMode, playerGuid)
         .first<{ elapsed_ms: number }>()
 
       const bestMs = personal?.elapsed_ms ?? Math.round(elapsedMs)
@@ -1096,10 +1083,10 @@ export function createApp() {
         `
         SELECT 1 + COUNT(*) AS rank
         FROM puzzle_leaderboard
-        WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND elapsed_ms < ?
+        WHERE puzzle_date = ? AND game_mode = ? AND elapsed_ms < ?
         `,
       )
-        .bind(puzzleDate, difficulty, gameMode, bestMs)
+        .bind(puzzleDate, gameMode, bestMs)
         .first<{ rank: number }>()
 
       // submissionRank = where the player WOULD sit if this attempt's
@@ -1113,10 +1100,10 @@ export function createApp() {
           `
           SELECT 1 + COUNT(*) AS rank
           FROM puzzle_leaderboard
-          WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ? AND elapsed_ms < ?
+          WHERE puzzle_date = ? AND game_mode = ? AND elapsed_ms < ?
           `,
         )
-          .bind(puzzleDate, difficulty, gameMode, submissionElapsedMs)
+          .bind(puzzleDate, gameMode, submissionElapsedMs)
           .first<{ rank: number }>()
         submissionRank = Number(subRankRow?.rank || submissionRank)
       }
@@ -1124,16 +1111,15 @@ export function createApp() {
       // Total entries for "Rank #N of TOTAL" display.
       const totalRow = await c.env.DB.prepare(
         `SELECT COUNT(*) AS total FROM puzzle_leaderboard
-         WHERE puzzle_date = ? AND difficulty = ? AND game_mode = ?`,
+         WHERE puzzle_date = ? AND game_mode = ?`,
       )
-        .bind(puzzleDate, difficulty, gameMode)
+        .bind(puzzleDate, gameMode)
         .first<{ total: number }>()
 
       return c.json({
         ok: true,
         puzzleDate,
         gameMode,
-        difficulty,
         playerGuid,
         bestMs,
         previousBestMs,
