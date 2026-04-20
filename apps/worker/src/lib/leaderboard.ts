@@ -116,11 +116,14 @@ export async function ensureSubmissionsTable(db: D1Database): Promise<void> {
     )
     .run()
 
-  // Drop legacy difficulty column from pre-existing tables.
+  // Drop legacy difficulty column from pre-existing tables. The old
+  // puzzle-scoped index referenced difficulty, so it has to go first —
+  // SQLite refuses DROP COLUMN while an index still mentions the column.
   try {
     const columns = await db.prepare(`PRAGMA table_info(puzzle_submissions)`).all<{ name: string }>()
     const hasDifficulty = (columns.results || []).some((column) => column.name === 'difficulty')
     if (hasDifficulty) {
+      await db.prepare(`DROP INDEX IF EXISTS idx_puzzle_submissions_puzzle`).run()
       await db.prepare(`ALTER TABLE puzzle_submissions DROP COLUMN difficulty`).run()
     }
   } catch (err) {
@@ -133,7 +136,6 @@ export async function ensureSubmissionsTable(db: D1Database): Promise<void> {
        ON puzzle_submissions (player_guid, submitted_at DESC)`,
     )
     .run()
-  await db.prepare(`DROP INDEX IF EXISTS idx_puzzle_submissions_puzzle`).run()
   await db
     .prepare(
       `CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_puzzle
