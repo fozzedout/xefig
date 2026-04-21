@@ -2831,7 +2831,10 @@ function renderGame({ resumeRun = null } = {}) {
             startActiveTimer(0)
             startTimerDisplay()
           }
-          persistActiveRun(progressState)
+          // Skip init-time emit: a fresh updatedAt here would beat an in-flight sync pull.
+          if (timerState.started) {
+            persistActiveRun(progressState)
+          }
           updatePieceCount()
           // Sync view button if puzzle auto-hid the reference
           if (viewBtn && puzzle && !puzzle.referenceVisible) {
