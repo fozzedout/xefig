@@ -2649,6 +2649,43 @@ canvas.slice-image {
   50% { opacity: 1; }
 }
 
+/* In-game: tint the dropdown menu button amber while a cloud sync is
+   running, so the status is visible in immersive chrome too. */
+.gt-icon-btn[data-sync="syncing"] {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.18);
+  border-color: rgba(251, 191, 36, 0.35);
+  animation: pulse-save 1s ease-in-out infinite;
+}
+
+/* Sync status pill on the More slice spine. Small cloud glyph in the
+   top-right corner — visible whether collapsed or expanded. */
+.more-sync-indicator {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8e6e0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  z-index: 4;
+  transition: color 0.2s, background 0.2s, opacity 0.2s;
+  opacity: 0.75;
+}
+.more-sync-indicator:hover { opacity: 1; }
+.more-sync-indicator svg { width: 14px; height: 14px; }
+.more-sync-indicator[data-state="saved"] { color: #4ade80; }
+.more-sync-indicator[data-state="syncing"] { color: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
+.more-sync-indicator[data-state="pending"] { color: #fbbf24; }
+.more-sync-indicator[data-state="error"] { color: #f87171; }
+
 .sr-only {
   position: absolute;
   width: 1px;

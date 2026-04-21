@@ -1116,6 +1116,32 @@ function computeSliceCenter(container) {
   })
 }
 
+function bindMoreSyncIndicator(container) {
+  const indicator = container.querySelector('#more-sync-indicator')
+  if (!indicator) return
+  const apply = (status) => {
+    const hasChanges = hasPendingChanges()
+    let state = 'saved'
+    let label = 'Saved to cloud'
+    if (status === 'syncing') {
+      state = 'syncing'; label = 'Syncing...'
+    } else if (status === 'error') {
+      state = 'error'; label = 'Sync failed — tap to retry'
+    } else if (hasChanges) {
+      state = 'pending'; label = 'Pending changes — tap to sync'
+    }
+    indicator.dataset.state = state
+    indicator.title = label
+    indicator.setAttribute('aria-label', label)
+  }
+  apply(getSyncStatus())
+  onStatusChange(apply)
+  indicator.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    try { await forcePush() } catch {}
+  })
+}
+
 function renderLauncher() {
   destroyPuzzle()
 
@@ -1182,6 +1208,9 @@ function renderLauncher() {
           <div class="slice slice-more${defaultFocus === 'more' ? ' active' : ''}" style="--flex: ${defaultFocus === 'more' ? MORE_ACTIVE_FLEX : MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
             <div class="slice-title">More</div>
+            ${isSyncEnabled() ? `<button id="more-sync-indicator" class="more-sync-indicator" type="button" data-state="saved" aria-label="Sync status" title="Saved to cloud">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 19Z"/></svg>
+            </button>` : ''}
             <div class="slice-more-cards">
               ${(() => {
                 const resume = getLatestActiveArchiveRun(puzzleDate)
@@ -1436,6 +1465,7 @@ function renderLauncher() {
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
+      bindMoreSyncIndicator(container)
       computeSliceCenter(container)
 
       // Recompute on any container resize so --slice-center / --slice-middle /
@@ -2511,28 +2541,32 @@ function renderGame({ resumeRun = null } = {}) {
 
   // Save indicator state
   function updateSaveIndicator(status) {
-    if (!saveIndicator) return
     const isPending = status === 'idle' || status === 'error' || !status
     // After initial load, 'idle' means we haven't pushed yet — check for changes
     const hasChanges = isPending && hasPendingChanges()
-    if (status === 'saved') {
-      saveIndicator.dataset.state = 'saved'
-      saveIndicator.title = 'Saved to cloud'
-    } else if (status === 'syncing') {
-      saveIndicator.dataset.state = 'syncing'
-      saveIndicator.title = 'Syncing...'
+    let state = 'saved'
+    let title = 'Saved to cloud'
+    if (status === 'syncing') {
+      state = 'syncing'; title = 'Syncing...'
     } else if (status === 'error' || hasChanges) {
-      saveIndicator.dataset.state = 'pending'
-      saveIndicator.title = 'Tap to sync now'
-    } else {
-      saveIndicator.dataset.state = 'saved'
-      saveIndicator.title = 'Saved to cloud'
+      state = 'pending'; title = status === 'error' ? 'Sync failed — tap to retry' : 'Tap to sync now'
     }
+    if (saveIndicator) {
+      saveIndicator.dataset.state = state
+      saveIndicator.title = title
+    }
+    // Tint the menu button while a sync is in flight so the status is
+    // visible in immersive chrome (where the legacy indicator isn't drawn).
+    const menuBtns = gameEl.querySelectorAll('#menu-btn')
+    menuBtns.forEach((btn) => {
+      if (state === 'syncing') btn.dataset.sync = 'syncing'
+      else delete btn.dataset.sync
+    })
   }
 
+  updateSaveIndicator(getSyncStatus())
+  onStatusChange(updateSaveIndicator)
   if (saveIndicator) {
-    updateSaveIndicator(getSyncStatus())
-    onStatusChange(updateSaveIndicator)
     saveIndicator.addEventListener('click', async () => {
       persistActiveRun()
       await forcePush()
@@ -2572,6 +2606,7 @@ function renderGame({ resumeRun = null } = {}) {
     document.removeEventListener('gestureend', preventBrowserZoom)
     document.removeEventListener('click', closeMenu)
     persistActiveRun()
+    if (isSyncEnabled()) forcePush().catch(() => {})
     returnFromGame()
   })
 
@@ -3052,6 +3087,7 @@ function initAppShell() {
     if (pageName === 'play') {
       renderLauncher()
       flushPendingSyncConflicts()
+      if (isSyncEnabled()) pullOnForeground().catch(() => {})
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
     } else if (pageName === 'settings') {
