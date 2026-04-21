@@ -849,10 +849,14 @@ function persistActiveRun(progressState) {
   }
   const puzzleChanged = JSON.stringify(stripViewState(nextPuzzleState)) !== JSON.stringify(stripViewState(currentRun.puzzleState))
 
+  // Only advance updatedAt when the puzzle state actually changed. Bumping
+  // it on every idle autosave makes storage drift ahead of what the beacon
+  // pushed and what the server echoes back, triggering spurious sync
+  // conflicts where both sides are really the same saved position.
   const nextRun = {
     ...currentRun,
     elapsedActiveMs: elapsed,
-    updatedAt: new Date().toISOString(),
+    updatedAt: puzzleChanged ? new Date().toISOString() : (currentRun.updatedAt || new Date().toISOString()),
     puzzleState: nextPuzzleState,
   }
   currentRun = nextRun
