@@ -1667,17 +1667,19 @@ canvas.slice-image {
     margin-left: 0.6rem;
   }
 
-  /* Music on/off indicator: diagonal slash over the icon when off, plus
-     a colored accent when on. Visible in both collapsed and active state.
-     The slash has opacity=0 inline on the SVG element so it's hidden by
-     default; CSS only flips it on when .is-off is set. */
-  .more-card--music .music-off-slash {
+  /* Music on/off indicator: sound-wave arcs when on, diagonal slash when off.
+     Both states transition smoothly. Visible in collapsed and active state. */
+  .more-card--music .music-off-slash,
+  .more-card--music .music-on-wave {
     transition: opacity 0.2s;
   }
+  .more-card--music .music-off-slash { opacity: 0; }
   .more-card--music.is-off .music-off-slash {
-    opacity: 1 !important;
-    stroke: rgba(232,230,224,0.55);
+    opacity: 1;
+    stroke: rgba(232,230,224,0.8);
   }
+  .more-card--music.is-off .music-on-wave { opacity: 0; }
+  .more-card--music.is-on .music-on-wave { opacity: 1; }
   .ls-default .more-card--music.is-on,
   .ls-default .more-card--music.is-on:hover {
     color: #8ad0a0;
@@ -2037,9 +2039,15 @@ canvas.slice-image {
     opacity: 1;
   }
 
-  /* Music volume slider in portrait — vertical-oriented via writing-mode
-     so it sits below the icon like the rotated label. Hidden when the
-     More slice is collapsed, shown as a tall vertical bar when active. */
+  /* Music volume slider in portrait — vertical via writing-mode, sits
+     below the icon like the rotated label. Hidden when collapsed,
+     stretches to fill the card height when the More slice is active
+     so the track is easy to hit with a thumb. */
+  .ls-default .slice-more.active .more-card--music {
+    align-self: stretch;
+    justify-content: flex-start;
+  }
+
   .ls-default .more-card-volume {
     opacity: 0;
     height: 0;
@@ -2058,8 +2066,11 @@ canvas.slice-image {
   .ls-default .slice-more.active .more-card-volume {
     opacity: 1;
     width: 18px;
-    height: 70px;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 120px;
     margin-top: 0.6rem;
+    margin-bottom: 0.4rem;
   }
 }
 
