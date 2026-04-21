@@ -223,21 +223,56 @@ export class DiamondPaintingPuzzle {
   clampPan() {
     const vp = this.getViewport()
     const ins = this.getPaletteInsets()
+    const safe = this.getSafeAreaInsets()
     const fullW = this.cols * CELL_PX * this.zoom
     const fullH = this.rows * CELL_PX * this.zoom
+
+    // Let the user pan cells out from under the top safe area (notch /
+    // dynamic island) in portrait — iOS blocks taps in that strip when
+    // content is flush with the screen edge.
+    const topSlack = ins.top + (fullH > vp.h ? safe.top : 0)
+    const leftSlack = ins.left + (fullW > vp.w ? safe.left : 0)
+    const rightSlack = ins.right + (fullW > vp.w ? safe.right : 0)
+    const bottomSlack = ins.bottom + (fullH > vp.h ? safe.bottom : 0)
 
     if (fullW <= vp.w) {
       this.panX = (vp.w - fullW) / 2
     } else {
       // Extend toward whichever side the palette hugs so cells hidden
       // beneath it can be panned into the open region.
-      this.panX = clamp(this.panX, vp.w - fullW - ins.right, 0 + ins.left)
+      this.panX = clamp(this.panX, vp.w - fullW - rightSlack, 0 + leftSlack)
     }
     if (fullH <= vp.h) {
       this.panY = (vp.h - fullH) / 2
     } else {
-      this.panY = clamp(this.panY, vp.h - fullH - ins.bottom, 0 + ins.top)
+      this.panY = clamp(this.panY, vp.h - fullH - bottomSlack, 0 + topSlack)
     }
+  }
+
+  getSafeAreaInsets() {
+    const insets = { top: 0, right: 0, bottom: 0, left: 0 }
+    const host = this.root || document.body
+    if (!host) return insets
+    const probe = document.createElement('div')
+    probe.style.cssText = [
+      'position:absolute',
+      'visibility:hidden',
+      'pointer-events:none',
+      'width:0',
+      'height:0',
+      'padding-top:var(--sai-top,0px)',
+      'padding-right:var(--sai-right,0px)',
+      'padding-bottom:var(--sai-bottom,0px)',
+      'padding-left:var(--sai-left,0px)',
+    ].join(';')
+    host.append(probe)
+    const s = getComputedStyle(probe)
+    insets.top = parseFloat(s.paddingTop) || 0
+    insets.right = parseFloat(s.paddingRight) || 0
+    insets.bottom = parseFloat(s.paddingBottom) || 0
+    insets.left = parseFloat(s.paddingLeft) || 0
+    probe.remove()
+    return insets
   }
 
   // ─── Palette ───
