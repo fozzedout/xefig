@@ -433,15 +433,17 @@ function applyActiveEntries(entries, { preserveLocalOnly = false } = {}) {
       continue
     }
 
-    // Both local and remote have progress. If the local copy has unpushed
-    // edits AND differs from remote, it's a genuine divergence — preserve
-    // both versions and let the user choose. Otherwise, take remote when
-    // it's newer (another device pushed), or keep local if it's newer.
+    // Both local and remote have progress. A real conflict means the
+    // server wrote AFTER our last local save while we also have unpushed
+    // edits — i.e. another device got ahead of us. If local is newer or
+    // equal, our edits just haven't been pushed yet; push on the next
+    // flush rather than prompting the user.
     if (localRun) {
       const localTok = activeRunToken(localRun)
       const remoteTok = activeRunToken(remoteRun)
       const localIsDirty = Boolean(dirtyJournal.activeRuns[key])
-      if (localTok !== remoteTok && localIsDirty) {
+      const remoteIsNewer = compareIsoTimestamps(localRun.updatedAt, remoteRun.updatedAt) < 0
+      if (localTok !== remoteTok && localIsDirty && remoteIsNewer) {
         const [puzzleDate, gameMode] = key.split(':')
         pendingActiveConflicts.set(key, { puzzleDate, gameMode, local: localRun, remote: remoteRun })
         // Keep local in storage for now; decision deferred to the user.
