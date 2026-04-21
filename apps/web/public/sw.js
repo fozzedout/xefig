@@ -1,6 +1,19 @@
-const CACHE_NAME = 'xefig-v6'
+const CACHE_NAME = 'xefig-v7'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
+
+// iOS Safari refuses to serve a cached navigation response if the original
+// had redirected: true — even when the body is fine and the URL is unchanged.
+// new Response() always has redirected: false, so wrap anything we put in
+// (or read out of) the cache. Harmless on responses that weren't redirected.
+function cleanResponse(response) {
+  if (!response || !response.redirected) return response
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -61,12 +74,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response.ok) {
-            const clone = response.clone()
+            const clone = cleanResponse(response.clone())
             caches.open(CACHE_NAME).then((cache) => cache.put(key, clone))
           }
           return response
         })
-        .catch(() => caches.match(key).then((cached) => cached || new Response('{"error":"offline"}', {
+        .catch(() => caches.match(key).then((cached) => cleanResponse(cached) || new Response('{"error":"offline"}', {
           status: 503,
           headers: { 'Content-Type': 'application/json' },
         })))
@@ -92,17 +105,17 @@ self.addEventListener('fetch', (event) => {
         if (cached) {
           // Refresh in background so a newer ?v= is picked up next time.
           fetch(request).then((response) => {
-            if (response.ok) cache.put(request, response.clone())
+            if (response.ok) cache.put(request, cleanResponse(response.clone()))
           }).catch(() => {})
-          return cached
+          return cleanResponse(cached)
         }
         try {
           const response = await fetch(request)
-          if (response.ok) cache.put(request, response.clone())
+          if (response.ok) cache.put(request, cleanResponse(response.clone()))
           return response
         } catch (err) {
           const stale = await cache.match(request, { ignoreSearch: true })
-          if (stale) return stale
+          if (stale) return cleanResponse(stale)
           throw err
         }
       })
@@ -115,10 +128,10 @@ self.addEventListener('fetch', (event) => {
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(request).then((cached) => {
         const fetched = fetch(request).then((response) => {
-          if (response.ok) cache.put(request, response.clone())
+          if (response.ok) cache.put(request, cleanResponse(response.clone()))
           return response
         })
-        return cached || fetched
+        return cleanResponse(cached) || fetched
       })
     )
   )
