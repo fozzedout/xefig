@@ -1240,11 +1240,11 @@ function renderLauncher() {
               </button>
               <div class="more-card more-card--music ${getMusicEnabled() ? 'is-on' : 'is-off'}" data-action="toggle-music" role="button" tabindex="0" aria-label="Music: ${getMusicEnabled() ? 'On' : 'Off'}">
                 <div class="more-card-img">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 9v6h3l5 4V5L7 9H4Z" fill="currentColor" stroke="none"/>
-                    <path class="music-on-wave music-on-wave--near" d="M15.5 8.5a4.5 4.5 0 0 1 0 7"/>
-                    <path class="music-on-wave music-on-wave--far" d="M18.5 6a8 8 0 0 1 0 12"/>
-                    <line class="music-off-slash" x1="3" y1="3" x2="21" y2="21" stroke-width="2"/>
+                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
+                    <ellipse cx="22" cy="44" rx="6" ry="4"/>
+                    <ellipse cx="42" cy="40" rx="6" ry="4"/>
+                    <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round" opacity="0"/>
                   </svg>
                 </div>
                 <input type="range" class="more-card-volume" min="0" max="1" step="0.01" value="${getMusicVolume()}" aria-label="Music volume">
