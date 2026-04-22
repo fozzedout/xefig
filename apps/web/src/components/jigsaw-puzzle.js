@@ -748,6 +748,11 @@ export class JigsawPuzzle {
     }
 
     piece.canvas.classList.add('is-dragging')
+    // The piece was 'pan-y' (landscape) / 'pan-x' (portrait) while in
+    // the tray to allow native scroll. Once we're actually dragging,
+    // switch to 'none' so iOS doesn't reclaim the gesture as a scroll
+    // mid-drag and fire pointercancel (which snapped the piece back).
+    piece.canvas.style.touchAction = 'none'
     piece.canvas.style.position = 'fixed'
     piece.canvas.style.left = `${piece.dragLeft}px`
     piece.canvas.style.top = `${piece.dragTop}px`
@@ -808,13 +813,12 @@ export class JigsawPuzzle {
       return
     }
 
-    if (event.type === 'pointercancel') {
-      this.mountPieceInCarousel(piece)
-      this.emitProgress()
-      this.stopDragging()
-      return
-    }
-
+    // pointercancel used to always snap the piece back to the tray.
+    // On iOS that caused mid-drag drops when Safari reclaimed the
+    // gesture — the user saw the piece start dragging and then jump
+    // back. Instead, fall through to the normal drop logic using the
+    // last known pointer position so a drag that visibly reached the
+    // board still lands there.
     const droppedInCarousel = this.isPointInCarousel(event.clientX, event.clientY)
     const drop = this.getDropState(piece)
 

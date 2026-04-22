@@ -1812,16 +1812,17 @@ function showCompletionOverlay({
   playerGuid: myGuid,
   completedRun,
 }) {
+  // If an overlay is already mounted (from a first-pass render before
+  // the leaderboard network round-trip resolved), reuse its element so
+  // we update in place instead of fading out and back in.
   const existing = document.querySelector('.completion-overlay')
-  if (existing) existing.remove()
-
-  const overlay = document.createElement('div')
+  const overlay = existing || document.createElement('div')
+  const isFirstRender = !existing
   overlay.className = 'completion-overlay'
 
-  let dismissed = false
   const dismiss = () => {
-    if (dismissed) return
-    dismissed = true
+    if (overlay.dataset.dismissed === '1') return
+    overlay.dataset.dismissed = '1'
     if (completedRun) clearRunForMode(completedRun)
     overlay.classList.remove('is-visible')
     setTimeout(() => overlay.remove(), 200)
@@ -1972,13 +1973,15 @@ function showCompletionOverlay({
     </div>
   `
 
-  document.body.appendChild(overlay)
-  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+  if (isFirstRender) {
+    document.body.appendChild(overlay)
+    requestAnimationFrame(() => overlay.classList.add('is-visible'))
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) dismiss()
+    })
+  }
 
   overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss()
-  })
 
   const pinned = overlay.querySelector('#lb-pinned')
   const scrollEl = overlay.querySelector('#lb-scroll')
@@ -2901,48 +2904,80 @@ function renderGame({ resumeRun = null } = {}) {
             'ok',
           )
 
-          let rank = null
-          let bestMs = null
-          let previousBestMs = null
-          let submissionRank = null
-          let submissionElapsedMs = currentRun.elapsedActiveMs
-          let leaderboardEntries = null
-          let totalEntries = 0
+          // Show the modal immediately with just the local time — waiting
+          // on the leaderboard round-trip used to block it for 10-15s on
+          // slow connections (and sometimes never appeared until the user
+          // tapped elsewhere). Fill in the rank + leaderboard section as
+          // soon as the network resolves.
+          const presentOverlay = () => {
+            showCompletionOverlay({
+              gameMode,
+              duration: durationLabel,
+              elapsedMs: currentRun.elapsedActiveMs,
+              submissionElapsedMs: currentRun.elapsedActiveMs,
+              playerGuid,
+              completedRun,
+            })
 
-          try {
-            const result = await submitLeaderboard(currentRun)
-            rank = result.rank
-            bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
-            previousBestMs = Number.isFinite(result.previousBestMs) ? result.previousBestMs : null
-            submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
-            if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
-            if (Number.isFinite(result.totalEntries)) totalEntries = result.totalEntries
+            ;(async () => {
+              let rank = null
+              let bestMs = null
+              let previousBestMs = null
+              let submissionRank = null
+              let submissionElapsedMs = currentRun.elapsedActiveMs
+              let leaderboardEntries = null
+              let totalEntries = 0
 
-            const lb = await fetchLeaderboard(
-              currentRun.puzzleDate,
-              currentRun.gameMode,
-              100,
-            )
-            leaderboardEntries = lb.entries || []
-            if (Number.isFinite(lb.totalEntries)) totalEntries = lb.totalEntries
-          } catch {
-            // Non-fatal
+              try {
+                const result = await submitLeaderboard(currentRun)
+                rank = result.rank
+                bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
+                previousBestMs = Number.isFinite(result.previousBestMs) ? result.previousBestMs : null
+                submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
+                if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
+                if (Number.isFinite(result.totalEntries)) totalEntries = result.totalEntries
+
+                const lb = await fetchLeaderboard(
+                  currentRun.puzzleDate,
+                  currentRun.gameMode,
+                  100,
+                )
+                leaderboardEntries = lb.entries || []
+                if (Number.isFinite(lb.totalEntries)) totalEntries = lb.totalEntries
+              } catch {
+                // Non-fatal
+              }
+
+              // Only re-render if the overlay is still mounted and
+              // hasn't been dismissed. If the user already dismissed it
+              // (or navigated away), don't summon a new one over
+              // whatever they're looking at now.
+              const existing = document.querySelector('.completion-overlay')
+              if (existing && existing.dataset.dismissed !== '1') {
+                showCompletionOverlay({
+                  gameMode,
+                  duration: durationLabel,
+                  elapsedMs: currentRun.elapsedActiveMs,
+                  rank,
+                  bestMs,
+                  previousBestMs,
+                  submissionRank,
+                  submissionElapsedMs,
+                  leaderboardEntries,
+                  totalEntries,
+                  playerGuid,
+                  completedRun,
+                })
+              }
+
+              setStatus(
+                rank
+                  ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${rank}.`
+                  : `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
+                'ok',
+              )
+            })()
           }
-
-          const presentOverlay = () => showCompletionOverlay({
-            gameMode,
-            duration: durationLabel,
-            elapsedMs: currentRun.elapsedActiveMs,
-            rank,
-            bestMs,
-            previousBestMs,
-            submissionRank,
-            submissionElapsedMs,
-            leaderboardEntries,
-            totalEntries,
-            playerGuid,
-            completedRun,
-          })
 
           // Prompt for a leaderboard name on every completion until the
           // player actually sets one. Saving enables server sync so the
@@ -2965,13 +3000,6 @@ function renderGame({ resumeRun = null } = {}) {
           } else {
             presentOverlay()
           }
-
-          setStatus(
-            rank
-              ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${rank}.`
-              : `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
-            'ok',
-          )
         },
       }
 
