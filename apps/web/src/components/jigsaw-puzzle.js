@@ -620,7 +620,13 @@ export class JigsawPuzzle {
     piece.inCarousel = true
 
     piece.canvas.classList.remove('is-locked', 'is-dragging', 'is-loose')
-    piece.canvas.style.touchAction = this.usesSidebarTray() ? 'pan-y' : 'pan-x'
+    // touch-action: none so iOS doesn't make the scroll-vs-drag
+    // decision for us — its angle threshold is very strict and small
+    // vertical drift on a leftward drag used to commit to scroll and
+    // fire pointercancel. We handle both scroll and drag ourselves in
+    // onWindowPointerMove's pendingLift branch, using a more forgiving
+    // first-past-the-post threshold.
+    piece.canvas.style.touchAction = 'none'
     piece.canvas.style.position = 'absolute'
     piece.canvas.style.left = '0px'
     piece.canvas.style.top = '0px'
@@ -696,6 +702,12 @@ export class JigsawPuzzle {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      // 'undecided' → first axis past threshold picks the mode.
+      // 'scrolling' → we drive carousel.scrollTop/Left from finger
+      // delta until pointerup; drag can no longer start.
+      mode: 'undecided',
     }
     this.attachWindowTracking()
   }
@@ -775,16 +787,57 @@ export class JigsawPuzzle {
 
   onWindowPointerMove(event) {
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
-      // If the finger has moved far enough away from the tray, snap to drag.
-      // Native scroll handles the scroll axis — if the browser claims the gesture
-      // for scroll, pointercancel fires and cancelPendingLift cleans up.
-      const liftDistance = this.usesSidebarTray()
-        ? this.pendingLift.startX - event.clientX  // leftward in landscape
-        : event.clientY - this.pendingLift.startY   // downward in portrait
-      if (liftDistance > 30) {
-        const piece = this.pendingLift.piece
+      const lift = this.pendingLift
+      const usesSidebar = this.usesSidebarTray()
+      // Drag-axis delta: leftward in landscape, downward in portrait.
+      const dragDelta = usesSidebar
+        ? lift.startX - event.clientX
+        : event.clientY - lift.startY
+      // Scroll-axis delta: vertical in landscape, horizontal in portrait.
+      const scrollDelta = usesSidebar
+        ? event.clientY - lift.startY
+        : event.clientX - lift.startX
+
+      if (lift.mode === 'scrolling') {
+        if (this.carousel) {
+          // Standard touch-scroll: content tracks the finger.
+          if (usesSidebar) {
+            this.carousel.scrollTop -= event.clientY - lift.lastY
+          } else {
+            this.carousel.scrollLeft -= event.clientX - lift.lastX
+          }
+        }
+        lift.lastX = event.clientX
+        lift.lastY = event.clientY
+        return
+      }
+
+      // Undecided — first axis to cross its threshold picks the mode.
+      // Drag threshold is deliberately looser than the scroll one so a
+      // leftward/downward drag with some perpendicular drift still
+      // commits to drag. iOS's native touch-action decision was too
+      // strict; this is the whole reason we took over scrolling.
+      const DRAG_THRESHOLD = 12
+      const SCROLL_THRESHOLD = 18
+      if (dragDelta >= DRAG_THRESHOLD) {
+        const piece = lift.piece
         this.pendingLift = null
         this.startDraggingPiece(event, piece, { centerOnPointer: true })
+        return
+      }
+      if (Math.abs(scrollDelta) >= SCROLL_THRESHOLD) {
+        lift.mode = 'scrolling'
+        // Apply the scroll accumulated up to this point so the content
+        // catches up with the finger in one step.
+        if (this.carousel) {
+          if (usesSidebar) {
+            this.carousel.scrollTop -= event.clientY - lift.startY
+          } else {
+            this.carousel.scrollLeft -= event.clientX - lift.startX
+          }
+        }
+        lift.lastX = event.clientX
+        lift.lastY = event.clientY
       }
       return
     }
