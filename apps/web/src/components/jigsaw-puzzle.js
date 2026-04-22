@@ -813,12 +813,13 @@ export class JigsawPuzzle {
       return
     }
 
-    // pointercancel used to always snap the piece back to the tray.
-    // On iOS that caused mid-drag drops when Safari reclaimed the
-    // gesture — the user saw the piece start dragging and then jump
-    // back. Instead, fall through to the normal drop logic using the
-    // last known pointer position so a drag that visibly reached the
-    // board still lands there.
+    if (event.type === 'pointercancel') {
+      this.mountPieceInCarousel(piece)
+      this.emitProgress()
+      this.stopDragging()
+      return
+    }
+
     const droppedInCarousel = this.isPointInCarousel(event.clientX, event.clientY)
     const drop = this.getDropState(piece)
 

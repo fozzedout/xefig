@@ -2956,9 +2956,12 @@ canvas.slice-image {
   opacity: 0.97;
 }
 
-.jigsaw-piece.is-dragging {
-  pointer-events: none;
-}
+/* Intentionally NOT setting pointer-events: none while dragging. On
+   iOS Safari, that silently releases the active setPointerCapture so
+   the carousel underneath (touch-action: pan-y) can reclaim the
+   gesture as a scroll and fire pointercancel mid-drag. Drop detection
+   uses event.clientX/Y with bounding-box math, so the piece covering
+   those coordinates doesn't matter. */
 
 @keyframes snap-flash {
   0%, 30%, 60%, 100% {
