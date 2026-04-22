@@ -55,6 +55,7 @@ export class JigsawPuzzle {
 
     this.draggingPiece = null
     this.pendingLift = null
+    this.trayMomentumRaf = null
     this.referenceVisible = false
     this.audioContext = null
     this.displayImageUrl = imageUrl
@@ -98,6 +99,7 @@ export class JigsawPuzzle {
   destroy() {
     this.cancelPendingLift()
     this.stopDragging()
+    this.stopTrayMomentum()
 
     if (this.stage) {
       this.stage.removeEventListener('pointerdown', this.handleStagePointerDown)
@@ -697,6 +699,7 @@ export class JigsawPuzzle {
 
   armCarouselLift(event, piece) {
     piece.pointerId = event.pointerId
+    this.stopTrayMomentum()
     this.pendingLift = {
       piece,
       pointerId: event.pointerId,
@@ -704,12 +707,58 @@ export class JigsawPuzzle {
       startY: event.clientY,
       lastX: event.clientX,
       lastY: event.clientY,
+      lastT: performance.now(),
+      // Rolling velocity in px/ms on the scroll axis; updated on every
+      // pointermove while mode === 'scrolling' so we can flick with
+      // momentum on release.
+      velocity: 0,
       // 'undecided' → first axis past threshold picks the mode.
       // 'scrolling' → we drive carousel.scrollTop/Left from finger
       // delta until pointerup; drag can no longer start.
       mode: 'undecided',
     }
     this.attachWindowTracking()
+  }
+
+  stopTrayMomentum() {
+    if (this.trayMomentumRaf !== null) {
+      cancelAnimationFrame(this.trayMomentumRaf)
+      this.trayMomentumRaf = null
+    }
+  }
+
+  startTrayMomentum(initialVelocityPxPerMs) {
+    // Initial velocity comes in px/ms; run a decaying rAF loop that
+    // applies the remaining velocity each frame. Matches the natural
+    // iOS flick feel well enough without the full spring physics.
+    if (!this.carousel || !Number.isFinite(initialVelocityPxPerMs)) {
+      return
+    }
+    if (Math.abs(initialVelocityPxPerMs) < 0.15) {
+      return
+    }
+    const usesSidebar = this.usesSidebarTray()
+    let velocity = initialVelocityPxPerMs
+    let lastT = performance.now()
+    const step = () => {
+      const now = performance.now()
+      const dt = now - lastT
+      lastT = now
+      const dist = velocity * dt
+      if (usesSidebar) {
+        this.carousel.scrollTop -= dist
+      } else {
+        this.carousel.scrollLeft -= dist
+      }
+      // Exponential decay — ~0.95^frames-at-60fps feels right.
+      velocity *= Math.pow(0.95, dt / 16.67)
+      if (Math.abs(velocity) < 0.02) {
+        this.trayMomentumRaf = null
+        return
+      }
+      this.trayMomentumRaf = requestAnimationFrame(step)
+    }
+    this.trayMomentumRaf = requestAnimationFrame(step)
   }
 
   cancelPendingLift() {
@@ -799,16 +848,27 @@ export class JigsawPuzzle {
         : event.clientX - lift.startX
 
       if (lift.mode === 'scrolling') {
+        const now = performance.now()
+        const dt = Math.max(1, now - lift.lastT)
+        const axisDelta = usesSidebar
+          ? event.clientY - lift.lastY
+          : event.clientX - lift.lastX
         if (this.carousel) {
           // Standard touch-scroll: content tracks the finger.
           if (usesSidebar) {
-            this.carousel.scrollTop -= event.clientY - lift.lastY
+            this.carousel.scrollTop -= axisDelta
           } else {
-            this.carousel.scrollLeft -= event.clientX - lift.lastX
+            this.carousel.scrollLeft -= axisDelta
           }
         }
+        // Rolling velocity in px/ms. Blend with previous so a stall
+        // right before lift-off doesn't kill all momentum from the
+        // flick leading up to it.
+        const instant = axisDelta / dt
+        lift.velocity = lift.velocity * 0.4 + instant * 0.6
         lift.lastX = event.clientX
         lift.lastY = event.clientY
+        lift.lastT = now
         return
       }
 
@@ -857,6 +917,15 @@ export class JigsawPuzzle {
 
   onWindowPointerUp(event) {
     if (this.pendingLift && this.pendingLift.pointerId === event.pointerId && !this.draggingPiece) {
+      // If we were scrolling, hand the velocity off to a momentum
+      // decay so a flick keeps coasting instead of dead-stopping at
+      // the finger's last position.
+      if (
+        this.pendingLift.mode === 'scrolling' &&
+        event.type !== 'pointercancel'
+      ) {
+        this.startTrayMomentum(this.pendingLift.velocity)
+      }
       this.cancelPendingLift()
       return
     }
