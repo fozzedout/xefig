@@ -3240,7 +3240,13 @@ canvas.slice-image {
 
 @media (orientation: landscape) {
   .jigsaw-root {
-    grid-template-rows: minmax(0, 1fr);
+    /* First row is a 24px spacer for iOS's "phantom top dead zone" in
+       landscape — touches in the top ~20px are silently captured by
+       the OS on recent iPhones (17 series documented, 15 observed)
+       even though env(safe-area-inset-top) still reports 0. Without
+       this, dragging the top piece of the tray gets cancelled mid-
+       drag because iOS steals the first bit of the gesture. */
+    grid-template-rows: 24px minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) minmax(118px, 10.5vw);
     align-items: stretch;
     /* No gap between canvas and tray — the tray should butt straight
@@ -3250,7 +3256,7 @@ canvas.slice-image {
   }
 
   .jigsaw-carousel {
-    grid-row: 1;
+    grid-row: 2;
     grid-column: 2;
     border-bottom: 0;
     /* Hug the actual screen right edge (ignore safe-area-inset-right)
@@ -3262,8 +3268,10 @@ canvas.slice-image {
     overflow-x: hidden;
     overflow-y: scroll;
     touch-action: pan-y;
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
-    mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
+    /* Slightly longer top fade than bottom to visually reinforce the
+       dead-zone buffer above the first piece. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.25rem, black calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 1.25rem, black calc(100% - 1rem), transparent);
   }
 
   .jigsaw-carousel-track {
@@ -3275,7 +3283,7 @@ canvas.slice-image {
 
   .jigsaw-tray-tools {
     flex-direction: column;
-    grid-row: 1;
+    grid-row: 2;
     grid-column: 2;
     align-self: start;
     justify-self: start;
