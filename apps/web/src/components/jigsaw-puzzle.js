@@ -404,6 +404,7 @@ export class JigsawPuzzle {
 
         const carouselItem = document.createElement('div')
         carouselItem.className = 'jigsaw-carousel-item'
+        carouselItem.dataset.pieceKey = `${row}:${col}`
 
         const carouselPreview = document.createElement('div')
         carouselPreview.className = 'jigsaw-carousel-preview'
@@ -1095,12 +1096,18 @@ export class JigsawPuzzle {
   }
 
   getProgressState() {
+    const trayOrder = []
+    for (const item of this.carouselTrack.children) {
+      const key = item.dataset?.pieceKey
+      if (key) trayOrder.push(key)
+    }
     return {
       zoom: this.zoom,
       panX: this.panX,
       panY: this.panY,
       boardColorIndex: this.boardColorIndex,
       edgesOnly: this.edgesOnly,
+      trayOrder,
       pieces: this.pieces.map((piece) => ({
         row: piece.row,
         col: piece.col,
@@ -1154,6 +1161,15 @@ export class JigsawPuzzle {
       piece.x = locked ? piece.targetX : clamped.x
       piece.y = locked ? piece.targetY : clamped.y
       this.mountPieceOnBoard(piece, { locked })
+    }
+
+    if (Array.isArray(payload.trayOrder)) {
+      for (const key of payload.trayOrder) {
+        const piece = pieceByKey.get(key)
+        if (piece && piece.inCarousel && piece.carouselItem.parentElement === this.carouselTrack) {
+          this.carouselTrack.append(piece.carouselItem)
+        }
+      }
     }
 
     const rawZoom = Number(payload.zoom)
