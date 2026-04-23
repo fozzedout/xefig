@@ -3021,7 +3021,10 @@ canvas.slice-image {
   min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  touch-action: pan-x;
+  /* We drive the tray scroll from pointer events ourselves so the
+     scroll-vs-drag decision uses our (looser) angle threshold. See
+     onCarouselPointerDown / onWindowPointerMove. */
+  touch-action: none;
   overscroll-behavior: contain;
   -webkit-mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
   mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
@@ -3267,7 +3270,8 @@ canvas.slice-image {
     min-height: 0;
     overflow-x: hidden;
     overflow-y: scroll;
-    touch-action: pan-y;
+    /* Manual scroll — see portrait rule above for rationale. */
+    touch-action: none;
     /* Slightly longer top fade than bottom to visually reinforce the
        dead-zone buffer above the first piece. */
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 1.25rem, black calc(100% - 1rem), transparent);

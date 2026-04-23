@@ -74,6 +74,7 @@ export class JigsawPuzzle {
     this.handleStagePointerUp = (event) => this.onStagePointerUp(event)
     this.handleStageWheel = (event) => this.onStageWheel(event)
     this.handleCarouselWheel = (event) => this.onCarouselWheel(event)
+    this.handleCarouselPointerDown = (event) => this.onCarouselPointerDown(event)
     this.handleLayoutChange = () => this.onLayoutChange()
   }
 
@@ -112,6 +113,7 @@ export class JigsawPuzzle {
     window.removeEventListener('resize', this.handleLayoutChange)
     if (this.carousel) {
       this.carousel.removeEventListener('wheel', this.handleCarouselWheel)
+      this.carousel.removeEventListener('pointerdown', this.handleCarouselPointerDown)
     }
 
     if (this.pieces?.length) {
@@ -258,6 +260,7 @@ export class JigsawPuzzle {
     this.stage.addEventListener('pointercancel', this.handleStagePointerUp)
     this.stage.addEventListener('wheel', this.handleStageWheel, { passive: false })
     this.carousel.addEventListener('wheel', this.handleCarouselWheel, { passive: false })
+    this.carousel.addEventListener('pointerdown', this.handleCarouselPointerDown)
     window.addEventListener('orientationchange', this.handleLayoutChange)
     window.addEventListener('resize', this.handleLayoutChange)
   }
@@ -697,6 +700,30 @@ export class JigsawPuzzle {
     this.startDraggingPiece(event, piece)
   }
 
+  onCarouselPointerDown(event) {
+    // Piece pointerdowns bubble up to here too, but the piece's own
+    // listener (fired first) will have armed the lift already.
+    if (event.pointerType !== 'touch') return
+    if (this.pendingLift || this.draggingPiece) return
+    // Background touch → start a scroll-only lift that commits
+    // immediately to scrolling, sharing the same momentum logic as
+    // the piece-initiated path. No drag can start from a background
+    // touch (there's no piece under it to lift).
+    this.stopTrayMomentum()
+    this.pendingLift = {
+      piece: null,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      lastT: performance.now(),
+      velocity: 0,
+      mode: 'scrolling',
+    }
+    this.attachWindowTracking()
+  }
+
   armCarouselLift(event, piece) {
     piece.pointerId = event.pointerId
     this.stopTrayMomentum()
@@ -766,7 +793,10 @@ export class JigsawPuzzle {
       return
     }
 
-    this.pendingLift.piece.pointerId = null
+    // piece is null for scroll-only lifts (carousel background touch).
+    if (this.pendingLift.piece) {
+      this.pendingLift.piece.pointerId = null
+    }
     this.pendingLift = null
 
     if (!this.draggingPiece) {
