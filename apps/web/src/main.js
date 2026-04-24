@@ -1249,6 +1249,18 @@ function renderLauncher() {
                 </div>
                 <input type="range" class="more-card-volume" min="0" max="1" step="0.01" value="${getMusicVolume()}" aria-label="Music volume">
               </div>
+              <button class="more-card" data-action="share-sync" aria-label="${isSyncEnabled() ? 'Send this profile to another device' : 'Set up device sync'}">
+                <div class="more-card-img">
+                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="10" y="6" width="22" height="36" rx="3"/>
+                    <rect x="32" y="22" width="22" height="36" rx="3"/>
+                    <circle cx="21" cy="36" r="1.2" fill="currentColor"/>
+                    <circle cx="43" cy="52" r="1.2" fill="currentColor"/>
+                    <path d="M24 24 L40 32" stroke-dasharray="3 2"/>
+                  </svg>
+                </div>
+                <span class="more-card-label">${isSyncEnabled() ? 'Play on another device' : 'Set up device sync'}</span>
+              </button>
               <button class="more-card" data-page="settings">
                 <div class="more-card-img">
                   <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.7">
@@ -1403,6 +1415,19 @@ function renderLauncher() {
               btn.classList.toggle('is-on', nowEnabled)
               btn.classList.toggle('is-off', !nowEnabled)
               btn.setAttribute('aria-label', `Music: ${nowEnabled ? 'On' : 'Off'}`)
+              return
+            }
+            if (btn.dataset.action === 'share-sync') {
+              if (isSyncEnabled()) {
+                const code = getShareCode()
+                if (code) {
+                  showSyncCodeCelebration({ name: getProfileName(), code })
+                  return
+                }
+              }
+              // No code yet (sync never set up) — drop the user into Settings
+              // where the Enable Sync button lives.
+              window.switchToPage('settings')
               return
             }
             if (btn.dataset.action === 'continue') {
@@ -2188,7 +2213,101 @@ function showNameDialog({ defaultName = '', onDone }) {
   })
 }
 
-function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm }) {
+// Build a link that, when opened on another device, auto-links the share
+// code via the boot handler (see `?sync=` parsing below).
+function makeSyncShareUrl(code) {
+  const url = new URL(location.origin + '/')
+  url.searchParams.set('sync', code)
+  return url.toString()
+}
+
+// Ask the browser to mark our storage as persistent. On iOS 15.2+ this is
+// the main lever we have against cache eviction wiping the player's identity.
+// Fire-and-forget; the browser grants it silently based on engagement.
+function requestPersistentStorage() {
+  try {
+    if (navigator.storage && typeof navigator.storage.persist === 'function') {
+      navigator.storage.persist().catch(() => {})
+    }
+  } catch {}
+}
+
+// Step 2 of the first-completion flow: reveal the sync code that was just
+// minted and make it easy to hand off to another device. Shown only after
+// `enableSync` succeeds — on failure we just present the completion overlay.
+function showSyncCodeCelebration({ name, code, onDone }) {
+  const existing = document.querySelector('.sync-celebrate-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'completion-overlay sync-celebrate-overlay'
+  const shareUrl = makeSyncShareUrl(code)
+  const greet = name ? `Saved as ${escapeHtml(name)}.` : 'Sync enabled.'
+  overlay.innerHTML = `
+    <div class="completion-card sync-celebrate-card">
+      <h3 class="sync-celebrate-title">${greet}</h3>
+      <p class="sync-celebrate-msg">Your sync code keeps your progress safe and lets you play on another device.</p>
+      <div class="sync-code-display sync-celebrate-code">
+        <span class="sync-code-value">${code}</span>
+      </div>
+      <div class="sync-celebrate-actions">
+        <button type="button" class="sync-celebrate-share">Send to another device</button>
+        <button type="button" class="sync-celebrate-copy">Copy code</button>
+      </div>
+      <p class="sync-celebrate-hint">You can see this code again in Settings at any time.</p>
+      <div class="confirm-actions sync-celebrate-done-row">
+        <button type="button" class="confirm-ok sync-celebrate-done">Done</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+
+  let done = false
+  const close = () => {
+    if (done) return
+    done = true
+    overlay.classList.remove('is-visible')
+    setTimeout(() => overlay.remove(), 200)
+    if (typeof onDone === 'function') onDone()
+  }
+
+  const shareBtn = overlay.querySelector('.sync-celebrate-share')
+  const copyBtn = overlay.querySelector('.sync-celebrate-copy')
+
+  shareBtn.addEventListener('click', async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'xefig sync',
+          text: 'Open xefig on your other device with this link',
+          url: shareUrl,
+        })
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        shareBtn.textContent = 'Link copied!'
+        setTimeout(() => { shareBtn.textContent = 'Send to another device' }, 2000)
+      }
+    } catch {
+      // user cancelled share sheet — ignore
+    }
+  })
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      copyBtn.textContent = 'Copied!'
+      setTimeout(() => { copyBtn.textContent = 'Copy code' }, 2000)
+    } catch {}
+  })
+
+  overlay.querySelector('.sync-celebrate-done').addEventListener('click', close)
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close()
+  })
+}
+
+function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel }) {
   const existing = document.querySelector('.confirm-overlay')
   if (existing) existing.remove()
 
@@ -2206,17 +2325,18 @@ function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'C
   document.body.appendChild(overlay)
   requestAnimationFrame(() => overlay.classList.add('is-visible'))
 
-  const dismiss = () => {
+  let settled = false
+  const dismiss = (fn) => {
+    if (settled) return
+    settled = true
     overlay.classList.remove('is-visible')
     setTimeout(() => overlay.remove(), 200)
+    if (typeof fn === 'function') fn()
   }
-  overlay.querySelector('.confirm-cancel').addEventListener('click', dismiss)
-  overlay.querySelector('.confirm-ok').addEventListener('click', () => {
-    dismiss()
-    onConfirm()
-  })
+  overlay.querySelector('.confirm-cancel').addEventListener('click', () => dismiss(onCancel))
+  overlay.querySelector('.confirm-ok').addEventListener('click', () => dismiss(onConfirm))
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss()
+    if (e.target === overlay) dismiss(onCancel)
   })
 }
 
@@ -2985,18 +3105,41 @@ function renderGame({ resumeRun = null } = {}) {
 
           // Prompt for a leaderboard name on every completion until the
           // player actually sets one. Saving enables server sync so the
-          // name propagates. Skip just continues to the overlay.
+          // name propagates, and we then surface the freshly-minted sync
+          // code so the player can back up their progress to another
+          // device — otherwise they'd never see it unless they dug into
+          // Settings. Skip just continues to the overlay.
           const hasName = !!(getProfileName() || '').trim()
           if (!hasName) {
             showNameDialog({
-              onDone: (result) => {
-                if (result && result.name) {
-                  try {
-                    setProfileName(result.name)
-                    if (!isSyncEnabled()) enableSync(playerGuid).catch(() => {})
-                  } catch (e) {
-                    console.error('Failed to save profile name', e)
+              onDone: async (result) => {
+                if (!result || !result.name) {
+                  presentOverlay()
+                  return
+                }
+                const wasSyncEnabled = isSyncEnabled()
+                try {
+                  setProfileName(result.name)
+                } catch (e) {
+                  console.error('Failed to save profile name', e)
+                }
+                if (wasSyncEnabled) {
+                  presentOverlay()
+                  return
+                }
+                try {
+                  const code = await enableSync(playerGuid)
+                  requestPersistentStorage()
+                  if (code) {
+                    showSyncCodeCelebration({
+                      name: result.name,
+                      code,
+                      onDone: presentOverlay,
+                    })
+                    return
                   }
+                } catch (e) {
+                  console.error('Failed to enable sync', e)
                 }
                 presentOverlay()
               },
@@ -3464,6 +3607,50 @@ onConflict(handleSyncConflicts)
 await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
 
 initAppShell()
+
+// ─── Sync link boot handler ───
+// If the page was opened with ?sync=ABC123, try to link that code so the
+// player lands on their existing progress without having to hunt through
+// Settings. If sync is already enabled locally, confirm before replacing
+// — we don't want a shared link to silently overwrite someone else's run.
+async function handleSyncLinkParam() {
+  const params = new URLSearchParams(location.search)
+  const raw = params.get('sync')
+  if (!raw) return
+  const code = raw.trim().toUpperCase()
+  // Always strip the param — whether we act on it or not, leaving it in
+  // the URL means a reload would retry a link that may have already been
+  // consumed or declined.
+  const cleanUrl = location.pathname + location.hash
+  try { history.replaceState(null, '', cleanUrl) } catch {}
+
+  if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(code)) return
+
+  if (isSyncEnabled()) {
+    const existingCode = getShareCode()
+    if (existingCode && existingCode.toUpperCase() === code) return
+    const proceed = await new Promise((resolve) => {
+      showConfirmDialog({
+        message: 'This device is already synced. Opening this link will replace the current profile with the shared one. Your current progress stays on the other device.',
+        confirmLabel: 'Switch',
+        cancelLabel: 'Keep current',
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+    if (!proceed) return
+    try { disableSync() } catch {}
+  }
+
+  try {
+    await linkSync(code)
+    requestPersistentStorage()
+    if (currentPage === 'play') renderLauncher()
+  } catch (e) {
+    console.error('Failed to link via share URL', e)
+  }
+}
+handleSyncLinkParam()
 
 function flushPendingSyncConflicts() {
   // Prefer the live pending set from sync.js — it catches conflicts that

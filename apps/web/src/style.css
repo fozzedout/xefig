@@ -4408,6 +4408,83 @@ canvas.slice-image {
   transform: translateY(-1px);
 }
 
+/* ─── Sync code celebration dialog ─── */
+
+.sync-celebrate-card {
+  padding: 1.5rem 1.5rem 1.2rem;
+  max-width: 380px;
+  text-align: left;
+  display: block;
+}
+
+.sync-celebrate-title {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.sync-celebrate-msg {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.sync-celebrate-code {
+  justify-content: center;
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  background: rgba(80, 232, 160, 0.06);
+  border: 1px dashed rgba(80, 232, 160, 0.3);
+  border-radius: 0.5rem;
+}
+
+.sync-celebrate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.sync-celebrate-share,
+.sync-celebrate-copy {
+  appearance: none;
+  border: none;
+  padding: 0.7rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.15s ease;
+}
+
+.sync-celebrate-share {
+  background: var(--accent, #50e8a0);
+  color: #0a0a0f;
+}
+
+.sync-celebrate-copy {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.sync-celebrate-share:hover,
+.sync-celebrate-copy:hover {
+  transform: translateY(-1px);
+}
+
+.sync-celebrate-hint {
+  margin: 0 0 1rem;
+  font-size: 0.72rem;
+  color: rgba(232, 230, 224, 0.45);
+  text-align: center;
+}
+
+.sync-celebrate-done-row {
+  margin-top: 0.2rem;
+}
+
 /* ─── Save/resume badge ─── */
 
 .mode-card-badge-save {
