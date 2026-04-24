@@ -92,28 +92,44 @@ self.addEventListener('fetch', (event) => {
   // pass straight through to the network.
   if (request.method !== 'GET') return
 
-  // Navigations / HTML documents: network-first. Stale-while-revalidate
-  // bricks the app across deploys because the old index.html references
-  // hashed asset filenames that no longer exist on the server (404s →
-  // "Loading..." forever). Always try network so a fresh deploy is
-  // picked up on the very next load; fall back to cache only when
-  // offline.
+  // Navigations / HTML documents: network-first with a short timeout,
+  // falling back to cache. Stale-while-revalidate bricks the app across
+  // deploys because the old index.html references hashed asset filenames
+  // that no longer exist on the server (404s → "Loading..." forever).
+  // We prefer network so a fresh deploy is picked up on the next load,
+  // but on a slow connection we'd rather show a cached copy than a
+  // blank screen. The background fetch still runs to completion and
+  // updates the cache, so post-deploy the next load recovers even if
+  // this one served the stale copy.
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith((async () => {
-      try {
-        const response = await fetch(request)
-        if (response.ok) {
-          const cache = await caches.open(CACHE_NAME)
-          cache.put(request, cleanResponse(response.clone()))
+      const cache = await caches.open(CACHE_NAME)
+      const cached = await cache.match(request)
+
+      const networkFetch = (async () => {
+        try {
+          const response = await fetch(request)
+          if (response.ok) {
+            cache.put(request, cleanResponse(response.clone()))
+          }
+          return response
+        } catch {
+          return null
         }
-        return response
-      } catch (err) {
-        const cached = await caches.match(request)
-        if (cached) return cleanResponse(cached)
-        const fallback = await caches.match('/')
-        if (fallback) return cleanResponse(fallback)
-        throw err
+      })()
+
+      if (cached) {
+        const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+        const winner = await Promise.race([networkFetch, timeout])
+        if (winner) return winner
+        return cleanResponse(cached)
       }
+
+      const response = await networkFetch
+      if (response) return response
+      const fallback = await cache.match('/')
+      if (fallback) return cleanResponse(fallback)
+      return new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
     })())
     return
   }
