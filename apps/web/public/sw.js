@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v7'
+const CACHE_NAME = 'xefig-v8'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -91,6 +91,32 @@ self.addEventListener('fetch', (event) => {
   // challenge-platform POSTs) can't be stored in the Cache API — let them
   // pass straight through to the network.
   if (request.method !== 'GET') return
+
+  // Navigations / HTML documents: network-first. Stale-while-revalidate
+  // bricks the app across deploys because the old index.html references
+  // hashed asset filenames that no longer exist on the server (404s →
+  // "Loading..." forever). Always try network so a fresh deploy is
+  // picked up on the very next load; fall back to cache only when
+  // offline.
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request)
+        if (response.ok) {
+          const cache = await caches.open(CACHE_NAME)
+          cache.put(request, cleanResponse(response.clone()))
+        }
+        return response
+      } catch (err) {
+        const cached = await caches.match(request)
+        if (cached) return cleanResponse(cached)
+        const fallback = await caches.match('/')
+        if (fallback) return cleanResponse(fallback)
+        throw err
+      }
+    })())
+    return
+  }
 
   // CDN images: key by the full URL (including ?v=<timestamp>) so a regenerated
   // image served at a new version is a cache miss and gets re-fetched, rather
