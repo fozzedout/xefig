@@ -5,7 +5,7 @@
   <g transform="translate(100 100) rotate(-20)">
     <use href="#xefig-seg" fill="#e070a0"/>
     <use href="#xefig-seg" fill="#40d0f0" transform="rotate(72)"/>
-    <use href="#xefig-seg" fill="#a060f0" transform="rotate(144)"/>
+    <use href="#xefig-seg" fill="#a880ff" transform="rotate(144)"/>
     <use href="#xefig-seg" fill="#f0c040" transform="rotate(216)"/>
     <use href="#xefig-seg" fill="#50d070" transform="rotate(288)"/>
   </g>
