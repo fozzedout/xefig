@@ -149,9 +149,11 @@ test('mobile polygram tray keeps controls visible and lets a shard be picked up'
   expect(trayLayout.visiblePieceTop).toBeGreaterThanOrEqual(trayLayout.gridTop - pieceTolerance)
   expect(trayLayout.visiblePieceBottom).toBeLessThanOrEqual(trayLayout.gridBottom + pieceTolerance)
 
-  // Dragging a tray piece picks it up (holds it)
+  // Dragging a tray piece picks it up (holds it). In portrait the tray
+  // is on top and the pickup direction is downward (toward the board),
+  // matching the jigsaw tray behaviour.
   const firstPiece = await getVisiblePieceLocator(page)
-  const dragResult = await dragVisiblePieceWithTouch(page, firstPiece, { x: 0, y: -200 }, { release: false })
+  const dragResult = await dragVisiblePieceWithTouch(page, firstPiece, { x: 0, y: 200 }, { release: false })
   expect(dragResult.className).toContain('is-held')
 })
 

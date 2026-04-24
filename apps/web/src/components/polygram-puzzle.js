@@ -45,7 +45,17 @@ export class PolygramPuzzle {
     this.ringDragState = null
     this.trackingPointerId = null
 
+    // Tray scroll-vs-drag: mirrors the jigsaw carousel. Touch pointerdown
+    // on a tray piece arms an undecided lift; first axis past threshold
+    // picks the mode. Taking scroll over from iOS avoids its strict
+    // angle heuristic cancelling a diagonal drag.
+    this.pendingLift = null
+    this.trayMomentumRaf = null
+
     this.handleWindowResize = () => this.onWindowResize()
+    this.handleWindowPointerMove = (event) => this.onWindowPointerMove(event)
+    this.handleWindowPointerUp = (event) => this.onWindowPointerUp(event)
+    this.handleTrayPointerDown = (event) => this.onTrayPointerDown(event)
   }
 
   async init() {
@@ -72,12 +82,18 @@ export class PolygramPuzzle {
 
   destroy() {
     window.removeEventListener('resize', this.handleWindowResize)
+    this.detachWindowTracking()
+    this.stopTrayMomentum()
+    this.pendingLift = null
 
     if (this.root) {
       this.root.removeEventListener('pointermove', this._onRootPointerMove)
       this.root.removeEventListener('pointerup', this._onRootPointerUp)
       this.root.removeEventListener('pointerdown', this._onRootPointerDown)
       this.root.removeEventListener('wheel', this._onWheel)
+    }
+    if (this.tray) {
+      this.tray.removeEventListener('pointerdown', this.handleTrayPointerDown)
     }
     if (this.board) {
       this.board.removeEventListener('pointerdown', this._onBoardPointerDown)
@@ -191,6 +207,9 @@ export class PolygramPuzzle {
     this.root.addEventListener('pointerup', this._onRootPointerUp)
     this.root.addEventListener('wheel', this._onWheel, { passive: false })
 
+    // Background touches on the tray drive manual scroll directly.
+    this.tray.addEventListener('pointerdown', this.handleTrayPointerDown)
+
     this.updateBoardTransform()
   }
 
@@ -222,8 +241,15 @@ export class PolygramPuzzle {
 
       element.addEventListener('pointerdown', (e) => {
         if (piece.state === 'locked' || this.completed) return
-        e.preventDefault()
+        // Stop propagation so the tray's background pointerdown handler
+        // doesn't also arm a scroll-only lift for the same gesture.
         e.stopPropagation()
+        if (e.pointerType === 'touch' && piece.state === 'tray') {
+          if (this.pendingLift || this.heldPieceId != null) return
+          this.armTrayLift(e, piece)
+          return
+        }
+        e.preventDefault()
         this.onPiecePointerDown(piece, e)
       })
 
@@ -388,6 +414,167 @@ export class PolygramPuzzle {
   }
 
   // ---------------------------------------------------------------------------
+  // Tray scroll-vs-drag (mirrors jigsaw-puzzle.js carousel handling)
+  // ---------------------------------------------------------------------------
+
+  usesSidebarTray() {
+    return window.innerWidth > window.innerHeight
+  }
+
+  armTrayLift(event, piece) {
+    this.stopTrayMomentum()
+    // Touching a tray piece is also the "tap anywhere else" gesture that
+    // dismisses an active rotation ring on a placed piece.
+    if (this.ringPieceId != null) this.dismissRing()
+    this.pendingLift = {
+      piece,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      lastT: performance.now(),
+      velocity: 0,
+      mode: 'undecided',
+    }
+    this.attachWindowTracking()
+  }
+
+  onTrayPointerDown(event) {
+    if (event.pointerType !== 'touch') return
+    if (this.pendingLift || this.heldPieceId != null) return
+    this.stopTrayMomentum()
+    if (this.ringPieceId != null) this.dismissRing()
+    this.pendingLift = {
+      piece: null,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      lastT: performance.now(),
+      velocity: 0,
+      mode: 'scrolling',
+    }
+    this.attachWindowTracking()
+  }
+
+  attachWindowTracking() {
+    window.addEventListener('pointermove', this.handleWindowPointerMove)
+    window.addEventListener('pointerup', this.handleWindowPointerUp)
+    window.addEventListener('pointercancel', this.handleWindowPointerUp)
+  }
+
+  detachWindowTracking() {
+    window.removeEventListener('pointermove', this.handleWindowPointerMove)
+    window.removeEventListener('pointerup', this.handleWindowPointerUp)
+    window.removeEventListener('pointercancel', this.handleWindowPointerUp)
+  }
+
+  onWindowPointerMove(event) {
+    if (!this.pendingLift || this.pendingLift.pointerId !== event.pointerId) return
+    const lift = this.pendingLift
+    const usesSidebar = this.usesSidebarTray()
+    // Drag-axis delta: leftward in landscape (tray on right),
+    // downward in portrait (tray on top in immersive).
+    const dragDelta = usesSidebar
+      ? lift.startX - event.clientX
+      : event.clientY - lift.startY
+    // Scroll-axis delta: perpendicular to drag axis.
+    const scrollDelta = usesSidebar
+      ? event.clientY - lift.startY
+      : event.clientX - lift.startX
+
+    if (lift.mode === 'scrolling') {
+      const now = performance.now()
+      const dt = Math.max(1, now - lift.lastT)
+      const axisDelta = usesSidebar
+        ? event.clientY - lift.lastY
+        : event.clientX - lift.lastX
+      if (this.trayGrid) {
+        if (usesSidebar) this.trayGrid.scrollTop -= axisDelta
+        else this.trayGrid.scrollLeft -= axisDelta
+      }
+      // Rolling velocity in px/ms, blended so a stall right before
+      // lift-off doesn't kill the flick's momentum.
+      const instant = axisDelta / dt
+      lift.velocity = lift.velocity * 0.4 + instant * 0.6
+      lift.lastX = event.clientX
+      lift.lastY = event.clientY
+      lift.lastT = now
+      return
+    }
+
+    // Undecided — first axis past its threshold picks the mode. Drag
+    // threshold is looser so a diagonal drag still commits to drag.
+    const DRAG_THRESHOLD = 12
+    const SCROLL_THRESHOLD = 18
+    if (lift.piece && dragDelta >= DRAG_THRESHOLD) {
+      const piece = lift.piece
+      this.pendingLift = null
+      this.detachWindowTracking()
+      this.dismissRing()
+      // Hand the gesture off to the existing held-piece flow: root
+      // pointer capture + trackingPointerId drive subsequent moves and
+      // the eventual drop.
+      this.trackingPointerId = event.pointerId
+      try { this.root.setPointerCapture(event.pointerId) } catch {}
+      this.holdPiece(piece, event.clientX, event.clientY)
+      return
+    }
+    if (Math.abs(scrollDelta) >= SCROLL_THRESHOLD) {
+      lift.mode = 'scrolling'
+      if (this.trayGrid) {
+        if (usesSidebar) this.trayGrid.scrollTop -= event.clientY - lift.startY
+        else this.trayGrid.scrollLeft -= event.clientX - lift.startX
+      }
+      lift.lastX = event.clientX
+      lift.lastY = event.clientY
+      lift.lastT = performance.now()
+    }
+  }
+
+  onWindowPointerUp(event) {
+    if (!this.pendingLift || this.pendingLift.pointerId !== event.pointerId) return
+    const lift = this.pendingLift
+    if (lift.mode === 'scrolling' && event.type !== 'pointercancel') {
+      this.startTrayMomentum(lift.velocity)
+    }
+    this.pendingLift = null
+    this.detachWindowTracking()
+  }
+
+  stopTrayMomentum() {
+    if (this.trayMomentumRaf !== null) {
+      cancelAnimationFrame(this.trayMomentumRaf)
+      this.trayMomentumRaf = null
+    }
+  }
+
+  startTrayMomentum(initialVelocityPxPerMs) {
+    if (!this.trayGrid || !Number.isFinite(initialVelocityPxPerMs)) return
+    if (Math.abs(initialVelocityPxPerMs) < 0.15) return
+    const usesSidebar = this.usesSidebarTray()
+    let velocity = initialVelocityPxPerMs
+    let lastT = performance.now()
+    const step = () => {
+      const now = performance.now()
+      const dt = now - lastT
+      lastT = now
+      const dist = velocity * dt
+      if (usesSidebar) this.trayGrid.scrollTop -= dist
+      else this.trayGrid.scrollLeft -= dist
+      velocity *= Math.pow(0.95, dt / 16.67)
+      if (Math.abs(velocity) < 0.02) {
+        this.trayMomentumRaf = null
+        return
+      }
+      this.trayMomentumRaf = requestAnimationFrame(step)
+    }
+    this.trayMomentumRaf = requestAnimationFrame(step)
+  }
+
+  // ---------------------------------------------------------------------------
   // Rotation ring
   // ---------------------------------------------------------------------------
 
@@ -439,6 +626,8 @@ export class PolygramPuzzle {
     event.stopPropagation()
     const piece = this.getRingPiece()
     if (!piece) return
+
+    if (this.referenceVisible) this.setReferenceVisible(false)
 
     const ringRect = this.rotateRing.getBoundingClientRect()
     const centerX = ringRect.left + ringRect.width / 2
@@ -591,6 +780,7 @@ export class PolygramPuzzle {
     if (!piece) return
 
     event.preventDefault()
+    if (this.referenceVisible) this.setReferenceVisible(false)
     const direction = Math.sign(event.deltaY)
     piece.rotation += direction * WHEEL_ROTATION_DEG
 

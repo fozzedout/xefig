@@ -3657,7 +3657,10 @@ canvas.slice-image {
   min-height: 64px;
   overflow-x: auto;
   overflow-y: hidden;
-  touch-action: pan-x;
+  /* We drive scroll manually on touch (see polygram-puzzle.js
+     pendingLift). iOS's native pan-x would steal diagonal drags that
+     should become a piece lift. */
+  touch-action: none;
   overscroll-behavior: contain;
 }
 
@@ -3739,7 +3742,7 @@ canvas.slice-image {
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    touch-action: pan-y;
+    touch-action: none;
     gap: 0.2rem;
   }
 }

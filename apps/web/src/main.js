@@ -1818,13 +1818,17 @@ function showCompletionOverlay({
   const existing = document.querySelector('.completion-overlay')
   const overlay = existing || document.createElement('div')
   const isFirstRender = !existing
-  overlay.className = 'completion-overlay'
+  if (isFirstRender) overlay.className = 'completion-overlay'
 
   const dismiss = () => {
     if (overlay.dataset.dismissed === '1') return
     overlay.dataset.dismissed = '1'
     if (completedRun) clearRunForMode(completedRun)
     overlay.classList.remove('is-visible')
+    // Stop absorbing taps immediately — the DOM removal is async (200ms
+    // fade-out), so without this a tap during the fade lands on the
+    // invisible overlay instead of the puzzle.
+    overlay.style.pointerEvents = 'none'
     setTimeout(() => overlay.remove(), 200)
   }
 
