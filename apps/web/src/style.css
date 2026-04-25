@@ -992,8 +992,9 @@ h1 {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  justify-content: center;
 }
+.cal-region > .cal-deck { margin-top: auto; margin-bottom: auto; }
+.cal-region > .cal-dots { margin-top: 0; }
 
 .cal-nav {
   display: flex;
