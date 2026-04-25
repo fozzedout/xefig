@@ -1681,7 +1681,6 @@ function renderArchivePage() {
           </button>
           <button class="cal-nav-arrow" data-action="next" aria-label="Next month">›</button>
         </div>
-        <div class="cal-tally" data-role="cal-tally"></div>
         <div class="cal-deck" data-role="cal-deck"></div>
         <div class="cal-dots" data-role="cal-dots"></div>
       </div>
@@ -1717,7 +1716,6 @@ function renderArchivePage() {
   const monthCards = []
   const deck = pageEl.querySelector('[data-role="cal-deck"]')
   const dotsEl = pageEl.querySelector('[data-role="cal-dots"]')
-  const tallyEl = pageEl.querySelector('[data-role="cal-tally"]')
   const navMedalSlot = pageEl.querySelector('[data-role="nav-medal"]')
   const navMonthNameEl = pageEl.querySelector('[data-role="nav-month-name"]')
   const navYearEl = pageEl.querySelector('[data-role="nav-year"]')
@@ -1873,7 +1871,13 @@ function renderArchivePage() {
     const entry = monthCards[monthIndex]
     if (!entry || !entry.hero) return
     const meta = buildMonthMedalForCalendar(monthIndex)
-    entry.hero.replaceChildren(meta.svg)
+    const wrap = document.createElement('div')
+    wrap.className = 'month-hero-medal'
+    wrap.appendChild(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
+    const caption = document.createElement('div')
+    caption.className = 'month-hero-caption'
+    caption.textContent = captionForMonth(monthIndex)
+    entry.hero.replaceChildren(wrap, caption)
   }
   for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
@@ -1887,21 +1891,26 @@ function renderArchivePage() {
 
   function updateNav() {
     const meta = buildMonthMedalForCalendar(activeMonthIndex)
-    navMedalSlot.replaceChildren(meta.svg)
+    navMedalSlot.replaceChildren(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
     navMonthNameEl.textContent = MONTH_NAMES[activeMonthIndex]
     navYearEl.textContent = String(todayYear)
-    if (!meta.playable) {
-      tallyEl.textContent = activeMonthIndex > currentMonthIndex
-        ? `${meta.total} days · upcoming`
-        : `${meta.total} days · pre-launch`
-    } else if (meta.completedIdx.length === 0) {
-      tallyEl.textContent = `${meta.playable} playable days · untouched`
-    } else {
-      const pct = Math.round((meta.completedIdx.length / meta.playable) * 100)
-      tallyEl.textContent = `${meta.completedIdx.length} / ${meta.playable} days · ${pct}% earned`
-    }
     prevBtn.disabled = activeMonthIndex === 0
     nextBtn.disabled = activeMonthIndex === 11
+  }
+
+  function captionForMonth(monthIndex) {
+    const meta = buildMonthMedalForCalendar(monthIndex)
+    const monthName = MONTH_NAMES[monthIndex]
+    if (!meta.playable) {
+      return monthIndex > currentMonthIndex
+        ? `${monthName} · ${meta.total} days · upcoming`
+        : `${monthName} · ${meta.total} days · pre-launch`
+    }
+    if (meta.completedIdx.length === 0) {
+      return `${monthName} · ${meta.playable} playable days · untouched`
+    }
+    const pct = Math.round((meta.completedIdx.length / meta.playable) * 100)
+    return `${monthName} · ${meta.completedIdx.length} / ${meta.playable} days · ${pct}% earned`
   }
 
   function centerScrollLeftFor(index) {

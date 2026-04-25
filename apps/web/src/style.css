@@ -941,7 +941,17 @@ h1 {
 /* ─── Archive (calendar) ─── */
 
 .archive-page {
-  background: #07070b;
+  background-color: #07070b;
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% 0%, rgba(64, 90, 140, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(160, 96, 240, 0.07), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(240, 192, 64, 0.06), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 100% 0%, rgba(80, 232, 160, 0.05), transparent 70%),
+    linear-gradient(transparent 0, transparent 47px, rgba(120, 160, 220, 0.04) 47px, rgba(120, 160, 220, 0.04) 48px),
+    linear-gradient(90deg, transparent 0, transparent 47px, rgba(120, 160, 220, 0.04) 47px, rgba(120, 160, 220, 0.04) 48px);
+  background-size: auto, auto, auto, auto, 48px 48px, 48px 48px;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
+  background-attachment: local, local, local, local, local, local;
   color: #e8e6e0;
   padding: calc(52px + var(--sai-top) + 1.5rem) var(--sai-right) calc(2rem + var(--sai-bottom)) var(--sai-left);
   overflow-y: auto;
@@ -1041,14 +1051,6 @@ h1 {
   color: rgba(232,230,224,0.32); font-size: 14px;
 }
 
-.cal-tally {
-  color: rgba(232,230,224,0.55);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-align: center;
-  margin: -6px 0 12px;
-}
-
 .cal-deck {
   display: flex;
   overflow-x: auto;
@@ -1079,16 +1081,31 @@ h1 {
 .month-hero {
   margin-top: auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 18px 0 6px;
   min-height: 0;
 }
-.month-hero svg.tier-svg {
+.month-hero-medal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.month-hero-medal svg.tier-svg {
   width: min(58vw, 220px);
   max-width: 220px;
   height: auto;
   filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
+}
+.month-hero-caption {
+  font: 600 12px/1.3 -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(232,230,224,0.55);
+  text-align: center;
+  padding: 0 12px;
 }
 
 .dow {
@@ -1478,7 +1495,6 @@ h1 {
   .archive-top-bar { padding: 0 1rem; }
   .cal-region { padding: 0; }
   .cal-nav { padding: 4px 0.5rem 8px; }
-  .cal-tally { padding: 0 0.75rem; margin-bottom: 8px; }
   .cal-dots { padding: 0 0.75rem; margin-top: 10px; }
   .grid { gap: 4px; padding: 0 4px; }
   .dow { gap: 4px; padding: 0 4px; font-size: 9.5px; letter-spacing: 0.06em; margin-bottom: 4px; }
@@ -1492,6 +1508,10 @@ h1 {
   .cal-nav-title .month-name { font-size: 18px; }
   .cal-nav-title .year-label { font-size: 11px; }
   .cal-nav-title .medal-mini { width: 30px; height: 30px; }
+}
+
+@media (orientation: portrait) and (max-height: 720px) {
+  .month-hero { display: none; }
 }
 
 @media (max-width: 480px) {
