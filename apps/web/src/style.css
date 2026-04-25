@@ -1522,7 +1522,7 @@ h1 {
   .cal-nav-title .medal-mini { width: 30px; height: 30px; }
 }
 
-@media (orientation: portrait) and (max-height: 720px) {
+@media (orientation: portrait) and (max-height: 600px) {
   .month-hero-medal { display: none; }
   .month-hero { padding: 1rem 0 2px; }
 }
@@ -2141,10 +2141,10 @@ canvas.slice-image {
   .ls-default .info-panel { display: none; }
 
   /* Immersive archive & settings — no top-nav, own padding.
-     Archive: edge-to-edge with no bottom padding so cal-dots can sit at the
-     literal bottom of the screen. Top still clears the safe area. */
+     Archive: edge-to-edge with a small bottom lift so the dots clear the
+     home-indicator without being shoved fully above the safe-area. */
   .ls-default .archive-page {
-    padding: calc(0.5rem + var(--sai-top)) 0 0 0;
+    padding: calc(0.5rem + var(--sai-top)) 0 12px 0;
   }
 
   .ls-default .settings-page {
