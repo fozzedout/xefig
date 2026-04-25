@@ -426,7 +426,9 @@ function getLauncherFocus() {
   if (!raw || typeof raw !== 'object') return null
   if (raw.date !== getIsoDate(new Date())) return null
   const focus = raw.focus
-  if (focus === 'more') return 'more'
+  // 'more' is a legacy value from when the More slice expanded inline. The
+  // sheet-based design has no expanded More state, so fall back to the day's
+  // pick instead of letting nothing be focused.
   if ([GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND].includes(focus)) return focus
   return null
 }
@@ -1120,30 +1122,75 @@ function computeSliceCenter(container) {
   })
 }
 
-function bindMoreSyncIndicator(container) {
-  const indicator = container.querySelector('#more-sync-indicator')
-  if (!indicator) return
+function bindMoreSheetSyncIndicator(sheetEl) {
+  // Sync status rides on the Devices card as a small dot. The card now lives
+  // inside the More sheet; this wires the dot + status update + onStatusChange
+  // subscription, and returns a teardown to call when the sheet closes.
+  const card = sheetEl.querySelector('#more-devices-card')
+  if (!card) return () => {}
+  const dot = card.querySelector('.more-card-sync-dot')
+  if (!dot) return () => {}
   const apply = (status) => {
     const hasChanges = hasPendingChanges()
-    let state = 'saved'
-    let label = 'Saved to cloud'
+    let dotState = 'saved'
+    let label = 'Saved to cloud — tap to send to another device'
     if (status === 'syncing') {
-      state = 'syncing'; label = 'Syncing...'
+      dotState = 'syncing'; label = 'Syncing...'
     } else if (status === 'error') {
-      state = 'error'; label = 'Sync failed — tap to retry'
+      dotState = 'error'; label = 'Sync failed — open Settings to retry'
     } else if (hasChanges) {
-      state = 'pending'; label = 'Pending changes — tap to sync'
+      dotState = 'pending'; label = 'Pending changes — syncing soon'
     }
-    indicator.dataset.state = state
-    indicator.title = label
-    indicator.setAttribute('aria-label', label)
+    dot.dataset.state = dotState
+    card.title = label
+    card.setAttribute('aria-label', label)
   }
   apply(getSyncStatus())
-  onStatusChange(apply)
-  indicator.addEventListener('click', async (e) => {
-    e.stopPropagation()
-    try { await forcePush() } catch {}
+  const off = onStatusChange(apply)
+  return typeof off === 'function' ? off : () => {}
+}
+
+// ─── PWA install detection ──────────────────────────────────────────────────
+let deferredInstallPrompt = null
+let installPromptListenersBound = false
+function bindInstallPromptListeners() {
+  if (installPromptListenersBound) return
+  installPromptListenersBound = true
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    deferredInstallPrompt = e
+    // If the More sheet is open, refresh it so the Install card appears.
+    const open = document.querySelector('.more-sheet-overlay')
+    if (open && typeof open.__rerender === 'function') open.__rerender()
   })
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null
+    const open = document.querySelector('.more-sheet-overlay')
+    if (open && typeof open.__rerender === 'function') open.__rerender()
+  })
+}
+
+function isStandaloneDisplay() {
+  try {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true
+    if (typeof navigator !== 'undefined' && navigator.standalone === true) return true
+  } catch {}
+  return false
+}
+
+function isIosSafari() {
+  const ua = navigator.userAgent || ''
+  const isIos = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && navigator.maxTouchPoints > 1)
+  if (!isIos) return false
+  // Strip out Chrome / Firefox / Edge on iOS — they all carry "CriOS"/"FxiOS"/"EdgiOS".
+  return !/CriOS|FxiOS|EdgiOS/.test(ua)
+}
+
+function getInstallState() {
+  if (isStandaloneDisplay()) return 'standalone'
+  if (deferredInstallPrompt) return 'available'
+  if (isIosSafari()) return 'ios-safari'
+  return 'unavailable'
 }
 
 function renderLauncher() {
@@ -1158,7 +1205,6 @@ function renderLauncher() {
   const ACTIVE_FLEX = 3
   const INACTIVE_FLEX = 0.8
   const MORE_INACTIVE_FLEX = 0.6
-  const MORE_ACTIVE_FLEX = 2.5
   const pickMode = getGameModeOfDay(todayDate)
   const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
 
@@ -1209,70 +1255,17 @@ function renderLauncher() {
         `
       })
       .join('') + `
-          <div class="slice slice-more${defaultFocus === 'more' ? ' active' : ''}" style="--flex: ${defaultFocus === 'more' ? MORE_ACTIVE_FLEX : MORE_INACTIVE_FLEX};">
+          <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
-            <div class="slice-title">More</div>
-            ${isSyncEnabled() ? `<button id="more-sync-indicator" class="more-sync-indicator" type="button" data-state="saved" aria-label="Sync status" title="Saved to cloud">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 19Z"/></svg>
-            </button>` : ''}
-            <div class="slice-more-cards">
-              ${(() => {
-                const resume = getLatestActiveArchiveRun(puzzleDate)
-                if (!resume) return ''
-                const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
-                const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
-                const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
-                return `
-              <button class="more-card more-card--continue" data-action="continue" data-mode="${resume.gameMode}" data-date="${resume.puzzleDate}" title="Continue ${modeLabel} from ${dateLabel}">
-                <div class="more-card-img">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
-                </div>
-                <span class="more-card-label">Continue · ${modeLabel} · ${dateLabel}</span>
-              </button>`
-              })()}
-              <button class="more-card" data-page="archive">
-                <div class="more-card-img">
-                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
-                    <rect x="8" y="6" width="48" height="10" rx="2"/>
-                    <path d="M12 16v36a4 4 0 004 4h32a4 4 0 004-4V16"/>
-                    <path d="M24 28h16" stroke-width="2" stroke-linecap="round"/>
-                    <rect x="20" y="22" width="24" height="12" rx="2" stroke-dasharray="3 2"/>
-                    <path d="M20 42h24M20 48h16" stroke-width="1" opacity="0.4"/>
-                  </svg>
-                </div>
-                <span class="more-card-label">Archive</span>
-              </button>
-              <div class="more-card more-card--music ${getMusicEnabled() ? 'is-on' : 'is-off'}" data-action="toggle-music" role="button" tabindex="0" aria-label="Music: ${getMusicEnabled() ? 'On' : 'Off'}">
-                <div class="more-card-img">
-                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.2">
-                    <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
-                    <ellipse cx="22" cy="44" rx="6" ry="4"/>
-                    <ellipse cx="42" cy="40" rx="6" ry="4"/>
-                    <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round" opacity="0"/>
-                  </svg>
-                </div>
-                <input type="range" class="more-card-volume" min="0" max="1" step="0.01" value="${getMusicVolume()}" aria-label="Music volume">
+            <div class="more-slice-content">
+              <div class="more-slice-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="12" r="2"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <circle cx="19" cy="12" r="2"/>
+                </svg>
               </div>
-              <button class="more-card" data-action="share-sync" aria-label="${isSyncEnabled() ? 'Send this profile to another device' : 'Set up device sync'}">
-                <div class="more-card-img">
-                  <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="10" y="6" width="22" height="36" rx="3"/>
-                    <rect x="32" y="22" width="22" height="36" rx="3"/>
-                    <circle cx="21" cy="36" r="1.2" fill="currentColor"/>
-                    <circle cx="43" cy="52" r="1.2" fill="currentColor"/>
-                    <path d="M24 24 L40 32" stroke-dasharray="3 2"/>
-                  </svg>
-                </div>
-                <span class="more-card-label">${isSyncEnabled() ? 'Play on another device' : 'Set up device sync'}</span>
-              </button>
-              <button class="more-card" data-page="settings">
-                <div class="more-card-img">
-                  <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.7">
-                    <path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/>
-                  </svg>
-                </div>
-                <span class="more-card-label">Settings</span>
-              </button>
+              <div class="more-slice-label">More</div>
             </div>
           </div>`
   }
@@ -1350,21 +1343,20 @@ function renderLauncher() {
     const setActive = (index) => {
       closeAllPanels()
       slices.forEach((s, i) => {
-        const isMore = s.classList.contains('slice-more')
-        if (isMore) {
-          const moreActive = index === i
-          s.classList.toggle('active', moreActive)
-          s.style.setProperty('--flex', moreActive ? MORE_ACTIVE_FLEX : MORE_INACTIVE_FLEX)
-        } else {
-          const isActive = i === index
-          s.classList.toggle('active', isActive)
-          s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
+        if (s.classList.contains('slice-more')) {
+          // More never expands inline now — it stays at its inactive flex and
+          // delegates everything to the modal sheet on tap.
+          s.classList.remove('active')
+          s.style.setProperty('--flex', MORE_INACTIVE_FLEX)
+          return
         }
+        const isActive = i === index
+        s.classList.toggle('active', isActive)
+        s.style.setProperty('--flex', isActive ? ACTIVE_FLEX : INACTIVE_FLEX)
       })
       const activated = slices[index]
-      if (activated) {
-        const focus = activated.classList.contains('slice-more') ? 'more' : activated.dataset.mode
-        if (focus) setLauncherFocus(focus)
+      if (activated && !activated.classList.contains('slice-more')) {
+        if (activated.dataset.mode) setLauncherFocus(activated.dataset.mode)
       }
     }
 
@@ -1382,86 +1374,13 @@ function renderLauncher() {
         })
       }
 
-      // More slice — expands on click, nav buttons switch page
+      // More slice — opens a modal sheet rather than expanding inline.
       if (slice.classList.contains('slice-more')) {
-        const musicSlider = slice.querySelector('.more-card--music .more-card-volume')
-        if (musicSlider) {
-          const stop = (e) => e.stopPropagation()
-          musicSlider.addEventListener('click', stop)
-          musicSlider.addEventListener('pointerdown', stop)
-          musicSlider.addEventListener('mousedown', stop)
-          musicSlider.addEventListener('touchstart', stop, { passive: true })
-          musicSlider.addEventListener('input', (e) => {
-            e.stopPropagation()
-            const vol = Number(musicSlider.value)
-            setMusicVolume(vol)
-            applyMusicVolume()
-            const card = musicSlider.closest('.more-card--music')
-            if (card) {
-              card.classList.toggle('is-on', vol > 0)
-              card.classList.toggle('is-off', vol <= 0)
-              card.setAttribute('aria-label', `Music: ${vol > 0 ? 'On' : 'Off'}`)
-            }
-          })
-        }
-        slice.querySelectorAll('.more-card').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation()
-            if (btn.dataset.action === 'toggle-music') {
-              // Card click toggles whether the slice is collapsed or active.
-              // Slider interactions stopPropagation so they never reach here.
-              const nowEnabled = !getMusicEnabled()
-              const nextVol = nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0
-              setMusicVolume(nextVol)
-              applyMusicVolume()
-              const slider = btn.querySelector('.more-card-volume')
-              if (slider) slider.value = String(nextVol)
-              btn.classList.toggle('is-on', nowEnabled)
-              btn.classList.toggle('is-off', !nowEnabled)
-              btn.setAttribute('aria-label', `Music: ${nowEnabled ? 'On' : 'Off'}`)
-              return
-            }
-            if (btn.dataset.action === 'share-sync') {
-              if (isSyncEnabled()) {
-                const code = getShareCode()
-                if (code) {
-                  showSyncCodeCelebration({ name: getProfileName(), code })
-                  return
-                }
-              }
-              // No code yet (sync never set up) — drop the user into Settings
-              // where the Enable Sync button lives.
-              window.switchToPage('settings')
-              return
-            }
-            if (btn.dataset.action === 'continue') {
-              const resumeMode = btn.dataset.mode
-              const resumeDate = btn.dataset.date
-              if (resumeMode && resumeDate) {
-                // Resolve puzzle payload for the resumed run's date, then
-                // dispatch through handleSliceClick so the saved run is
-                // picked up and rendered.
-                ;(async () => {
-                  try {
-                    const payload = await fetchPuzzlePayload({ date: resumeDate })
-                    state.puzzle = payload
-                    handleSliceClick(resumeMode, resumeDate)
-                  } catch {
-                    // Fallback: dispatch without a fresh payload; handleSliceClick
-                    // will still resume using the saved imageUrl.
-                    handleSliceClick(resumeMode, resumeDate)
-                  }
-                })()
-              }
-              return
-            }
-            window.switchToPage(btn.dataset.page)
-          })
-        })
         slice.addEventListener('click', () => {
-          if (!slice.classList.contains('active')) {
-            setActive(i)
-          }
+          openMoreSheet({
+            puzzleDate: state.puzzle?.date || todayDate,
+            handleSliceClick,
+          })
         })
         return
       }
@@ -1494,7 +1413,6 @@ function renderLauncher() {
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
-      bindMoreSyncIndicator(container)
       computeSliceCenter(container)
 
       // Recompute on any container resize so --slice-center / --slice-middle /
@@ -1544,6 +1462,12 @@ function renderLauncher() {
 }
 
 const ARCHIVE_START_DATE = '2026-03-17'
+const ARCHIVE_FILTER_KEY = 'xefig:archive:filter:v1'
+let archiveLastFocusKey = null
+// Set by renderArchivePage so returnFromGame can update a single thumb in
+// place + scroll back to it without rebuilding the whole timeline.
+let updateArchiveThumb = null
+const expandedArchiveDays = new Set()
 const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_JIGSAW]: '#f0c040',
   [GAME_MODE_SLIDING]: '#40d0f0',
@@ -1554,11 +1478,39 @@ const ARCHIVE_ACCENT_MAP = {
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
+function getStoredArchiveFilter() {
+  try {
+    const v = localStorage.getItem(ARCHIVE_FILTER_KEY)
+    if (v === 'in-progress' || v === 'completed' || v === 'all') return v
+  } catch {}
+  return 'all'
+}
+
 function renderArchivePage() {
   const pageEl = document.querySelector('#page-archive')
   const todayDate = getIsoDate(new Date())
   state.sourceMode = 'archive'
   state.difficulty = state.difficulty || 'medium'
+
+  const initialFilter = getStoredArchiveFilter()
+  const resume = getLatestActiveArchiveRun(todayDate)
+  let resumeBannerHtml = ''
+  if (resume) {
+    const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
+    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+    const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
+    resumeBannerHtml = `
+      <button class="archive-resume-banner" data-resume-mode="${resume.gameMode}" data-resume-date="${resume.puzzleDate}">
+        <span class="archive-resume-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
+        </span>
+        <span class="archive-resume-text">
+          <span class="archive-resume-title">Resume ${modeLabel}</span>
+          <span class="archive-resume-sub">${dateLabel} · in progress</span>
+        </span>
+      </button>
+    `
+  }
 
   pageEl.innerHTML = `
     <div class="archive-page">
@@ -1568,16 +1520,30 @@ function renderArchivePage() {
         </button>
         <h2>Archive</h2>
         <div class="archive-filters">
-          <button class="filter-chip active" data-filter="all">All</button>
-          <button class="filter-chip" data-filter="in-progress">In Progress</button>
-          <button class="filter-chip" data-filter="completed">Completed</button>
+          <button class="filter-chip${initialFilter === 'all' ? ' active' : ''}" data-filter="all">All</button>
+          <button class="filter-chip${initialFilter === 'in-progress' ? ' active' : ''}" data-filter="in-progress">In Progress</button>
+          <button class="filter-chip${initialFilter === 'completed' ? ' active' : ''}" data-filter="completed">Completed</button>
         </div>
       </div>
+      ${resumeBannerHtml}
       <div class="timeline" id="archive-timeline"></div>
     </div>
   `
 
   pageEl.querySelector('.page-back-btn').addEventListener('click', () => window.switchToPage('play'))
+
+  const resumeBtn = pageEl.querySelector('.archive-resume-banner')
+  if (resumeBtn) {
+    resumeBtn.addEventListener('click', async () => {
+      const mode = resumeBtn.dataset.resumeMode
+      const date = resumeBtn.dataset.resumeDate
+      try {
+        const payload = await fetchPuzzlePayload({ date })
+        archiveLastFocusKey = `${date}:${mode}`
+        handleThumbClick(payload, mode, date)
+      } catch {}
+    })
+  }
 
   const timeline = pageEl.querySelector('#archive-timeline')
   const allDays = []
@@ -1589,6 +1555,7 @@ function renderArchivePage() {
   }
 
   function handleThumbClick(puzzlePayload, mode, puzzleDate) {
+    archiveLastFocusKey = `${puzzleDate}:${mode}`
     state.sourceMode = 'archive'
     state.archiveDate = puzzleDate
     state.puzzle = puzzlePayload
@@ -1618,49 +1585,61 @@ function renderArchivePage() {
     renderGame()
   }
 
+  const ARCHIVE_MODES = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
+
+  function getThumbStatus(dateKey, mode) {
+    if (hasActiveRun(dateKey, mode)) {
+      const run = getRunForMode(dateKey, mode)
+      const elapsed = run?.elapsedMs ?? run?.elapsed ?? 0
+      return { kind: 'resume', label: elapsed ? formatDuration(elapsed) : '▶' }
+    }
+    if (getCompletedModesForDate(dateKey).has(mode)) {
+      const entry = getCompletionEntry(dateKey, mode)
+      return { kind: 'completed', label: entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '✓' }
+    }
+    return { kind: 'new', label: 'new' }
+  }
+
+  function renderThumbHtml(puzzlePayload, mode, dateKey) {
+    const title = MODE_LABELS[mode]
+    const accent = ARCHIVE_ACCENT_MAP[mode]
+    const status = getThumbStatus(dateKey, mode)
+    const isDiamond = mode === GAME_MODE_DIAMOND
+    const fullImageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
+    const thumbUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
+    const thumbImageHtml = isDiamond
+      ? `<div class="thumb-image"><canvas class="diamond-grid-canvas thumb-grid-canvas" data-image-url="${fullImageUrl}" data-date="${dateKey}"></canvas></div>`
+      : `<div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>`
+
+    return `<div class="puzzle-thumb thumb-${status.kind}" data-mode="${mode}" data-date="${dateKey}" style="--thumb-accent:${accent}">
+      ${thumbImageHtml}
+      <div class="thumb-info">
+        <div class="thumb-mode" style="color:${accent}">${title}</div>
+      </div>
+      <div class="thumb-pill thumb-pill-${status.kind}">${status.label}</div>
+    </div>`
+  }
+
+  function bindThumb(thumbEl, puzzlePayload) {
+    thumbEl.addEventListener('click', () => {
+      handleThumbClick(puzzlePayload, thumbEl.dataset.mode, thumbEl.dataset.date)
+    })
+  }
+
+  function recomputeDayState(dayEl, dateKey) {
+    const completedModes = getCompletedModesForDate(dateKey)
+    const hasResume = ARCHIVE_MODES.some((m) => hasActiveRun(dateKey, m))
+    dayEl.dataset.hasCompleted = completedModes.size > 0 ? '1' : ''
+    dayEl.dataset.hasResume = hasResume ? '1' : ''
+    const untouched = !hasResume && completedModes.size === 0
+    dayEl.classList.toggle('day-untouched', untouched && !expandedArchiveDays.has(dateKey))
+  }
+
   function renderDayEntry(puzzlePayload, dateKey, index) {
     const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
     const isToday = dateKey === todayDate
-    const completedModes = getCompletedModesForDate(dateKey)
-    const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
 
-    const thumbsHtml = modes
-      .map((mode) => {
-        const title = MODE_LABELS[mode]
-        const accent = ARCHIVE_ACCENT_MAP[mode]
-        const isCompleted = completedModes.has(mode)
-        const hasSave = hasActiveRun(dateKey, mode)
-        const thumbUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
-        let statusClass = 'new'
-        let statusLabel = 'new'
-        if (hasSave) {
-          statusClass = 'resume'
-          statusLabel = '\u25B6 resume'
-        } else if (isCompleted) {
-          statusClass = 'completed'
-          const entry = getCompletionEntry(dateKey, mode)
-          statusLabel = entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '\u2713'
-        }
-
-        const isDiamond = mode === GAME_MODE_DIAMOND
-        const fullImageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
-        const thumbImageHtml = isDiamond
-          ? `<div class="thumb-image"><canvas class="diamond-grid-canvas thumb-grid-canvas" data-image-url="${fullImageUrl}" data-date="${dateKey}"></canvas></div>`
-          : `<div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>`
-
-        return `<div class="puzzle-thumb" data-mode="${mode}" data-date="${dateKey}">
-          <div class="thumb-accent" style="background:${accent}"></div>
-          ${thumbImageHtml}
-          <div class="thumb-info">
-            <div class="thumb-mode" style="color:${accent}">${title}</div>
-            <div class="thumb-right">
-              <span class="thumb-status ${statusClass}">${statusLabel}</span>
-              ${hasSave ? '<svg class="thumb-save-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2zm1 1v4h7V2H4zm4 6a2 2 0 100 4 2 2 0 000-4z"/></svg>' : ''}
-            </div>
-          </div>
-        </div>`
-      })
-      .join('')
+    const thumbsHtml = ARCHIVE_MODES.map((mode) => renderThumbHtml(puzzlePayload, mode, dateKey)).join('')
 
     const dayName = DAY_NAMES[d.getUTCDay()]
     const monthStr = MONTH_NAMES[d.getUTCMonth()].slice(0, 3)
@@ -1669,24 +1648,40 @@ function renderArchivePage() {
     el.className = 'timeline-day' + (isToday ? ' today' : '')
     el.style.animationDelay = (index * 0.06) + 's'
     el.dataset.date = dateKey
-    el.dataset.hasCompleted = completedModes.size > 0 ? '1' : ''
-    el.dataset.hasResume = modes.some((m) => hasActiveRun(dateKey, m)) ? '1' : ''
     el.innerHTML = `
       <div class="day-header">
         <div class="day-date">${monthStr} ${d.getUTCDate()}</div>
         <div class="day-label${isToday ? ' today-label' : ''}">${isToday ? 'Today' : dayName}</div>
+        <div class="day-collapse-hint">5 puzzles unplayed →</div>
       </div>
       <div class="day-puzzles">${thumbsHtml}</div>
     `
 
-    // Bind click handlers on thumbs
-    el.querySelectorAll('.puzzle-thumb').forEach((thumb) => {
-      thumb.addEventListener('click', () => {
-        handleThumbClick(puzzlePayload, thumb.dataset.mode, thumb.dataset.date)
-      })
+    recomputeDayState(el, dateKey)
+    el.querySelectorAll('.puzzle-thumb').forEach((thumb) => bindThumb(thumb, puzzlePayload))
+
+    el.querySelector('.day-header').addEventListener('click', () => {
+      if (el.classList.contains('day-untouched')) {
+        expandedArchiveDays.add(dateKey)
+        el.classList.remove('day-untouched')
+      }
     })
 
     return el
+  }
+
+  updateArchiveThumb = (date, mode) => {
+    const day = allDays.find((entry) => entry.dateKey === date)
+    if (!day) return
+    const oldThumb = day.el.querySelector(`.puzzle-thumb[data-mode="${mode}"]`)
+    if (!oldThumb) return
+    const tmp = document.createElement('div')
+    tmp.innerHTML = renderThumbHtml(day.payload, mode, date)
+    const newThumb = tmp.firstElementChild
+    oldThumb.replaceWith(newThumb)
+    bindThumb(newThumb, day.payload)
+    recomputeDayState(day.el, date)
+    if (mode === GAME_MODE_DIAMOND) renderDiamondGridThumbnails(day.el)
   }
 
   let loading = false
@@ -1749,6 +1744,8 @@ function renderArchivePage() {
       observer.disconnect()
     }
 
+    if (typeof applyFilter === 'function' && currentFilter !== 'all') applyFilter(currentFilter)
+
     loading = false
   }
 
@@ -1760,34 +1757,38 @@ function renderArchivePage() {
   )
   observer.observe(sentinel)
 
-  // Filter chips
+  function applyFilter(filter) {
+    timeline.querySelectorAll('.timeline-day').forEach((day) => {
+      if (filter === 'all') {
+        day.style.display = ''
+      } else if (filter === 'in-progress') {
+        day.style.display = day.dataset.hasResume ? '' : 'none'
+      } else if (filter === 'completed') {
+        day.style.display = day.dataset.hasCompleted ? '' : 'none'
+      }
+    })
+    timeline.querySelectorAll('.month-divider').forEach((div) => {
+      let next = div.nextElementSibling
+      while (next && !next.classList.contains('timeline-day') && !next.classList.contains('month-divider')) {
+        next = next.nextElementSibling
+      }
+      if (!next || next.classList.contains('month-divider')) {
+        div.style.display = 'none'
+      } else {
+        div.style.display = next.style.display
+      }
+    })
+  }
+
+  let currentFilter = initialFilter
+
   pageEl.querySelectorAll('.filter-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       pageEl.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'))
       chip.classList.add('active')
-      const filter = chip.dataset.filter
-
-      timeline.querySelectorAll('.timeline-day').forEach((day) => {
-        if (filter === 'all') {
-          day.style.display = ''
-        } else if (filter === 'in-progress') {
-          day.style.display = day.dataset.hasResume ? '' : 'none'
-        } else if (filter === 'completed') {
-          day.style.display = day.dataset.hasCompleted ? '' : 'none'
-        }
-      })
-      // Also hide/show month dividers based on next visible day
-      timeline.querySelectorAll('.month-divider').forEach((div) => {
-        let next = div.nextElementSibling
-        while (next && !next.classList.contains('timeline-day') && !next.classList.contains('month-divider')) {
-          next = next.nextElementSibling
-        }
-        if (!next || next.classList.contains('month-divider')) {
-          div.style.display = 'none'
-        } else {
-          div.style.display = next.style.display
-        }
-      })
+      currentFilter = chip.dataset.filter
+      try { localStorage.setItem(ARCHIVE_FILTER_KEY, currentFilter) } catch {}
+      applyFilter(currentFilter)
     })
   })
 
@@ -2309,6 +2310,253 @@ function showSyncCodeCelebration({ name, code, onDone }) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close()
   })
+}
+
+// ─── More sheet ─────────────────────────────────────────────────────────────
+// Replaces the old in-slice "More" expanded card grid. The slice itself is
+// just a tap target; tapping opens this sheet (centered modal on landscape,
+// bottom sheet on portrait). All horizontal labels — no rotated text, no
+// portrait/landscape divergence.
+function closeMoreSheet() {
+  const overlay = document.querySelector('.more-sheet-overlay')
+  if (!overlay) return
+  if (typeof overlay.__teardown === 'function') overlay.__teardown()
+  overlay.classList.remove('is-visible')
+  setTimeout(() => overlay.remove(), 200)
+}
+
+function openMoreSheet({ puzzleDate, handleSliceClick }) {
+  const existing = document.querySelector('.more-sheet-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'more-sheet-overlay'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-modal', 'true')
+  overlay.setAttribute('aria-label', 'More options')
+
+  let detachSync = () => {}
+  const renderCards = () => {
+    const cards = []
+
+    const resume = getLatestActiveArchiveRun(puzzleDate)
+    if (resume) {
+      const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
+      const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+      const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
+      cards.push(`
+        <button class="more-sheet-card more-sheet-card--continue" data-action="continue" data-mode="${resume.gameMode}" data-date="${resume.puzzleDate}">
+          <span class="more-sheet-card-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
+          </span>
+          <span class="more-sheet-card-text">
+            <span class="more-sheet-card-title">Continue</span>
+            <span class="more-sheet-card-sub">${modeLabel} · ${dateLabel}</span>
+          </span>
+        </button>`)
+    }
+
+    cards.push(`
+      <button class="more-sheet-card" data-page="archive">
+        <span class="more-sheet-card-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <rect x="8" y="6" width="48" height="10" rx="2"/>
+            <path d="M12 16v36a4 4 0 004 4h32a4 4 0 004-4V16"/>
+            <path d="M24 28h16" stroke-width="2" stroke-linecap="round"/>
+            <rect x="20" y="22" width="24" height="12" rx="2" stroke-dasharray="3 2"/>
+          </svg>
+        </span>
+        <span class="more-sheet-card-text">
+          <span class="more-sheet-card-title">Archive</span>
+          <span class="more-sheet-card-sub">Your puzzle history</span>
+        </span>
+      </button>`)
+
+    const musicOn = getMusicEnabled()
+    cards.push(`
+      <button class="more-sheet-card more-sheet-card--music ${musicOn ? 'is-on' : 'is-off'}" data-action="toggle-music" aria-label="Music: ${musicOn ? 'On' : 'Off'}">
+        <span class="more-sheet-card-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M26 44V14l20-4v30" stroke-width="2" stroke-linejoin="round"/>
+            <ellipse cx="22" cy="44" rx="6" ry="4"/>
+            <ellipse cx="42" cy="40" rx="6" ry="4"/>
+            <line class="music-off-slash" x1="8" y1="8" x2="56" y2="56" stroke-width="4" stroke-linecap="round" opacity="0"/>
+          </svg>
+        </span>
+        <span class="more-sheet-card-text">
+          <span class="more-sheet-card-title">Music: ${musicOn ? 'On' : 'Off'}</span>
+          <span class="more-sheet-card-sub">Tap to ${musicOn ? 'mute' : 'unmute'}</span>
+        </span>
+      </button>`)
+
+    if (isSyncEnabled()) {
+      cards.push(`
+        <button class="more-sheet-card more-sheet-card--devices" id="more-devices-card" data-action="share-sync">
+          <span class="more-sheet-card-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="10" y="6" width="22" height="36" rx="3"/>
+              <rect x="32" y="22" width="22" height="36" rx="3"/>
+              <circle cx="21" cy="36" r="1.2" fill="currentColor"/>
+              <circle cx="43" cy="52" r="1.2" fill="currentColor"/>
+              <path d="M24 24 L40 32" stroke-dasharray="3 2"/>
+            </svg>
+            <span class="more-card-sync-dot" data-state="saved" aria-hidden="true"></span>
+          </span>
+          <span class="more-sheet-card-text">
+            <span class="more-sheet-card-title">Devices</span>
+            <span class="more-sheet-card-sub">Share with another device</span>
+          </span>
+        </button>`)
+    }
+
+    const installState = getInstallState()
+    if (installState === 'available' || installState === 'ios-safari') {
+      const sub = installState === 'ios-safari'
+        ? 'Tap Share → Add to Home Screen'
+        : 'Add to your home screen'
+      cards.push(`
+        <button class="more-sheet-card more-sheet-card--install" data-action="install-app">
+          <span class="more-sheet-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12"/>
+              <path d="M7 10l5 5 5-5"/>
+              <path d="M5 21h14"/>
+            </svg>
+          </span>
+          <span class="more-sheet-card-text">
+            <span class="more-sheet-card-title">Install app</span>
+            <span class="more-sheet-card-sub">${sub}</span>
+          </span>
+        </button>`)
+    }
+
+    cards.push(`
+      <button class="more-sheet-card" data-page="settings">
+        <span class="more-sheet-card-icon">
+          <svg viewBox="0 0 100 100" fill="currentColor" opacity="0.85" aria-hidden="true">
+            <path fill-rule="evenodd" d="M40.7 15.2 L44 4.4 L56 4.4 L59.3 15.2 L68 18.8 L78 13.5 L86.5 22 L81.2 32 L84.8 40.7 L95.6 44 L95.6 56 L84.8 59.3 L81.2 68 L86.5 78 L78 86.5 L68 81.2 L59.3 84.8 L56 95.6 L44 95.6 L40.7 84.8 L32 81.2 L22 86.5 L13.5 78 L18.8 68 L15.2 59.3 L4.4 56 L4.4 44 L15.2 40.7 L18.8 32 L13.5 22 L22 13.5 L32 18.8 z M50 32 L56.9 33.4 L62.7 37.3 L66.6 43.1 L68 50 L66.6 56.9 L62.7 62.7 L56.9 66.6 L50 68 L43.1 66.6 L37.3 62.7 L33.4 56.9 L32 50 L33.4 43.1 L37.3 37.3 L43.1 33.4 z"/>
+          </svg>
+        </span>
+        <span class="more-sheet-card-text">
+          <span class="more-sheet-card-title">Settings</span>
+          <span class="more-sheet-card-sub">Profile, audio, sync, more</span>
+        </span>
+      </button>`)
+
+    return cards.join('')
+  }
+
+  const populate = () => {
+    detachSync()
+    overlay.innerHTML = `
+      <div class="more-sheet" role="document">
+        <button type="button" class="more-sheet-close" aria-label="Close">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 2 L14 14 M14 2 L2 14"/></svg>
+        </button>
+        <div class="more-sheet-handle" aria-hidden="true"></div>
+        <h2 class="more-sheet-title">More</h2>
+        <div class="more-sheet-cards">${renderCards()}</div>
+      </div>
+    `
+    detachSync = bindMoreSheetSyncIndicator(overlay) || (() => {})
+
+    overlay.querySelector('.more-sheet-close').addEventListener('click', closeMoreSheet)
+
+    overlay.querySelectorAll('.more-sheet-card').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+
+        if (btn.dataset.action === 'toggle-music') {
+          const nowEnabled = !getMusicEnabled()
+          const nextVol = nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0
+          setMusicVolume(nextVol)
+          applyMusicVolume()
+          // Re-render the sheet so card class + label reflect new state.
+          populate()
+          return
+        }
+
+        if (btn.dataset.action === 'install-app') {
+          const installState = getInstallState()
+          if (installState === 'available' && deferredInstallPrompt) {
+            try {
+              deferredInstallPrompt.prompt()
+              await deferredInstallPrompt.userChoice
+            } catch {}
+            deferredInstallPrompt = null
+            closeMoreSheet()
+            return
+          }
+          if (installState === 'ios-safari') {
+            // Just show a tooltip-style hint via showConfirmDialog reuse —
+            // single OK button (Cancel hidden via empty label is awkward, so
+            // we use the existing dialog with a single confirm).
+            closeMoreSheet()
+            showConfirmDialog({
+              message: 'To install: tap the Share button in Safari, then choose "Add to Home Screen".',
+              confirmLabel: 'Got it',
+              cancelLabel: 'Close',
+              onConfirm: () => {},
+            })
+            return
+          }
+          return
+        }
+
+        if (btn.dataset.action === 'share-sync') {
+          if (isSyncEnabled()) {
+            const code = getShareCode()
+            if (code) {
+              closeMoreSheet()
+              showSyncCodeCelebration({ name: getProfileName(), code })
+              return
+            }
+          }
+          closeMoreSheet()
+          window.switchToPage('settings')
+          return
+        }
+
+        if (btn.dataset.action === 'continue') {
+          const resumeMode = btn.dataset.mode
+          const resumeDate = btn.dataset.date
+          if (resumeMode && resumeDate && typeof handleSliceClick === 'function') {
+            closeMoreSheet()
+            try {
+              const payload = await fetchPuzzlePayload({ date: resumeDate })
+              state.puzzle = payload
+            } catch {}
+            handleSliceClick(resumeMode, resumeDate)
+          }
+          return
+        }
+
+        if (btn.dataset.page) {
+          closeMoreSheet()
+          window.switchToPage(btn.dataset.page)
+        }
+      })
+    })
+  }
+
+  overlay.__rerender = populate
+  overlay.__teardown = () => {
+    detachSync()
+    document.removeEventListener('keydown', onKey)
+  }
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') closeMoreSheet()
+  }
+  document.addEventListener('keydown', onKey)
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeMoreSheet()
+  })
+
+  document.body.appendChild(overlay)
+  populate()
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
 }
 
 function showConfirmDialog({ message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel }) {
@@ -3242,6 +3490,7 @@ let settingsRendered = false
 
 function initAppShell() {
   applyLandscapeLayout()
+  bindInstallPromptListeners()
   app.innerHTML = NAV_HTML
 
   const topNav = document.querySelector('#topNav')
@@ -3291,19 +3540,64 @@ function showGamePage() {
 
 function returnFromGame() {
   if (state.sourceMode === 'archive') {
-    archiveRendered = false
     window.switchToPage('archive')
+    if (archiveLastFocusKey && typeof updateArchiveThumb === 'function') {
+      const [date, mode] = archiveLastFocusKey.split(':')
+      updateArchiveThumb(date, mode)
+      requestAnimationFrame(() => {
+        const thumb = document.querySelector(
+          `#page-archive .puzzle-thumb[data-date="${date}"][data-mode="${mode}"]`,
+        )
+        if (thumb) thumb.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+    }
   } else {
     window.switchToPage('play')
   }
+}
+
+const SETTINGS_OPEN_SECTIONS_KEY = 'xefig:settings:open-sections:v1'
+const SETTINGS_DEFAULT_OPEN = ['profile']
+
+function getOpenSections() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_OPEN_SECTIONS_KEY)
+    if (!raw) return new Set(SETTINGS_DEFAULT_OPEN)
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return new Set(parsed)
+  } catch {}
+  return new Set(SETTINGS_DEFAULT_OPEN)
+}
+
+function setSectionOpen(id, open) {
+  const set = getOpenSections()
+  if (open) set.add(id); else set.delete(id)
+  try {
+    localStorage.setItem(SETTINGS_OPEN_SECTIONS_KEY, JSON.stringify([...set]))
+  } catch {}
 }
 
 function renderSettingsPage() {
   const container = document.querySelector('#page-settings')
   const colors = getBoardColors()
   const activeIndex = getGlobalBoardColorIndex()
-
+  const openSet = getOpenSections()
   const formTs = Date.now()
+
+  const sections = [
+    { id: 'profile', title: 'Profile', desc: 'Your name and sync code' },
+    { id: 'display', title: 'Display', desc: 'Board background' },
+    { id: 'audio', title: 'Audio', desc: 'Music' },
+    { id: 'sync', title: 'Sync & Devices', desc: 'Enable, link, and manage sync' },
+    { id: 'about', title: 'About', desc: 'AI-generated content notice' },
+    { id: 'contact', title: 'Contact', desc: 'Send a message' },
+  ]
+
+  const navHtml = sections
+    .map((s) => `<a class="settings-nav-link" href="#settings-section-${s.id}" data-section="${s.id}">${s.title}</a>`)
+    .join('')
+
+  const sectionOpen = (id) => openSet.has(id) ? ' open' : ''
 
   container.innerHTML = `
     <div class="settings-page">
@@ -3314,64 +3608,126 @@ function renderSettingsPage() {
         <h2>Settings</h2>
         <p>Customize your puzzle experience.</p>
       </div>
-      <div class="settings-sections">
-        <div class="settings-group">
-          <div class="settings-group-title">Board Background</div>
-          <div id="settings-board-colors" class="settings-color-grid">
-            ${colors
-              .map(
-                (c, i) =>
-                  `<div style="text-align:center">
-                    <button class="settings-color-swatch${i === activeIndex ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${c.name}" title="${c.name}"${c.color ? ` style="background:${c.color}"` : ''}>
-                      ${c.color ? '' : '\ud83d\uddbc'}
-                    </button>
-                    <div class="settings-color-label">${c.name}</div>
-                  </div>`,
-              )
-              .join('')}
-          </div>
-        </div>
-        <div class="settings-group">
-          <div class="settings-group-title">Sync Progress</div>
-          <div id="settings-sync-content"></div>
-        </div>
-        <div class="settings-group">
-          <div class="settings-group-title">AI-Generated Content</div>
-          <p class="about-text">
-            All puzzle images on Xefig are generated using artificial intelligence
-            (Google Gemini). No real photographs are used. In accordance with EU
-            AI Act transparency requirements, we disclose that this content is
-            AI-generated and should not be mistaken for authentic photographs.
-          </p>
-        </div>
-        <div class="settings-group">
-          <div class="settings-group-title">Contact</div>
-          <form id="contact-form" class="contact-form" autocomplete="off">
-            <div class="contact-field">
-              <label class="contact-label" for="contact-name">Name</label>
-              <input class="contact-input" type="text" id="contact-name" name="name" required minlength="2" maxlength="100" placeholder="Your name" />
+      <div class="settings-body">
+        <nav class="settings-nav" aria-label="Settings sections">${navHtml}</nav>
+        <div class="settings-sections">
+          <details class="settings-section" id="settings-section-profile" data-section="profile"${sectionOpen('profile')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Profile</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body" id="settings-profile-content"></div>
+          </details>
+
+          <details class="settings-section" id="settings-section-display" data-section="display"${sectionOpen('display')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Display</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body">
+              <div class="settings-subtitle">Board background</div>
+              <div id="settings-board-colors" class="settings-color-grid">
+                ${colors
+                  .map(
+                    (c, i) =>
+                      `<div style="text-align:center">
+                        <button class="settings-color-swatch${i === activeIndex ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${c.name}" title="${c.name}"${c.color ? ` style="background:${c.color}"` : ''}>
+                          ${c.color ? '' : '\ud83d\uddbc'}
+                        </button>
+                        <div class="settings-color-label">${c.name}</div>
+                      </div>`,
+                  )
+                  .join('')}
+              </div>
             </div>
-            <div class="contact-field">
-              <label class="contact-label" for="contact-email">Email</label>
-              <input class="contact-input" type="email" id="contact-email" name="email" required placeholder="you@example.com" />
+          </details>
+
+          <details class="settings-section" id="settings-section-audio" data-section="audio"${sectionOpen('audio')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Audio</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body" id="settings-audio-content"></div>
+          </details>
+
+          <details class="settings-section" id="settings-section-sync" data-section="sync"${sectionOpen('sync')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Sync &amp; Devices</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body" id="settings-sync-content"></div>
+          </details>
+
+          <details class="settings-section" id="settings-section-about" data-section="about"${sectionOpen('about')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">About</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body">
+              <p class="about-text">
+                All puzzle images on Xefig are generated using artificial intelligence
+                (Google Gemini). No real photographs are used. In accordance with EU
+                AI Act transparency requirements, we disclose that this content is
+                AI-generated and should not be mistaken for authentic photographs.
+              </p>
             </div>
-            <div class="contact-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;tab-index:-1">
-              <label for="contact-website">Website</label>
-              <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" />
+          </details>
+
+          <details class="settings-section" id="settings-section-contact" data-section="contact"${sectionOpen('contact')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Contact</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body">
+              <form id="contact-form" class="contact-form" autocomplete="off">
+                <div class="contact-field">
+                  <label class="contact-label" for="contact-name">Name</label>
+                  <input class="contact-input" type="text" id="contact-name" name="name" required minlength="2" maxlength="100" placeholder="Your name" />
+                </div>
+                <div class="contact-field">
+                  <label class="contact-label" for="contact-email">Email</label>
+                  <input class="contact-input" type="email" id="contact-email" name="email" required placeholder="you@example.com" />
+                </div>
+                <div class="contact-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;tab-index:-1">
+                  <label for="contact-website">Website</label>
+                  <input type="text" id="contact-website" name="website" tabindex="-1" autocomplete="off" />
+                </div>
+                <div class="contact-field">
+                  <label class="contact-label" for="contact-message">Message</label>
+                  <textarea class="contact-input contact-textarea" id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Your message..."></textarea>
+                </div>
+                <div id="contact-status" class="contact-status"></div>
+                <button type="submit" class="contact-submit" id="contact-submit">Send Message</button>
+              </form>
             </div>
-            <div class="contact-field">
-              <label class="contact-label" for="contact-message">Message</label>
-              <textarea class="contact-input contact-textarea" id="contact-message" name="message" required minlength="10" maxlength="5000" rows="5" placeholder="Your message..."></textarea>
-            </div>
-            <div id="contact-status" class="contact-status"></div>
-            <button type="submit" class="contact-submit" id="contact-submit">Send Message</button>
-          </form>
+          </details>
         </div>
       </div>
     </div>
   `
 
   container.querySelector('.page-back-btn').addEventListener('click', () => window.switchToPage('play'))
+
+  // Persist open/close per section.
+  container.querySelectorAll('details.settings-section').forEach((det) => {
+    det.addEventListener('toggle', () => {
+      setSectionOpen(det.dataset.section, det.open)
+    })
+  })
+
+  // Sidebar anchor links: open the target section if collapsed, then scroll.
+  container.querySelectorAll('.settings-nav-link').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault()
+      const id = link.dataset.section
+      const det = container.querySelector(`details[data-section="${id}"]`)
+      if (det && !det.open) {
+        det.open = true
+        setSectionOpen(id, true)
+      }
+      if (det) det.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
+  })
 
   const grid = container.querySelector('#settings-board-colors')
   grid.addEventListener('click', (e) => {
@@ -3385,6 +3741,8 @@ function renderSettingsPage() {
     })
   })
 
+  renderProfileSettings()
+  renderAudioSettings()
   renderSyncSettings()
 
   // Contact form handler
@@ -3435,6 +3793,114 @@ function renderSettingsPage() {
   settingsRendered = true
 }
 
+function renderProfileSettings() {
+  const el = document.querySelector('#settings-profile-content')
+  if (!el) return
+
+  const currentName = getProfileName()
+  const enabled = isSyncEnabled()
+  const code = getShareCode()
+  const nameSafe = currentName.replace(/"/g, '&quot;')
+
+  if (enabled && code) {
+    el.innerHTML = `
+      <div class="sync-field">
+        <label class="sync-field-label" for="sync-profile-name">Display name</label>
+        <input type="text" id="sync-profile-name" class="sync-name-input" maxlength="30" placeholder="Anonymous" value="${nameSafe}" autocomplete="off" spellcheck="false" />
+      </div>
+      <p class="sync-description">Your sync code (use this on another device):</p>
+      <div class="sync-code-display">
+        <span class="sync-code-value">${code}</span>
+        <button type="button" id="sync-copy-btn" class="sync-copy-btn" title="Copy code">Copy</button>
+      </div>
+      <p class="sync-hint">Tap the Devices card in More to send a quick link to another device.</p>
+    `
+    const nameInput = el.querySelector('#sync-profile-name')
+    let nameTimeout = null
+    nameInput.addEventListener('input', () => {
+      clearTimeout(nameTimeout)
+      nameTimeout = setTimeout(() => setProfileName(nameInput.value), 400)
+    })
+    el.querySelector('#sync-copy-btn').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code)
+        const btn = el.querySelector('#sync-copy-btn')
+        btn.textContent = 'Copied!'
+        setTimeout(() => { btn.textContent = 'Copy' }, 2000)
+      } catch {}
+    })
+  } else {
+    el.innerHTML = `
+      <div class="sync-field">
+        <label class="sync-field-label" for="sync-profile-name">Display name</label>
+        <input type="text" id="sync-profile-name" class="sync-name-input" maxlength="30" placeholder="Anonymous" value="${nameSafe}" autocomplete="off" spellcheck="false" />
+      </div>
+      <p class="sync-hint">Enable Sync below to get a shareable code that lets you continue on another device.</p>
+    `
+    const nameInput = el.querySelector('#sync-profile-name')
+    let nameTimeout = null
+    nameInput.addEventListener('input', () => {
+      clearTimeout(nameTimeout)
+      nameTimeout = setTimeout(() => setProfileName(nameInput.value), 400)
+    })
+  }
+}
+
+function renderAudioSettings() {
+  const el = document.querySelector('#settings-audio-content')
+  if (!el) return
+  const vol = getMusicVolume()
+  const enabled = vol > 0
+  el.innerHTML = `
+    <div class="settings-row">
+      <label class="settings-row-label">
+        <span>Music</span>
+        <span class="settings-row-sub">${enabled ? 'Playing' : 'Muted'}</span>
+      </label>
+      <button type="button" id="settings-music-toggle" class="settings-toggle ${enabled ? 'is-on' : 'is-off'}" role="switch" aria-checked="${enabled ? 'true' : 'false'}">
+        <span class="settings-toggle-track"></span>
+      </button>
+    </div>
+    <div class="settings-row settings-row-stack">
+      <label class="settings-row-label" for="settings-music-volume">
+        <span>Volume</span>
+        <span class="settings-row-sub" id="settings-music-volume-display">${Math.round(vol * 100)}%</span>
+      </label>
+      <input type="range" id="settings-music-volume" class="settings-volume-slider" min="0" max="1" step="0.01" value="${vol}" />
+    </div>
+  `
+
+  const toggle = el.querySelector('#settings-music-toggle')
+  const slider = el.querySelector('#settings-music-volume')
+  const display = el.querySelector('#settings-music-volume-display')
+  const sub = el.querySelector('.settings-row-label .settings-row-sub')
+
+  const refresh = () => {
+    const v = getMusicVolume()
+    const on = v > 0
+    toggle.classList.toggle('is-on', on)
+    toggle.classList.toggle('is-off', !on)
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false')
+    slider.value = String(v)
+    display.textContent = `${Math.round(v * 100)}%`
+    if (sub) sub.textContent = on ? 'Playing' : 'Muted'
+  }
+
+  toggle.addEventListener('click', () => {
+    const nowEnabled = !getMusicEnabled()
+    setMusicVolume(nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0)
+    applyMusicVolume()
+    refresh()
+  })
+
+  slider.addEventListener('input', () => {
+    const v = Number(slider.value)
+    setMusicVolume(v)
+    applyMusicVolume()
+    refresh()
+  })
+}
+
 function renderSyncSettings() {
   const syncEl = document.querySelector('#settings-sync-content')
   if (!syncEl) return
@@ -3443,43 +3909,14 @@ function renderSyncSettings() {
   const code = getShareCode()
 
   if (enabled && code) {
-    const currentName = getProfileName()
     syncEl.innerHTML = `
-      <div class="sync-field">
-        <label class="sync-field-label" for="sync-profile-name">Profile Name</label>
-        <input type="text" id="sync-profile-name" class="sync-name-input" maxlength="30" placeholder="Anonymous" value="${currentName.replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false" />
-      </div>
-      <p class="sync-description">Your sync code:</p>
-      <div class="sync-code-display">
-        <span class="sync-code-value">${code}</span>
-        <button type="button" id="sync-copy-btn" class="sync-copy-btn" title="Copy code">Copy</button>
-      </div>
-      <p class="sync-hint">Enter this code on another device to sync your progress.</p>
+      <p class="sync-description">Sync is on. Your progress syncs automatically across devices.</p>
       <div id="sync-status-msg" class="sync-status"></div>
-      <button type="button" id="sync-now-btn" class="sync-now-btn">Sync Now</button>
-      <button type="button" id="sync-disable-btn" class="sync-disable-btn">Disable Sync</button>
+      <div class="sync-button-row">
+        <button type="button" id="sync-now-btn" class="sync-now-btn">Sync Now</button>
+        <button type="button" id="sync-disable-btn" class="sync-disable-btn">Disable Sync</button>
+      </div>
     `
-
-    const nameInput = syncEl.querySelector('#sync-profile-name')
-    let nameTimeout = null
-    nameInput.addEventListener('input', () => {
-      clearTimeout(nameTimeout)
-      nameTimeout = setTimeout(() => {
-        setProfileName(nameInput.value)
-      }, 400)
-    })
-
-    syncEl.querySelector('#sync-copy-btn').addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(code)
-        const btn = syncEl.querySelector('#sync-copy-btn')
-        btn.textContent = 'Copied!'
-        setTimeout(() => { btn.textContent = 'Copy' }, 2000)
-      } catch {
-        // fallback
-      }
-    })
-
     const syncNowBtn = syncEl.querySelector('#sync-now-btn')
     const syncStatusEl = syncEl.querySelector('#sync-status-msg')
     syncNowBtn.addEventListener('click', async () => {
@@ -3498,9 +3935,6 @@ function renderSyncSettings() {
           syncStatusEl.textContent = 'Synced.'
         }
         syncStatusEl.className = 'sync-status sync-status-ok'
-        // Re-render the launcher on next home-page visit so any newly-pulled
-        // completions show up. Triggering it now is safe because settings is
-        // an overlay on top of the launcher.
         renderLauncher()
       } catch (err) {
         syncStatusEl.textContent = err?.message || 'Sync failed.'
@@ -3510,9 +3944,9 @@ function renderSyncSettings() {
         syncNowBtn.disabled = false
       }
     })
-
     syncEl.querySelector('#sync-disable-btn').addEventListener('click', () => {
       disableSync()
+      renderProfileSettings()
       renderSyncSettings()
     })
   } else {
@@ -3536,9 +3970,9 @@ function renderSyncSettings() {
       btn.textContent = 'Enabling...'
       statusEl.textContent = ''
       statusEl.className = 'sync-status'
-
       try {
-        const shareCode = await enableSync(playerGuid)
+        await enableSync(playerGuid)
+        renderProfileSettings()
         renderSyncSettings()
       } catch (err) {
         statusEl.textContent = err.message || 'Failed to enable sync.'
@@ -3567,6 +4001,7 @@ function renderSyncSettings() {
       try {
         await linkSync(code)
         refreshPlayerGuid()
+        renderProfileSettings()
         renderSyncSettings()
         statusEl.textContent = 'Linked! Progress synced from the other device.'
         statusEl.className = 'sync-status sync-status-ok'
@@ -3578,7 +4013,6 @@ function renderSyncSettings() {
       }
     })
 
-    // Auto-uppercase input
     const input = syncEl.querySelector('#sync-code-input')
     input.addEventListener('input', () => {
       input.value = input.value.toUpperCase()

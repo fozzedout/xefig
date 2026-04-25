@@ -122,13 +122,16 @@ test('More slice share card opens celebration with the share code when sync is e
 
   await page.goto('/', { waitUntil: 'networkidle' })
 
-  // Open the More slice.
+  // Open the More slice — now triggers a modal sheet rather than expanding inline.
   const moreSlice = page.locator('.slice-more')
   await moreSlice.click()
 
-  const shareCard = page.locator('.more-card[data-action="share-sync"]')
+  const sheet = page.locator('.more-sheet')
+  await expect(sheet).toBeVisible()
+
+  const shareCard = sheet.locator('.more-sheet-card[data-action="share-sync"]')
   await expect(shareCard).toBeVisible()
-  await expect(shareCard).toContainText('Play on another device')
+  await expect(shareCard).toContainText('Share with another device')
   await shareCard.click()
 
   const celebrate = page.locator('.sync-celebrate-overlay')

@@ -303,19 +303,181 @@ h1 {
   line-height: 1.5;
 }
 
-.settings-sections { max-width: 560px; }
+/* Settings layout: sidebar nav + collapsible sections. On portrait/tablet
+   the sidebar collapses to nothing; on landscape ≥1024px it sticks to the
+   side as anchor-link nav. */
+.settings-body {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  max-width: 920px;
+}
 
-.settings-group { margin-bottom: 2rem; }
+.settings-sections {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
+}
 
-.settings-group-title {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+.settings-nav { display: none; }
+
+@media (min-width: 1024px) {
+  .settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 0 0 180px;
+    position: sticky;
+    top: calc(52px + var(--sai-top) + 2rem);
+  }
+  .settings-nav-link {
+    color: rgba(232, 230, 224, 0.65);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.45rem 0.7rem;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .settings-nav-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e8e6e0;
+  }
+}
+
+.settings-section {
+  margin-bottom: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.settings-section-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  min-height: 48px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e8e6e0;
+  user-select: none;
+}
+.settings-section-summary::-webkit-details-marker { display: none; }
+.settings-section-summary:hover { background: rgba(255, 255, 255, 0.04); }
+
+.settings-section-title { flex: 1 1 auto; }
+
+.settings-section-chevron {
+  font-size: 0.9rem;
   color: rgba(232, 230, 224, 0.5);
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: transform 0.15s;
+  display: inline-block;
+}
+.settings-section[open] > .settings-section-summary .settings-section-chevron {
+  transform: rotate(90deg);
+}
+
+.settings-section-body {
+  padding: 0.4rem 1rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.settings-subtitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 224, 0.45);
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* Audio section: row + toggle + slider */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+}
+.settings-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.95rem;
+}
+.settings-row-sub {
+  font-size: 0.75rem;
+  color: rgba(232, 230, 224, 0.55);
+}
+
+.settings-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(232, 230, 224, 0.18);
+  cursor: pointer;
+  transition: background 0.18s;
+  padding: 0;
+}
+.settings-toggle.is-on { background: #4ade80; }
+.settings-toggle-track {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s;
+}
+.settings-toggle.is-on .settings-toggle-track { transform: translateX(18px); }
+
+.settings-volume-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(232, 230, 224, 0.2);
+  outline: none;
+  cursor: pointer;
+}
+.settings-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8e6e0;
+  cursor: pointer;
+  border: none;
+}
+.settings-volume-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8e6e0;
+  cursor: pointer;
+  border: none;
+}
+
+.sync-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
 }
 
 .settings-color-grid {
@@ -906,8 +1068,94 @@ h1 {
 .day-puzzles {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+
+.timeline-day.day-untouched .day-puzzles { display: none; }
+.timeline-day.day-untouched .day-header {
+  cursor: pointer;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(255,255,255,0.06);
+}
+.timeline-day.day-untouched .day-header:hover { background: rgba(255,255,255,0.04); }
+.day-collapse-hint {
+  display: none;
+  font-size: 0.7rem;
+  color: rgba(232, 230, 224, 0.45);
+  margin-left: auto;
+}
+.timeline-day.day-untouched .day-collapse-hint { display: inline; }
+.timeline-day.day-untouched .day-header {
+  display: flex;
+  align-items: center;
   gap: 0.6rem;
 }
+
+.archive-resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0 0 1.2rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(80, 232, 160, 0.25);
+  background: linear-gradient(135deg, rgba(80,232,160,0.10), rgba(64,208,240,0.06));
+  color: #e8e6e0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.archive-resume-banner:hover { transform: translateY(-1px); }
+.archive-resume-icon {
+  width: 36px; height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  background: rgba(80,232,160,0.18);
+  color: #50e8a0;
+  display: grid; place-items: center;
+}
+.archive-resume-icon svg { width: 16px; height: 16px; }
+.archive-resume-text { display: flex; flex-direction: column; gap: 0.1rem; }
+.archive-resume-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #e8e6e0;
+}
+.archive-resume-sub {
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: rgba(232, 230, 224, 0.55);
+  text-transform: uppercase;
+}
+
+.thumb-pill {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 3;
+  font-family: ui-monospace, 'Fira Code', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.08);
+  pointer-events: none;
+}
+.thumb-pill-new { color: #40d0f0; }
+.thumb-pill-resume { color: #f0c040; border-color: rgba(240,192,64,0.45); }
+.thumb-pill-completed { color: #50e8a0; border-color: rgba(80,232,160,0.45); }
+
+.puzzle-thumb.thumb-resume { box-shadow: inset 0 0 0 1px rgba(240,192,64,0.4); }
+.puzzle-thumb.thumb-completed { box-shadow: inset 0 0 0 1px rgba(80,232,160,0.4); }
 
 .puzzle-thumb {
   position: relative;
@@ -994,17 +1242,17 @@ h1 {
 
 .month-divider {
   padding-left: 2.5rem;
-  margin-bottom: 1.2rem;
-  margin-top: 0.5rem;
+  margin-bottom: 0.6rem;
+  margin-top: 0.3rem;
 }
 
 .month-divider span {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(232, 230, 224, 0.3);
-  padding: 3px 0;
+  padding: 2px 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
@@ -1021,7 +1269,7 @@ h1 {
   .timeline::before { left: 1rem; }
   .day-puzzles {
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 }
 
@@ -1558,164 +1806,39 @@ canvas.slice-image {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* ─── More/Nav slice ─── */
+  /* ─── More slice (landscape) ─── */
   .ls-default .slice-more {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
   }
 
-  /* The More slice is narrower than a collapsed slice (flex 0.6 vs 0.8), so
-     --slice-center (= half a collapsed slice) overshoots its actual middle.
-     Use the slice's own 50% for the title and the cards' centering anchor. */
-  .ls-default .slice-more .slice-title {
-    left: 50%;
-  }
-
-  /* Cards — stacked at bottom. Bottom offset matches .slice-icon so the
-     bottommost card icon aligns horizontally with the icons of the other
-     slices, and gap (no per-card margin) keeps spacing predictable. */
-  .ls-default .slice-more-cards {
+  .ls-default .slice-more .more-slice-content {
     position: absolute;
-    bottom: 0.8rem;
-    left: 0;
-    right: 0;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    z-index: 3;
-    padding: 0 0.4rem;
-    gap: 0.4rem;
-  }
-
-  .ls-default .more-card {
-    position: relative;
-    display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0;
-    padding: 0.25rem 0.5rem;
-    background: none;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    color: rgba(232,230,224,0.5);
-    font-family: inherit;
-    overflow: hidden;
-    transition: background 0.3s, color 0.3s;
+    gap: 0.5rem;
+    color: rgba(232,230,224,0.7);
+    z-index: 3;
   }
 
-  .ls-default .more-card:hover {
+  .ls-default .slice-more .more-slice-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ls-default .slice-more .more-slice-label {
+    font-weight: 700;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .ls-default .slice-more:hover .more-slice-content {
     color: #e8e6e0;
   }
-
-  .ls-default .slice-more.active .more-card {
-    background: rgba(255,255,255,0.04);
-  }
-
-  .ls-default .slice-more.active .more-card:hover {
-    background: rgba(255,255,255,0.08);
-  }
-
-  .ls-default .more-card--continue {
-    color: #e070a0;
-  }
-
-  .ls-default .slice-more.active .more-card--continue {
-    background: rgba(224, 112, 160, 0.12);
-  }
-
-  .ls-default .slice-more.active .more-card--continue:hover {
-    background: rgba(224, 112, 160, 0.2);
-  }
-
-  .ls-default .more-card--continue .more-card-img svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  /* Icon images — always visible, centered */
-  .ls-default .more-card-img {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.4s var(--ease-expo);
-  }
-
-  .ls-default .more-card-img svg {
-    width: 32px;
-    height: 32px;
-  }
-
-  /* Label is collapsed (zero width, no margin) when the More slice isn't
-     active, so the icon truly centers in narrow slices instead of being
-     pushed off-center by an invisible label still occupying layout space. */
-  .ls-default .more-card-label {
-    font-weight: 700;
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    opacity: 0;
-    width: 0;
-    margin-left: 0;
-    overflow: hidden;
-    transition: opacity 0.3s 0.1s;
-    white-space: nowrap;
-  }
-
-  .ls-default .slice-more.active .more-card-label {
-    opacity: 1;
-    width: auto;
-    margin-left: 0.6rem;
-  }
-
-  .ls-default .more-card--music.is-on,
-  .ls-default .more-card--music.is-on:hover {
-    color: #8ad0a0;
-  }
-
-  /* Music volume slider — hidden when collapsed (like the label), shown when
-     the More slice is active. Horizontal, fills remaining card width. */
-  .ls-default .more-card-volume {
-    opacity: 0;
-    width: 0;
-    margin-left: 0;
-    height: 18px;
-    padding: 0;
-    background: transparent;
-    cursor: pointer;
-    transition: opacity 0.3s 0.1s;
-    overflow: hidden;
-    touch-action: none;
-  }
-
-  .ls-default .slice-more.active .more-card--music {
-    flex-wrap: nowrap;
-  }
-
-  .ls-default .slice-more.active .more-card-volume {
-    opacity: 1;
-    width: auto;
-    flex: 1 1 auto;
-    margin-left: 0.6rem;
-    min-width: 60px;
-  }
-}
-
-/* More slice hidden outside ls-default */
-.slice-more { display: none; }
-.slice-more-cards { display: none; }
-.ls-default .slice-more { display: block; }
-.ls-default .slice-more-cards { display: flex; }
-
-/* Music mute slash — orientation-agnostic. The slash is inline opacity:0
-   on the SVG so it's hidden by default; we flip it on via .is-off. This
-   rule lives outside the orientation media queries so the muted state
-   renders in portrait too (previously it was scoped to landscape only). */
-.more-card--music .music-off-slash {
-  transition: opacity 0.2s;
-}
-.more-card--music.is-off .music-off-slash {
-  opacity: 1 !important;
-  stroke: rgba(232,230,224,0.55);
 }
 
 /* ─── Portrait spine layout ─── */
@@ -1945,131 +2068,34 @@ canvas.slice-image {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* ─── More/Nav slice (portrait) ─── */
+  /* ─── More slice (portrait) ─── */
   .ls-default .slice-more {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
   }
 
-  /* Cards — right-aligned row, top-aligned within the slice with
-     visible gaps so the icons don't feel crammed together. */
-  .ls-default .slice-more-cards {
-    right: 1.5rem;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-end;
-    align-items: flex-start;
-    z-index: 3;
-    padding: 0.8rem 0.4rem 0;
-    gap: 0.8rem;
-  }
-
-  .ls-default .more-card {
-    position: relative;
+  .ls-default .slice-more .more-slice-content {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 1.2rem 0.8rem;
-    background: none;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    color: rgba(232,230,224,0.5);
-    font-family: inherit;
-    overflow: hidden;
-    transition: background 0.3s, color 0.3s;
+    gap: 0.4rem;
+    color: rgba(232,230,224,0.7);
+    z-index: 3;
   }
 
-  .ls-default .more-card:hover {
-    color: #e8e6e0;
+  .ls-default .slice-more .more-slice-icon svg {
+    width: 24px;
+    height: 24px;
   }
 
-  .ls-default .slice-more.active .more-card {
-    background: rgba(255,255,255,0.04);
-  }
-
-  .ls-default .slice-more.active .more-card:hover {
-    background: rgba(255,255,255,0.08);
-  }
-
-  .ls-default .more-card--continue {
-    color: #e070a0;
-  }
-
-  .ls-default .slice-more.active .more-card--continue {
-    background: rgba(224, 112, 160, 0.12);
-  }
-
-  .ls-default .slice-more.active .more-card--continue:hover {
-    background: rgba(224, 112, 160, 0.2);
-  }
-
-  /* Icon — centered in card */
-  .ls-default .more-card-img {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .ls-default .more-card-img svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  /* Label — rotated spine text, appears below icon on expand */
-  .ls-default .more-card-label {
-    writing-mode: vertical-rl;
+  .ls-default .slice-more .more-slice-label {
     font-weight: 700;
     font-size: 0.6rem;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    opacity: 0;
-    margin-left: 0;
-    margin-top: 0.4rem;
-    transition: opacity 0.3s 0.1s;
-    white-space: nowrap;
-  }
-
-  .ls-default .slice-more.active .more-card-label {
-    opacity: 1;
-  }
-
-  /* Music volume slider in portrait — vertical via writing-mode, sits
-     below the icon like the rotated label. Hidden when collapsed,
-     stretches to fill the card height when the More slice is active
-     so the track is easy to hit with a thumb. */
-  .ls-default .slice-more.active .more-card--music {
-    align-self: stretch;
-    justify-content: flex-start;
-  }
-
-  .ls-default .more-card-volume {
-    opacity: 0;
-    height: 0;
-    width: 0;
-    margin-top: 0;
-    padding: 0;
-    background: transparent;
-    cursor: pointer;
-    transition: opacity 0.3s 0.1s;
-    overflow: hidden;
-    writing-mode: vertical-lr;
-    direction: rtl;
-    touch-action: none;
-  }
-
-  .ls-default .slice-more.active .more-card-volume {
-    opacity: 1;
-    width: 18px;
-    height: auto;
-    flex: 1 1 auto;
-    min-height: 120px;
-    margin-top: 0.6rem;
-    margin-bottom: 0.4rem;
   }
 }
 
@@ -2668,33 +2694,190 @@ canvas.slice-image {
   animation: pulse-save 1s ease-in-out infinite;
 }
 
-/* Sync status pill on the More slice spine. Small cloud glyph in the
-   top-right corner — visible whether collapsed or expanded. */
-.more-sync-indicator {
+/* ─── More sheet (modal) ─────────────────────────────────────────────────
+   Replaces the in-slice "More" card grid. Centered modal on landscape;
+   bottom-sheet on portrait. Cards always render with horizontal labels —
+   no rotated text, no portrait/landscape divergence. */
+.more-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  padding: max(1rem, var(--sai-top)) max(1rem, var(--sai-right)) max(1rem, var(--sai-bottom)) max(1rem, var(--sai-left));
+}
+.more-sheet-overlay.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.more-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #1a1a2a, #0f0f1a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.25rem 1rem 1rem;
+  color: #e8e6e0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  transform: translateY(20px) scale(0.98);
+  transition: transform 0.2s ease-out;
+}
+.more-sheet-overlay.is-visible .more-sheet {
+  transform: translateY(0) scale(1);
+}
+
+.more-sheet-handle { display: none; }
+
+.more-sheet-close {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e8e6e0;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(232, 230, 224, 0.6);
   cursor: pointer;
-  z-index: 4;
-  transition: color 0.2s, background 0.2s, opacity 0.2s;
-  opacity: 0.75;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
 }
-.more-sync-indicator:hover { opacity: 1; }
-.more-sync-indicator svg { width: 14px; height: 14px; }
-.more-sync-indicator[data-state="saved"] { color: #4ade80; }
-.more-sync-indicator[data-state="syncing"] { color: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
-.more-sync-indicator[data-state="pending"] { color: #fbbf24; }
-.more-sync-indicator[data-state="error"] { color: #f87171; }
+.more-sheet-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8e6e0;
+}
+.more-sheet-close svg { width: 14px; height: 14px; }
+
+.more-sheet-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 224, 0.5);
+  padding-left: 0.25rem;
+}
+
+.more-sheet-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.more-sheet-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.7rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: #e8e6e0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+.more-sheet-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.more-sheet-card:active { transform: scale(0.99); }
+
+.more-sheet-card-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(232, 230, 224, 0.85);
+}
+.more-sheet-card-icon svg { width: 26px; height: 26px; }
+
+.more-sheet-card-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.more-sheet-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.more-sheet-card-sub {
+  font-size: 0.75rem;
+  color: rgba(232, 230, 224, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more-sheet-card--continue { border-color: rgba(224, 112, 160, 0.3); }
+.more-sheet-card--continue .more-sheet-card-icon { color: #e070a0; }
+.more-sheet-card--music.is-on .more-sheet-card-icon { color: #8ad0a0; }
+
+/* Music mute slash on sheet card icon. */
+.more-sheet-card--music .music-off-slash { transition: opacity 0.2s; }
+.more-sheet-card--music.is-off .music-off-slash {
+  opacity: 1 !important;
+  stroke: rgba(232, 230, 224, 0.55);
+}
+
+/* Sync status dot anchored to the Devices card icon. */
+.more-card-sync-dot {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  border: 2px solid #1a1a2a;
+  transition: background 0.2s;
+}
+.more-card-sync-dot[data-state="syncing"] { background: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
+.more-card-sync-dot[data-state="pending"] { background: #fbbf24; }
+.more-card-sync-dot[data-state="error"] { background: #f87171; }
+
+/* Portrait: snap to bottom-sheet. */
+@media (max-width: 768px) {
+  .more-sheet-overlay { align-items: flex-end; padding: 0; }
+  .more-sheet {
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 18px 18px 0 0;
+    border-bottom: none;
+    padding-top: 0.5rem;
+    padding-bottom: max(1rem, var(--sai-bottom));
+    transform: translateY(40px);
+  }
+  .more-sheet-overlay.is-visible .more-sheet { transform: translateY(0); }
+  .more-sheet-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(232, 230, 224, 0.25);
+    margin: 0 auto 0.75rem;
+  }
+}
 
 .sr-only {
   position: absolute;
