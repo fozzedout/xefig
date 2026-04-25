@@ -1257,16 +1257,14 @@ function renderLauncher() {
       .join('') + `
           <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
-            <div class="more-slice-content">
-              <div class="more-slice-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <circle cx="5" cy="12" r="2"/>
-                  <circle cx="12" cy="12" r="2"/>
-                  <circle cx="19" cy="12" r="2"/>
-                </svg>
-              </div>
-              <div class="more-slice-label">More</div>
+            <div class="slice-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <circle cx="5" cy="12" r="2"/>
+                <circle cx="12" cy="12" r="2"/>
+                <circle cx="19" cy="12" r="2"/>
+              </svg>
             </div>
+            <div class="slice-title">More</div>
           </div>`
   }
 

@@ -1811,34 +1811,6 @@ canvas.slice-image {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
   }
-
-  .ls-default .slice-more .more-slice-content {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    color: rgba(232,230,224,0.7);
-    z-index: 3;
-  }
-
-  .ls-default .slice-more .more-slice-icon svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  .ls-default .slice-more .more-slice-label {
-    font-weight: 700;
-    font-size: 0.65rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .ls-default .slice-more:hover .more-slice-content {
-    color: #e8e6e0;
-  }
 }
 
 /* ─── Portrait spine layout ─── */
@@ -2072,30 +2044,6 @@ canvas.slice-image {
   .ls-default .slice-more {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
-  }
-
-  .ls-default .slice-more .more-slice-content {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    color: rgba(232,230,224,0.7);
-    z-index: 3;
-  }
-
-  .ls-default .slice-more .more-slice-icon svg {
-    width: 24px;
-    height: 24px;
-  }
-
-  .ls-default .slice-more .more-slice-label {
-    font-weight: 700;
-    font-size: 0.6rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
   }
 }
 

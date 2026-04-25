@@ -39,8 +39,8 @@ for (const viewport of VIEWPORTS) {
 
     const geom = await page.evaluate(() => {
       const moreSlice = document.querySelector('.slice-more')
-      const moreLabel = document.querySelector('.slice-more .more-slice-label')
-      const moreIcon = document.querySelector('.slice-more .more-slice-icon')
+      const moreLabel = document.querySelector('.slice-more .slice-title')
+      const moreIcon = document.querySelector('.slice-more .slice-icon')
       const oldCards = document.querySelector('.slice-more .more-card')
 
       const rect = (el) => {
