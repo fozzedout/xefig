@@ -1769,17 +1769,18 @@ function renderArchivePage() {
     const seq = []
     for (let i = 0; i < startOffset; i++) seq.push(null)
     for (let d = 1; d <= total; d++) seq.push(d)
-    while (seq.length % 7 !== 0) seq.push(null)
+    while (seq.length < 42) seq.push(null)
 
-    for (let rowStart = 0; rowStart < seq.length; rowStart += 7) {
+    for (let rowStart = 0; rowStart < 42; rowStart += 7) {
       const row = seq.slice(rowStart, rowStart + 7)
       const weekDates = []
       let weekHasContent = false
+      const rowHasDay = row.some((d) => d != null)
 
       row.forEach((dayNum) => {
         const cell = document.createElement('div')
         if (dayNum == null) {
-          cell.className = 'day outside'
+          cell.className = rowHasDay ? 'day outside' : 'day spacer'
         } else {
           const dateKey = getIsoDate(new Date(Date.UTC(year, monthIndex, dayNum)))
           const isToday = dateKey === todayDate
@@ -1871,13 +1872,13 @@ function renderArchivePage() {
     const entry = monthCards[monthIndex]
     if (!entry || !entry.hero) return
     const meta = buildMonthMedalForCalendar(monthIndex)
-    const wrap = document.createElement('div')
-    wrap.className = 'month-hero-medal'
-    wrap.appendChild(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
     const caption = document.createElement('div')
     caption.className = 'month-hero-caption'
     caption.textContent = captionForMonth(monthIndex)
-    entry.hero.replaceChildren(wrap, caption)
+    const wrap = document.createElement('div')
+    wrap.className = 'month-hero-medal'
+    wrap.appendChild(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
+    entry.hero.replaceChildren(caption, wrap)
   }
   for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
