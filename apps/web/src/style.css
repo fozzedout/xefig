@@ -1908,12 +1908,26 @@ canvas.slice-image {
     padding: calc(1.5rem + var(--sai-top)) calc(2rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(2rem + var(--sai-left));
   }
 
-  /* Landscape archive: 2-column layout — calendar left, hero/week-strip right.
+  /* Landscape archive: 2-column layout — calendar left, hero+week-strip right.
      Day cells drop aspect-ratio:1 so the grid fills available height instead
-     of overflowing past the dots. */
-  .ls-default .archive-top-bar { margin-bottom: 0.4rem; padding: 0 0.5rem; }
-  .ls-default .archive-top-bar h2 { font-size: 1.05rem; }
-  .ls-default .cal-nav { padding: 2px 0 6px; }
+     of overflowing past the dots. The archive-top-bar collapses to just a
+     floating back button so the title doesn't eat a whole row. */
+  .ls-default .archive-top-bar {
+    position: absolute;
+    top: calc(0.5rem + var(--sai-top));
+    left: calc(0.75rem + var(--sai-left));
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .ls-default .archive-top-bar > * { pointer-events: auto; }
+  .ls-default .archive-top-bar h2,
+  .ls-default .archive-top-spacer { display: none; }
+  .ls-default .archive-top-bar .page-back-btn { width: 32px; height: 32px; }
+  .ls-default .cal-region { padding: 0 0.5rem; }
+  .ls-default .cal-nav { padding: 2px 0 6px 44px; }
   .ls-default .cal-nav-arrow { width: 32px; height: 32px; font-size: 18px; }
   .ls-default .cal-nav-title { gap: 8px; padding: 4px 8px; }
   .ls-default .cal-nav-title .month-name { font-size: 16px; }
@@ -1922,21 +1936,23 @@ canvas.slice-image {
 
   .ls-default .cal-deck > .month-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(180px, 30%, 260px);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) clamp(180px, 30%, 240px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "dow hero"
+      "grid hero"
+      "grid week";
     column-gap: 14px;
     min-height: 0;
   }
   .ls-default .month-card > .dow {
-    grid-column: 1;
-    grid-row: 1;
+    grid-area: dow;
     margin: 0 0 4px;
     gap: 4px;
     font-size: 9px;
   }
   .ls-default .month-card > .grid {
-    grid-column: 1;
-    grid-row: 2;
+    grid-area: grid;
     grid-auto-rows: minmax(0, 1fr);
     gap: 4px;
     min-height: 0;
@@ -1958,8 +1974,7 @@ canvas.slice-image {
   }
 
   .ls-default .month-card > .month-hero {
-    grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-area: hero;
     padding: 0;
     gap: 6px;
     flex: none;
@@ -1968,11 +1983,20 @@ canvas.slice-image {
     justify-content: center;
   }
   .ls-default .month-hero-caption { padding: 0 4px; font-size: 10px; }
-  .ls-default .month-hero-medal svg.tier-svg { width: 140px; height: 140px; }
+  .ls-default .month-hero-medal svg.tier-svg { width: 110px; height: 110px; }
 
   .ls-default .month-card > .week-strip {
-    display: none;
+    grid-area: week;
+    margin: 0;
+    padding: 6px 0 0;
+    border-top: 1px solid rgba(232,230,224,0.08);
+    gap: 4px;
   }
+  .ls-default .month-card > .week-strip .week-cell {
+    aspect-ratio: auto;
+  }
+  .ls-default .month-card > .week-strip .week-cell svg { max-width: 32px; height: 32px; }
+  .ls-default .month-card > .week-strip .week-cell .w-label { font-size: 7.5px; margin-top: 1px; }
 
   .ls-default .cal-dots { margin-top: 8px; padding: 0 0.75rem; }
 
