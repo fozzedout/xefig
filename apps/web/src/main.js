@@ -186,7 +186,11 @@ let activeElapsedBaseMs = 0
 let activeStartedAtMs = null
 let autosaveIntervalId = null
 let gameVisibilityBound = false
-const playerGuid = getPlayerGuid()
+// `let` rather than `const` because linkSync replaces the local GUID with
+// the shared profile's — anything captured at boot would otherwise stay
+// stale and break leaderboard "is me" matching until the next reload.
+let playerGuid = getPlayerGuid()
+function refreshPlayerGuid() { playerGuid = getPlayerGuid() }
 cleanupBadCompletedRuns()
 
 const MUSIC_TRACKS = [
@@ -3562,6 +3566,7 @@ function renderSyncSettings() {
 
       try {
         await linkSync(code)
+        refreshPlayerGuid()
         renderSyncSettings()
         statusEl.textContent = 'Linked! Progress synced from the other device.'
         statusEl.className = 'sync-status sync-status-ok'
@@ -3644,6 +3649,7 @@ async function handleSyncLinkParam() {
 
   try {
     await linkSync(code)
+    refreshPlayerGuid()
     requestPersistentStorage()
     if (currentPage === 'play') renderLauncher()
   } catch (e) {
