@@ -33,16 +33,94 @@ async function mockBaseline(page) {
   })
 }
 
+function todayUtc() {
+  return new Date().toISOString().slice(0, 10)
+}
 function yesterdayUtc() {
   return new Date(Date.now() - 86400000).toISOString().slice(0, 10)
 }
 
-test('archive timeline preserves DOM identity across navigation to game and back', async ({ page }) => {
-  const yesterday = yesterdayUtc()
+async function openArchive(page) {
+  await page.goto('/', { waitUntil: 'networkidle' })
+  await page.locator('.slice-more').click()
+  await page.locator('.more-sheet-card[data-page="archive"]').click()
+  await expect(page.locator('.cal-region')).toBeVisible({ timeout: 15000 })
+}
 
+test('archive renders the current-month calendar with the brand glyph per day', async ({ page }) => {
   await mockBaseline(page)
-  // Seed a saved active jigsaw run for yesterday so the day is NOT collapsed
-  // as untouched and we have a clickable thumb that enters the game.
+  await openArchive(page)
+
+  const today = todayUtc()
+  const todayCell = page.locator(`.day[data-date="${today}"]`)
+  await expect(todayCell).toBeVisible()
+  await expect(todayCell).toHaveClass(/today/)
+  await expect(todayCell.locator('.glyph')).toBeVisible()
+
+  // Page-dots reflect 12 months and the current month is the highlighted dot
+  const dots = page.locator('.cal-dots .dot')
+  await expect(dots).toHaveCount(12)
+  await expect(page.locator('.cal-dots .dot.current')).toHaveCount(1)
+})
+
+test('tapping a playable day opens the day-detail sheet with all five mode thumbs', async ({ page }) => {
+  const yesterday = yesterdayUtc()
+  await mockBaseline(page)
+  await openArchive(page)
+
+  await page.locator(`.day[data-date="${yesterday}"]`).click()
+
+  const sheet = page.locator('.day-detail-overlay.open')
+  await expect(sheet).toBeVisible()
+  await expect(sheet.locator('.day-detail-title')).toContainText(String(new Date(yesterday).getUTCDate()))
+  await expect(sheet.locator('.puzzle-thumb')).toHaveCount(5)
+})
+
+test('locked future and pre-launch days do not open the day-detail sheet', async ({ page }) => {
+  await mockBaseline(page)
+  await openArchive(page)
+
+  // Pre-launch (before 2026-03-17) — pick 2026-03-01 which is in March
+  // Switch to March via the prev arrow first.
+  const navTitle = page.locator('.cal-nav-title .month-name')
+  const initialMonth = await navTitle.textContent()
+  // Try to navigate back until we reach March (or the prev button disables)
+  for (let i = 0; i < 12; i++) {
+    const txt = await navTitle.textContent()
+    if (txt?.trim() === 'March') break
+    const prev = page.locator('.cal-nav-arrow[data-action="prev"]')
+    if (await prev.isDisabled()) break
+    await prev.click()
+    await page.waitForTimeout(80)
+  }
+  // March 1 is locked (pre-launch), should have .locked
+  const marchOne = page.locator('.day[data-date="2026-03-01"]')
+  if (await marchOne.count() > 0) {
+    await expect(marchOne).toHaveClass(/locked/)
+    // Click should not open the sheet
+    await marchOne.click({ force: true })
+    await expect(page.locator('.day-detail-overlay.open')).toHaveCount(0)
+  }
+})
+
+test('year picker opens and jumps to the selected month', async ({ page }) => {
+  await mockBaseline(page)
+  await openArchive(page)
+
+  await page.locator('.cal-nav-title').click()
+  const picker = page.locator('.year-picker.open')
+  await expect(picker).toBeVisible()
+  await expect(picker.locator('.year-picker-cell')).toHaveCount(12)
+
+  // Click January (the first cell)
+  await picker.locator('.year-picker-cell').first().click()
+  await expect(page.locator('.year-picker.open')).toHaveCount(0)
+  await expect(page.locator('.cal-nav-title .month-name')).toHaveText('January')
+})
+
+test('day-detail thumb launches game; returning preserves the calendar DOM', async ({ page }) => {
+  const yesterday = yesterdayUtc()
+  await mockBaseline(page)
   await page.addInitScript((date) => {
     localStorage.setItem(
       `xefig:run:${date}:jigsaw`,
@@ -56,61 +134,48 @@ test('archive timeline preserves DOM identity across navigation to game and back
     )
   }, yesterday)
 
-  await page.goto('/', { waitUntil: 'networkidle' })
+  await openArchive(page)
 
-  await page.locator('.slice-more').click()
-  await page.locator('.more-sheet-card[data-page="archive"]').click()
+  // Tag the calendar to prove DOM identity survives game→archive return
+  await page.locator('.cal-deck').evaluate((el) => el.setAttribute('data-test-tag', 'sentinel'))
 
-  const day = page.locator(`.timeline-day[data-date="${yesterday}"]`)
-  await expect(day).toBeVisible({ timeout: 15000 })
+  await page.locator(`.day[data-date="${yesterday}"]`).click()
+  const sheet = page.locator('.day-detail-overlay.open')
+  await expect(sheet).toBeVisible()
 
-  // Tag the day so we can prove DOM identity is preserved across navigation.
-  await day.evaluate((el) => el.setAttribute('data-test-tag', 'sentinel'))
+  await sheet.locator('.puzzle-thumb[data-mode="jigsaw"]').click()
 
-  // The resume thumb is visible (day is not untouched because it has an active run).
-  const resumeThumb = day.locator('.puzzle-thumb.thumb-resume[data-mode="jigsaw"]')
-  await expect(resumeThumb).toBeVisible()
-  await resumeThumb.click()
-
-  // The game page renders; tap the in-game back button which calls returnFromGame().
   const backBtn = page.locator('.page-back-btn').first()
   await expect(backBtn).toBeVisible({ timeout: 10000 })
   await backBtn.click({ force: true })
 
-  // Without the archiveRendered=false reset, the same day node must still exist.
-  const tagged = page.locator('.timeline-day[data-test-tag="sentinel"]')
-  await expect(tagged).toHaveCount(1)
-  await expect(tagged).toHaveAttribute('data-date', yesterday)
+  await expect(page.locator('.cal-deck[data-test-tag="sentinel"]')).toHaveCount(1)
 })
 
-test('seeded completed run renders with thumb-completed pill', async ({ page }) => {
+test('seeded completed run shows a gold ring on its day glyph', async ({ page }) => {
   const yesterday = yesterdayUtc()
-
   await mockBaseline(page)
   await page.addInitScript((date) => {
+    const allModes = ['jigsaw', 'sliding', 'swap', 'polygram', 'diamond']
+    const completed = {}
+    for (const m of allModes) {
+      completed[m] = {
+        puzzleDate: date,
+        gameMode: m,
+        bestElapsedMs: 123456,
+        completedAt: new Date().toISOString(),
+      }
+    }
     localStorage.setItem(
       'xefig:puzzles:completed:v1',
-      JSON.stringify({
-        [date]: {
-          jigsaw: {
-            puzzleDate: date,
-            gameMode: 'jigsaw',
-            bestElapsedMs: 123456,
-            completedAt: new Date().toISOString(),
-          },
-        },
-      }),
+      JSON.stringify({ [date]: completed }),
     )
   }, yesterday)
 
-  await page.goto('/', { waitUntil: 'networkidle' })
-  await page.locator('.slice-more').click()
-  await page.locator('.more-sheet-card[data-page="archive"]').click()
+  await openArchive(page)
 
-  const day = page.locator(`.timeline-day[data-date="${yesterday}"]`)
-  await expect(day).toBeVisible({ timeout: 15000 })
-
-  const completedThumb = day.locator('.puzzle-thumb.thumb-completed[data-mode="jigsaw"]')
-  await expect(completedThumb).toBeVisible()
-  await expect(completedThumb.locator('.thumb-pill-completed')).toBeVisible()
+  const cell = page.locator(`.day[data-date="${yesterday}"]`)
+  await expect(cell).toBeVisible()
+  // All 5 modes done → glyph carries data-complete="1"
+  await expect(cell.locator('.glyph[data-complete="1"]')).toBeVisible()
 })

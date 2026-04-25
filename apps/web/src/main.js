@@ -1460,12 +1460,11 @@ function renderLauncher() {
 }
 
 const ARCHIVE_START_DATE = '2026-03-17'
-const ARCHIVE_FILTER_KEY = 'xefig:archive:filter:v1'
 let archiveLastFocusKey = null
-// Set by renderArchivePage so returnFromGame can update a single thumb in
-// place + scroll back to it without rebuilding the whole timeline.
+// Set by renderArchivePage so returnFromGame can refresh the calendar (and
+// any open day-detail sheet) for a single (date, mode) pair without
+// rebuilding the page.
 let updateArchiveThumb = null
-const expandedArchiveDays = new Set()
 const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_JIGSAW]: '#f0c040',
   [GAME_MODE_SLIDING]: '#40d0f0',
@@ -1474,41 +1473,193 @@ const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_DIAMOND]: '#e070a0',
 }
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
-function getStoredArchiveFilter() {
-  try {
-    const v = localStorage.getItem(ARCHIVE_FILTER_KEY)
-    if (v === 'in-progress' || v === 'completed' || v === 'all') return v
-  } catch {}
-  return 'all'
+// Petal positions match brand favicon: diamond at 0° after the -20° root
+// rotation, then sliding/polygram/jigsaw/swap clockwise. baseRot is applied
+// to both the petal and its matching star arm so a completed mode lights
+// up its colour wedge AND fills in that arm of the central gold star.
+const ARCHIVE_GLYPH_MODES = [
+  { key: GAME_MODE_DIAMOND,  color: '#e070a0', baseRot: 0 },
+  { key: GAME_MODE_SLIDING,  color: '#40d0f0', baseRot: 72 },
+  { key: GAME_MODE_POLYGRAM, color: '#a060f0', baseRot: 144 },
+  { key: GAME_MODE_JIGSAW,   color: '#f0c040', baseRot: 216 },
+  { key: GAME_MODE_SWAP,     color: '#50d070', baseRot: 288 },
+]
+const ARCHIVE_MODES = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
+
+const ARCHIVE_SVG_DEFS_HTML = `
+  <svg class="archive-svg-defs" width="0" height="0" aria-hidden="true">
+    <defs>
+      <path id="xefig-petal" d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z"/>
+      <polygon id="xefig-arm" points="0,0 -9.9,-13.6 0,-44 9.9,-13.6"/>
+      <polygon id="xefig-star-outline" points="0,-44 9.9,-13.6 41.9,-13.6 16,5.2 25.9,35.6 0,16.8 -25.9,35.6 -16,5.2 -41.9,-13.6 -9.9,-13.6"/>
+      <linearGradient id="gold-grad" x1="0" y1="-1" x2="0" y2="1">
+        <stop offset="0"   stop-color="#fcd97a"/>
+        <stop offset="0.5" stop-color="#f0c040"/>
+        <stop offset="1"   stop-color="#a87a1a"/>
+      </linearGradient>
+    </defs>
+  </svg>
+`
+
+function pointOnArchiveCircle(angleDeg, r) {
+  const a = (angleDeg - 90) * Math.PI / 180
+  return [Math.cos(a) * r, Math.sin(a) * r]
+}
+
+function makeArchiveGlyph({ done = [], inprogress = false } = {}) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const allDone = done.length === ARCHIVE_GLYPH_MODES.length
+  const svg = document.createElementNS(ns, 'svg')
+  svg.setAttribute('viewBox', '-100 -100 200 200')
+  svg.classList.add('glyph')
+  if (allDone) svg.dataset.complete = '1'
+  if (inprogress && !allDone) svg.dataset.inprogress = '1'
+
+  const ring = document.createElementNS(ns, 'circle')
+  ring.setAttribute('r', '88')
+  ring.classList.add('ring-bg')
+  svg.appendChild(ring)
+
+  const root = document.createElementNS(ns, 'g')
+  root.setAttribute('transform', 'rotate(-20)')
+
+  const ghost = document.createElementNS(ns, 'use')
+  ghost.setAttribute('href', '#xefig-star-outline')
+  ghost.classList.add('star-ghost')
+  root.appendChild(ghost)
+
+  const doneSet = new Set(done)
+  ARCHIVE_GLYPH_MODES.forEach((m) => {
+    const g = document.createElementNS(ns, 'g')
+    g.setAttribute('data-mode', m.key)
+    if (doneSet.has(m.key)) g.dataset.done = '1'
+
+    const petal = document.createElementNS(ns, 'use')
+    petal.setAttribute('href', '#xefig-petal')
+    petal.setAttribute('transform', `rotate(${m.baseRot})`)
+    petal.setAttribute('fill', m.color)
+    petal.classList.add('petal')
+    g.appendChild(petal)
+
+    const arm = document.createElementNS(ns, 'use')
+    arm.setAttribute('href', '#xefig-arm')
+    arm.setAttribute('transform', `rotate(${m.baseRot})`)
+    arm.classList.add('arm')
+    g.appendChild(arm)
+
+    root.appendChild(g)
+  })
+
+  svg.appendChild(root)
+  return svg
+}
+
+function appendArchiveCentralGlyph(svg, scale) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const g = document.createElementNS(ns, 'g')
+  g.setAttribute('transform', `scale(${scale})`)
+
+  const petalRoot = document.createElementNS(ns, 'g')
+  petalRoot.setAttribute('transform', 'rotate(-20)')
+  ARCHIVE_GLYPH_MODES.forEach((m) => {
+    const petal = document.createElementNS(ns, 'use')
+    petal.setAttribute('href', '#xefig-petal')
+    petal.setAttribute('transform', `rotate(${m.baseRot})`)
+    petal.setAttribute('fill', m.color)
+    petal.setAttribute('opacity', '0.95')
+    petalRoot.appendChild(petal)
+  })
+  g.appendChild(petalRoot)
+
+  const starRoot = document.createElementNS(ns, 'g')
+  starRoot.setAttribute('transform', 'rotate(-20)')
+  ARCHIVE_GLYPH_MODES.forEach((m) => {
+    const arm = document.createElementNS(ns, 'use')
+    arm.setAttribute('href', '#xefig-arm')
+    arm.setAttribute('transform', `rotate(${m.baseRot})`)
+    arm.setAttribute('fill', '#FFD700')
+    starRoot.appendChild(arm)
+  })
+  g.appendChild(starRoot)
+
+  svg.appendChild(g)
+}
+
+function buildWeekMedal({ completed = [], totalDays = 7 }) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(ns, 'svg')
+  svg.classList.add('tier-svg')
+  svg.setAttribute('viewBox', '-100 -100 200 200')
+  const completedSet = new Set(completed)
+  const isComplete = totalDays > 0 && completedSet.size === totalDays
+  const frame = document.createElementNS(ns, 'circle')
+  frame.setAttribute('r', '82')
+  frame.setAttribute('class', isComplete ? 'gold-ring' : 'frame-ring')
+  svg.appendChild(frame)
+  appendArchiveCentralGlyph(svg, 0.55)
+  for (let i = 0; i < totalDays; i++) {
+    const angle = (360 / totalDays) * i - 90
+    const [x, y] = pointOnArchiveCircle(angle + 90, 70)
+    const pip = document.createElementNS(ns, 'circle')
+    pip.setAttribute('cx', x.toFixed(2))
+    pip.setAttribute('cy', y.toFixed(2))
+    pip.setAttribute('r', '8')
+    pip.setAttribute('class', completedSet.has(i) ? 'pip-filled' : 'pip-empty')
+    svg.appendChild(pip)
+  }
+  return svg
+}
+
+function buildMonthMedal({ completed = [], totalDays = 30 }) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(ns, 'svg')
+  svg.classList.add('tier-svg')
+  svg.setAttribute('viewBox', '-100 -100 200 200')
+  const completedSet = new Set(completed)
+  const isComplete = totalDays > 0 && completedSet.size === totalDays
+  const frame = document.createElementNS(ns, 'circle')
+  frame.setAttribute('r', '95')
+  frame.setAttribute('class', isComplete ? 'gold-ring' : 'frame-ring')
+  svg.appendChild(frame)
+  appendArchiveCentralGlyph(svg, 0.55)
+  for (let i = 0; i < totalDays; i++) {
+    const angle = (360 / totalDays) * i
+    const a = (angle - 90) * Math.PI / 180
+    const x1 = Math.cos(a) * 75, y1 = Math.sin(a) * 75
+    const x2 = Math.cos(a) * 93, y2 = Math.sin(a) * 93
+    const tick = document.createElementNS(ns, 'line')
+    tick.setAttribute('x1', x1.toFixed(2))
+    tick.setAttribute('y1', y1.toFixed(2))
+    tick.setAttribute('x2', x2.toFixed(2))
+    tick.setAttribute('y2', y2.toFixed(2))
+    tick.setAttribute('class', completedSet.has(i) ? 'tick-filled' : 'tick-empty')
+    svg.appendChild(tick)
+  }
+  return svg
+}
+
+function getDayCompletionGlyphData(dateKey) {
+  const completed = getCompletedModesForDate(dateKey)
+  const done = ARCHIVE_GLYPH_MODES.map((m) => m.key).filter((k) => completed.has(k))
+  const inprogress = ARCHIVE_MODES.some((m) => hasActiveRun(dateKey, m))
+  return { done, inprogress }
+}
+
+function isoDateAdd(dateKey, days) {
+  return new Date(Date.parse(`${dateKey}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10)
 }
 
 function renderArchivePage() {
   const pageEl = document.querySelector('#page-archive')
   const todayDate = getIsoDate(new Date())
+  const todayParts = todayDate.split('-').map(Number)
+  const todayYear = todayParts[0]
+  const currentMonthIndex = todayParts[1] - 1
   state.sourceMode = 'archive'
   state.difficulty = state.difficulty || 'medium'
-
-  const initialFilter = getStoredArchiveFilter()
-  const resume = getLatestActiveArchiveRun(todayDate)
-  let resumeBannerHtml = ''
-  if (resume) {
-    const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
-    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
-    const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
-    resumeBannerHtml = `
-      <button class="archive-resume-banner" data-resume-mode="${resume.gameMode}" data-resume-date="${resume.puzzleDate}">
-        <span class="archive-resume-icon">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
-        </span>
-        <span class="archive-resume-text">
-          <span class="archive-resume-title">Resume ${modeLabel}</span>
-          <span class="archive-resume-sub">${dateLabel} · in progress</span>
-        </span>
-      </button>
-    `
-  }
 
   pageEl.innerHTML = `
     <div class="archive-page">
@@ -1517,40 +1668,370 @@ function renderArchivePage() {
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
         </button>
         <h2>Archive</h2>
-        <div class="archive-filters">
-          <button class="filter-chip${initialFilter === 'all' ? ' active' : ''}" data-filter="all">All</button>
-          <button class="filter-chip${initialFilter === 'in-progress' ? ' active' : ''}" data-filter="in-progress">In Progress</button>
-          <button class="filter-chip${initialFilter === 'completed' ? ' active' : ''}" data-filter="completed">Completed</button>
-        </div>
+        <div class="archive-top-spacer"></div>
       </div>
-      ${resumeBannerHtml}
-      <div class="timeline" id="archive-timeline"></div>
+      <div class="cal-region">
+        <div class="cal-nav">
+          <button class="cal-nav-arrow" data-action="prev" aria-label="Previous month">‹</button>
+          <button class="cal-nav-title" data-action="open-year">
+            <span class="medal-mini" data-role="nav-medal"></span>
+            <span class="month-name" data-role="nav-month-name"></span>
+            <span class="year-label" data-role="nav-year"></span>
+            <span class="chevron">▾</span>
+          </button>
+          <button class="cal-nav-arrow" data-action="next" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-tally" data-role="cal-tally"></div>
+        <div class="cal-deck" data-role="cal-deck"></div>
+        <div class="cal-dots" data-role="cal-dots"></div>
+      </div>
+    </div>
+    ${ARCHIVE_SVG_DEFS_HTML}
+    <div class="day-detail-overlay" data-role="day-detail" hidden>
+      <div class="day-detail-backdrop"></div>
+      <div class="day-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="day-detail-title">
+        <button class="day-detail-close" data-role="day-detail-close" aria-label="Close">×</button>
+        <div class="day-detail-head">
+          <div class="day-detail-title" id="day-detail-title" data-role="day-detail-title"></div>
+          <div class="day-detail-sub" data-role="day-detail-sub"></div>
+        </div>
+        <div class="day-detail-thumbs" data-role="day-detail-thumbs"></div>
+      </div>
+    </div>
+    <div class="year-picker" data-role="year-picker" hidden>
+      <div class="year-picker-backdrop"></div>
+      <div class="year-picker-sheet" role="dialog" aria-modal="true">
+        <button class="year-picker-close" data-role="year-picker-close" aria-label="Close">×</button>
+        <div class="year-picker-nav">
+          <button class="cal-nav-arrow" data-action="yp-prev-year" aria-label="Previous year" disabled>‹</button>
+          <div class="year-picker-year" data-role="year-picker-year"></div>
+          <button class="cal-nav-arrow" data-action="yp-next-year" aria-label="Next year" disabled>›</button>
+        </div>
+        <div class="year-picker-grid" data-role="year-picker-grid"></div>
+      </div>
     </div>
   `
 
   pageEl.querySelector('.page-back-btn').addEventListener('click', () => window.switchToPage('play'))
 
-  const resumeBtn = pageEl.querySelector('.archive-resume-banner')
-  if (resumeBtn) {
-    resumeBtn.addEventListener('click', async () => {
-      const mode = resumeBtn.dataset.resumeMode
-      const date = resumeBtn.dataset.resumeDate
-      try {
-        const payload = await fetchPuzzlePayload({ date })
-        archiveLastFocusKey = `${date}:${mode}`
-        handleThumbClick(payload, mode, date)
-      } catch {}
+  const monthCards = []
+  const deck = pageEl.querySelector('[data-role="cal-deck"]')
+  const dotsEl = pageEl.querySelector('[data-role="cal-dots"]')
+  const tallyEl = pageEl.querySelector('[data-role="cal-tally"]')
+  const navMedalSlot = pageEl.querySelector('[data-role="nav-medal"]')
+  const navMonthNameEl = pageEl.querySelector('[data-role="nav-month-name"]')
+  const navYearEl = pageEl.querySelector('[data-role="nav-year"]')
+  const prevBtn = pageEl.querySelector('[data-action="prev"]')
+  const nextBtn = pageEl.querySelector('[data-action="next"]')
+  const titleBtn = pageEl.querySelector('[data-action="open-year"]')
+
+  const detailOverlay = pageEl.querySelector('[data-role="day-detail"]')
+  const detailTitleEl = pageEl.querySelector('[data-role="day-detail-title"]')
+  const detailSubEl = pageEl.querySelector('[data-role="day-detail-sub"]')
+  const detailThumbsEl = pageEl.querySelector('[data-role="day-detail-thumbs"]')
+
+  const yearPickerEl = pageEl.querySelector('[data-role="year-picker"]')
+  const yearPickerYearEl = pageEl.querySelector('[data-role="year-picker-year"]')
+  const yearPickerGridEl = pageEl.querySelector('[data-role="year-picker-grid"]')
+
+  let openDetailDate = null
+  let activeMonthIndex = currentMonthIndex
+
+  function isLockedDate(dateKey) {
+    return dateKey < ARCHIVE_START_DATE || dateKey > todayDate
+  }
+
+  function daysInMonth(year, monthIndex) {
+    return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+  }
+
+  function buildMonthCardEl(year, monthIndex) {
+    const card = document.createElement('div')
+    card.className = 'month-card'
+    card.dataset.month = monthIndex
+
+    const dow = document.createElement('div')
+    dow.className = 'dow'
+    DAY_NAMES.forEach((n) => {
+      const span = document.createElement('span')
+      span.textContent = n.slice(0, 3)
+      dow.appendChild(span)
+    })
+    card.appendChild(dow)
+
+    const grid = document.createElement('div')
+    grid.className = 'grid'
+    const weekStrip = document.createElement('div')
+    weekStrip.className = 'week-strip'
+
+    const total = daysInMonth(year, monthIndex)
+    const startOffset = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay()
+
+    const weeks = []
+    const seq = []
+    for (let i = 0; i < startOffset; i++) seq.push(null)
+    for (let d = 1; d <= total; d++) seq.push(d)
+    while (seq.length % 7 !== 0) seq.push(null)
+
+    for (let rowStart = 0; rowStart < seq.length; rowStart += 7) {
+      const row = seq.slice(rowStart, rowStart + 7)
+      const weekDates = []
+      let weekHasContent = false
+
+      row.forEach((dayNum) => {
+        const cell = document.createElement('div')
+        if (dayNum == null) {
+          cell.className = 'day outside'
+        } else {
+          const dateKey = getIsoDate(new Date(Date.UTC(year, monthIndex, dayNum)))
+          const isToday = dateKey === todayDate
+          const locked = isLockedDate(dateKey)
+          cell.className = 'day' + (isToday ? ' today' : '') + (locked && !isToday ? ' locked' : '')
+          cell.dataset.date = dateKey
+          const num = document.createElement('div')
+          num.className = 'num'
+          num.textContent = dayNum
+          cell.appendChild(num)
+          const data = locked ? { done: [], inprogress: false } : getDayCompletionGlyphData(dateKey)
+          cell.appendChild(makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || (isToday && !locked) }))
+          weekDates.push({ dateKey, locked })
+          weekHasContent = true
+        }
+        grid.appendChild(cell)
+      })
+
+      if (weekHasContent) {
+        const wk = document.createElement('div')
+        wk.className = 'week-cell'
+        const lbl = document.createElement('div')
+        lbl.className = 'w-label'
+        wk.appendChild(buildWeekMedal({ completed: [], totalDays: weekDates.length }))
+        wk.appendChild(lbl)
+        weekStrip.appendChild(wk)
+        weeks.push({ weekDates, cell: wk, label: lbl })
+      }
+    }
+
+    card.appendChild(grid)
+    card.appendChild(weekStrip)
+    return { card, weeks }
+  }
+
+  function refreshMonthMedals(monthIndex) {
+    const entry = monthCards[monthIndex]
+    if (!entry) return
+    entry.weeks.forEach(({ weekDates, cell, label }) => {
+      const completedIdx = []
+      let total = 0
+      weekDates.forEach(({ dateKey, locked }, i) => {
+        if (locked) return
+        total += 1
+        if (getCompletedModesForDate(dateKey).size === ARCHIVE_GLYPH_MODES.length) {
+          completedIdx.push(i)
+        }
+      })
+      cell.replaceChild(buildWeekMedal({ completed: completedIdx, totalDays: weekDates.length }), cell.firstChild)
+      label.textContent = total ? `${completedIdx.length}/${total}` : '—'
     })
   }
 
-  const timeline = pageEl.querySelector('#archive-timeline')
-  const allDays = []
-  let loadedCount = 0
-  const BATCH_SIZE = 10
-
-  function addDays(dateKey, n) {
-    return new Date(Date.parse(`${dateKey}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+  function buildMonthMedalForCalendar(monthIndex) {
+    const total = daysInMonth(todayYear, monthIndex)
+    const completedIdx = []
+    let playable = 0
+    for (let d = 1; d <= total; d++) {
+      const dateKey = getIsoDate(new Date(Date.UTC(todayYear, monthIndex, d)))
+      if (isLockedDate(dateKey)) continue
+      playable += 1
+      if (getCompletedModesForDate(dateKey).size === ARCHIVE_GLYPH_MODES.length) {
+        completedIdx.push(d - 1)
+      }
+    }
+    return { svg: buildMonthMedal({ completed: completedIdx, totalDays: total }), completedIdx, playable, total }
   }
+
+  function refreshDots() {
+    Array.from(dotsEl.children).forEach((dot, i) => {
+      dot.classList.toggle('current', i === activeMonthIndex)
+      const meta = buildMonthMedalForCalendar(i)
+      dot.classList.remove('has-progress', 'month-perfect')
+      if (meta.playable && meta.completedIdx.length === meta.total) dot.classList.add('month-perfect')
+      else if (meta.completedIdx.length > 0) dot.classList.add('has-progress')
+    })
+  }
+
+  for (let m = 0; m < 12; m++) {
+    const built = buildMonthCardEl(todayYear, m)
+    monthCards.push({ el: built.card, weeks: built.weeks, year: todayYear })
+    deck.appendChild(built.card)
+  }
+
+  for (let i = 0; i < 12; i++) {
+    const dot = document.createElement('div')
+    dot.className = 'dot'
+    dot.dataset.month = i
+    dot.addEventListener('click', () => jumpToMonth(i))
+    dotsEl.appendChild(dot)
+  }
+
+  function updateNav() {
+    const meta = buildMonthMedalForCalendar(activeMonthIndex)
+    navMedalSlot.replaceChildren(meta.svg)
+    navMonthNameEl.textContent = MONTH_NAMES[activeMonthIndex]
+    navYearEl.textContent = String(todayYear)
+    if (!meta.playable) {
+      tallyEl.textContent = activeMonthIndex > currentMonthIndex
+        ? `${meta.total} days · upcoming`
+        : `${meta.total} days · pre-launch`
+    } else if (meta.completedIdx.length === 0) {
+      tallyEl.textContent = `${meta.playable} playable days · untouched`
+    } else {
+      const pct = Math.round((meta.completedIdx.length / meta.playable) * 100)
+      tallyEl.textContent = `${meta.completedIdx.length} / ${meta.playable} days · ${pct}% earned`
+    }
+    prevBtn.disabled = activeMonthIndex === 0
+    nextBtn.disabled = activeMonthIndex === 11
+  }
+
+  function centerScrollLeftFor(index) {
+    const card = deck.children[index]
+    if (!card) return 0
+    const cardRect = card.getBoundingClientRect()
+    const deckRect = deck.getBoundingClientRect()
+    const cardLeftInDeck = (cardRect.left - deckRect.left) + deck.scrollLeft
+    return cardLeftInDeck + cardRect.width / 2 - deck.clientWidth / 2
+  }
+
+  function snappedIndex() {
+    const deckRect = deck.getBoundingClientRect()
+    const deckCenter = deckRect.left + deckRect.width / 2
+    let best = 0, bestDist = Infinity
+    Array.from(deck.children).forEach((c, i) => {
+      const r = c.getBoundingClientRect()
+      const center = r.left + r.width / 2
+      const dist = Math.abs(deckCenter - center)
+      if (dist < bestDist) { bestDist = dist; best = i }
+    })
+    return best
+  }
+
+  function jumpToMonth(monthIndex) {
+    if (monthIndex < 0 || monthIndex > 11) return
+    activeMonthIndex = monthIndex
+    const target = centerScrollLeftFor(monthIndex)
+    const prev = deck.style.scrollSnapType
+    deck.style.scrollSnapType = 'none'
+    deck.scrollLeft = target
+    requestAnimationFrame(() => {
+      deck.style.scrollSnapType = prev || ''
+    })
+    updateNav()
+    refreshDots()
+  }
+
+  let scrollTimer
+  deck.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer)
+    scrollTimer = setTimeout(() => {
+      const i = snappedIndex()
+      if (i !== activeMonthIndex) {
+        activeMonthIndex = i
+        updateNav()
+        refreshDots()
+      }
+    }, 60)
+  })
+
+  prevBtn.addEventListener('click', () => {
+    if (activeMonthIndex > 0) {
+      deck.scrollTo({ left: centerScrollLeftFor(activeMonthIndex - 1), behavior: 'smooth' })
+    }
+  })
+  nextBtn.addEventListener('click', () => {
+    if (activeMonthIndex < 11) {
+      deck.scrollTo({ left: centerScrollLeftFor(activeMonthIndex + 1), behavior: 'smooth' })
+    }
+  })
+
+  function statusForMode(dateKey, mode) {
+    if (hasActiveRun(dateKey, mode)) {
+      const run = getRunForMode(dateKey, mode)
+      const elapsed = run?.elapsedMs ?? run?.elapsed ?? 0
+      return { kind: 'resume', label: elapsed ? formatDuration(elapsed) : '▶' }
+    }
+    if (getCompletedModesForDate(dateKey).has(mode)) {
+      const entry = getCompletionEntry(dateKey, mode)
+      return { kind: 'completed', label: entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '✓' }
+    }
+    return { kind: 'new', label: 'new' }
+  }
+
+  function renderDetailThumbs(payload, dateKey) {
+    detailThumbsEl.replaceChildren()
+    ARCHIVE_MODES.forEach((mode) => {
+      const accent = ARCHIVE_ACCENT_MAP[mode]
+      const status = statusForMode(dateKey, mode)
+      const isDiamond = mode === GAME_MODE_DIAMOND
+      const fullImageUrl = resolvePuzzleImageUrl(payload, mode)
+      const thumbUrl = resolvePuzzleThumbnailUrl(payload, mode)
+      const thumb = document.createElement('button')
+      thumb.className = `puzzle-thumb thumb-${status.kind}`
+      thumb.dataset.mode = mode
+      thumb.dataset.date = dateKey
+      thumb.style.setProperty('--thumb-accent', accent)
+      thumb.style.setProperty('--accent', accent)
+      const imageHtml = isDiamond
+        ? `<div class="thumb-image"><canvas class="diamond-grid-canvas thumb-grid-canvas" data-image-url="${fullImageUrl}" data-date="${dateKey}"></canvas></div>`
+        : `<div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>`
+      thumb.innerHTML = `
+        ${imageHtml}
+        <div class="thumb-info">
+          <div class="thumb-mode" style="color:${accent}">${MODE_LABELS[mode]}</div>
+        </div>
+        <div class="thumb-pill thumb-pill-${status.kind}">${status.label}</div>
+      `
+      thumb.addEventListener('click', () => handleThumbClick(payload, mode, dateKey))
+      detailThumbsEl.appendChild(thumb)
+    })
+    if (typeof renderDiamondGridThumbnails === 'function') renderDiamondGridThumbnails(detailThumbsEl)
+  }
+
+  async function openDayDetail(dateKey) {
+    if (isLockedDate(dateKey)) return
+    openDetailDate = dateKey
+    const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
+    const weekday = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()]
+    detailTitleEl.textContent = `${weekday}, ${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}`
+
+    const completed = getCompletedModesForDate(dateKey).size
+    const total = ARCHIVE_GLYPH_MODES.length
+    detailSubEl.textContent = completed === total
+      ? `All ${total} completed`
+      : completed === 0
+        ? `${total} puzzles`
+        : `${completed} / ${total} completed`
+
+    detailThumbsEl.innerHTML = `<div class="day-detail-loading">Loading puzzles...</div>`
+    detailOverlay.hidden = false
+    requestAnimationFrame(() => detailOverlay.classList.add('open'))
+
+    try {
+      const payload = await fetchPuzzlePayload({ date: dateKey })
+      if (openDetailDate !== dateKey) return
+      renderDetailThumbs(payload, dateKey)
+    } catch {
+      detailThumbsEl.innerHTML = `<div class="day-detail-loading">Couldn't load puzzles for this day.</div>`
+    }
+  }
+
+  function closeDayDetail() {
+    openDetailDate = null
+    detailOverlay.classList.remove('open')
+    setTimeout(() => { detailOverlay.hidden = true }, 200)
+  }
+
+  detailOverlay.querySelector('[data-role="day-detail-close"]').addEventListener('click', closeDayDetail)
+  detailOverlay.querySelector('.day-detail-backdrop').addEventListener('click', closeDayDetail)
 
   function handleThumbClick(puzzlePayload, mode, puzzleDate) {
     archiveLastFocusKey = `${puzzleDate}:${mode}`
@@ -1583,214 +2064,89 @@ function renderArchivePage() {
     renderGame()
   }
 
-  const ARCHIVE_MODES = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
-
-  function getThumbStatus(dateKey, mode) {
-    if (hasActiveRun(dateKey, mode)) {
-      const run = getRunForMode(dateKey, mode)
-      const elapsed = run?.elapsedMs ?? run?.elapsed ?? 0
-      return { kind: 'resume', label: elapsed ? formatDuration(elapsed) : '▶' }
-    }
-    if (getCompletedModesForDate(dateKey).has(mode)) {
-      const entry = getCompletionEntry(dateKey, mode)
-      return { kind: 'completed', label: entry?.bestElapsedMs ? formatDuration(entry.bestElapsedMs) : '✓' }
-    }
-    return { kind: 'new', label: 'new' }
-  }
-
-  function renderThumbHtml(puzzlePayload, mode, dateKey) {
-    const title = MODE_LABELS[mode]
-    const accent = ARCHIVE_ACCENT_MAP[mode]
-    const status = getThumbStatus(dateKey, mode)
-    const isDiamond = mode === GAME_MODE_DIAMOND
-    const fullImageUrl = resolvePuzzleImageUrl(puzzlePayload, mode)
-    const thumbUrl = resolvePuzzleThumbnailUrl(puzzlePayload, mode)
-    const thumbImageHtml = isDiamond
-      ? `<div class="thumb-image"><canvas class="diamond-grid-canvas thumb-grid-canvas" data-image-url="${fullImageUrl}" data-date="${dateKey}"></canvas></div>`
-      : `<div class="thumb-image" style="background-image:url('${thumbUrl}')"></div>`
-
-    return `<div class="puzzle-thumb thumb-${status.kind}" data-mode="${mode}" data-date="${dateKey}" style="--thumb-accent:${accent}">
-      ${thumbImageHtml}
-      <div class="thumb-info">
-        <div class="thumb-mode" style="color:${accent}">${title}</div>
-      </div>
-      <div class="thumb-pill thumb-pill-${status.kind}">${status.label}</div>
-    </div>`
-  }
-
-  function bindThumb(thumbEl, puzzlePayload) {
-    thumbEl.addEventListener('click', () => {
-      handleThumbClick(puzzlePayload, thumbEl.dataset.mode, thumbEl.dataset.date)
-    })
-  }
-
-  function recomputeDayState(dayEl, dateKey) {
-    const completedModes = getCompletedModesForDate(dateKey)
-    const hasResume = ARCHIVE_MODES.some((m) => hasActiveRun(dateKey, m))
-    dayEl.dataset.hasCompleted = completedModes.size > 0 ? '1' : ''
-    dayEl.dataset.hasResume = hasResume ? '1' : ''
-    const untouched = !hasResume && completedModes.size === 0
-    dayEl.classList.toggle('day-untouched', untouched && !expandedArchiveDays.has(dateKey))
-  }
-
-  function renderDayEntry(puzzlePayload, dateKey, index) {
-    const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
-    const isToday = dateKey === todayDate
-
-    const thumbsHtml = ARCHIVE_MODES.map((mode) => renderThumbHtml(puzzlePayload, mode, dateKey)).join('')
-
-    const dayName = DAY_NAMES[d.getUTCDay()]
-    const monthStr = MONTH_NAMES[d.getUTCMonth()].slice(0, 3)
-
-    const el = document.createElement('div')
-    el.className = 'timeline-day' + (isToday ? ' today' : '')
-    el.style.animationDelay = (index * 0.06) + 's'
-    el.dataset.date = dateKey
-    el.innerHTML = `
-      <div class="day-header">
-        <div class="day-date">${monthStr} ${d.getUTCDate()}</div>
-        <div class="day-label${isToday ? ' today-label' : ''}">${isToday ? 'Today' : dayName}</div>
-        <div class="day-collapse-hint">5 puzzles unplayed →</div>
-      </div>
-      <div class="day-puzzles">${thumbsHtml}</div>
-    `
-
-    recomputeDayState(el, dateKey)
-    el.querySelectorAll('.puzzle-thumb').forEach((thumb) => bindThumb(thumb, puzzlePayload))
-
-    el.querySelector('.day-header').addEventListener('click', () => {
-      if (el.classList.contains('day-untouched')) {
-        expandedArchiveDays.add(dateKey)
-        el.classList.remove('day-untouched')
-      }
-    })
-
-    return el
-  }
-
-  updateArchiveThumb = (date, mode) => {
-    const day = allDays.find((entry) => entry.dateKey === date)
-    if (!day) return
-    const oldThumb = day.el.querySelector(`.puzzle-thumb[data-mode="${mode}"]`)
-    if (!oldThumb) return
-    const tmp = document.createElement('div')
-    tmp.innerHTML = renderThumbHtml(day.payload, mode, date)
-    const newThumb = tmp.firstElementChild
-    oldThumb.replaceWith(newThumb)
-    bindThumb(newThumb, day.payload)
-    recomputeDayState(day.el, date)
-    if (mode === GAME_MODE_DIAMOND) renderDiamondGridThumbnails(day.el)
-  }
-
-  let loading = false
-  let exhausted = false
-
-  // Sentinel element at the bottom — triggers loading when scrolled into view
-  const sentinel = document.createElement('div')
-  sentinel.className = 'timeline-loading'
-  sentinel.textContent = 'Loading\u2026'
-  timeline.appendChild(sentinel)
-
-  async function loadBatch() {
-    if (loading || exhausted) return
-    loading = true
-
-    const fragment = document.createDocumentFragment()
-    let lastMonth = -1
-
-    if (loadedCount > 0) {
-      const prevDate = new Date(Date.parse(`${addDays(todayDate, -(loadedCount - 1))}T00:00:00Z`))
-      lastMonth = prevDate.getUTCMonth()
-    }
-
-    let loaded = 0
-    for (let i = 0; i < BATCH_SIZE; i++) {
-      const dateKey = addDays(todayDate, -(loadedCount + i))
-      if (dateKey < ARCHIVE_START_DATE) {
-        exhausted = true
-        break
-      }
-
-      const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
-      const m = d.getUTCMonth()
-
-      if (m !== lastMonth) {
-        lastMonth = m
-        const divider = document.createElement('div')
-        divider.className = 'month-divider'
-        divider.innerHTML = `<span>${MONTH_NAMES[m]} ${d.getUTCFullYear()}</span>`
-        fragment.appendChild(divider)
-      }
-
-      try {
-        const payload = await fetchPuzzlePayload({ date: dateKey })
-        const dayEl = renderDayEntry(payload, dateKey, i)
-        allDays.push({ dateKey, el: dayEl, payload })
-        fragment.appendChild(dayEl)
-      } catch {
-        // Day has no puzzle — skip
-      }
-      loaded++
-    }
-
-    timeline.insertBefore(fragment, sentinel)
-    renderDiamondGridThumbnails(timeline)
-    loadedCount += loaded
-
-    if (exhausted || loaded === 0) {
-      sentinel.remove()
-      observer.disconnect()
-    }
-
-    if (typeof applyFilter === 'function' && currentFilter !== 'all') applyFilter(currentFilter)
-
-    loading = false
-  }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) loadBatch()
-    },
-    { root: pageEl.querySelector('.archive-page'), rootMargin: '200px' },
-  )
-  observer.observe(sentinel)
-
-  function applyFilter(filter) {
-    timeline.querySelectorAll('.timeline-day').forEach((day) => {
-      if (filter === 'all') {
-        day.style.display = ''
-      } else if (filter === 'in-progress') {
-        day.style.display = day.dataset.hasResume ? '' : 'none'
-      } else if (filter === 'completed') {
-        day.style.display = day.dataset.hasCompleted ? '' : 'none'
-      }
-    })
-    timeline.querySelectorAll('.month-divider').forEach((div) => {
-      let next = div.nextElementSibling
-      while (next && !next.classList.contains('timeline-day') && !next.classList.contains('month-divider')) {
-        next = next.nextElementSibling
-      }
-      if (!next || next.classList.contains('month-divider')) {
-        div.style.display = 'none'
-      } else {
-        div.style.display = next.style.display
-      }
-    })
-  }
-
-  let currentFilter = initialFilter
-
-  pageEl.querySelectorAll('.filter-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      pageEl.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'))
-      chip.classList.add('active')
-      currentFilter = chip.dataset.filter
-      try { localStorage.setItem(ARCHIVE_FILTER_KEY, currentFilter) } catch {}
-      applyFilter(currentFilter)
+  monthCards.forEach((entry) => {
+    entry.el.querySelectorAll('.day[data-date]').forEach((dayEl) => {
+      if (dayEl.classList.contains('locked')) return
+      dayEl.addEventListener('click', () => openDayDetail(dayEl.dataset.date))
     })
   })
 
-  loadBatch()
+  function refreshYearPickerGrid() {
+    yearPickerGridEl.replaceChildren()
+    yearPickerYearEl.innerHTML = `${todayYear}<span class="yp-year-sub">Tap a month to jump</span>`
+    for (let i = 0; i < 12; i++) {
+      const cell = document.createElement('button')
+      cell.className = 'year-picker-cell'
+      if (i === activeMonthIndex) cell.classList.add('current')
+      const meta = buildMonthMedalForCalendar(i)
+      cell.appendChild(meta.svg)
+      const lbl = document.createElement('div')
+      lbl.className = 'yp-label'
+      lbl.textContent = MONTH_NAMES_SHORT[i]
+      cell.appendChild(lbl)
+      const sub = document.createElement('div')
+      sub.className = 'yp-sub'
+      sub.textContent = !meta.playable
+        ? (i > currentMonthIndex ? 'upcoming' : 'pre-launch')
+        : `${meta.completedIdx.length}/${meta.playable}`
+      cell.appendChild(sub)
+      cell.addEventListener('click', () => {
+        closeYearPicker()
+        setTimeout(() => jumpToMonth(i), 0)
+      })
+      yearPickerGridEl.appendChild(cell)
+    }
+  }
+
+  function openYearPicker() {
+    refreshYearPickerGrid()
+    yearPickerEl.hidden = false
+    requestAnimationFrame(() => yearPickerEl.classList.add('open'))
+  }
+  function closeYearPicker() {
+    yearPickerEl.classList.remove('open')
+    setTimeout(() => { yearPickerEl.hidden = true }, 200)
+  }
+  function escClose(e) {
+    if (e.key !== 'Escape') return
+    if (!yearPickerEl.hidden) closeYearPicker()
+    else if (!detailOverlay.hidden) closeDayDetail()
+  }
+
+  titleBtn.addEventListener('click', openYearPicker)
+  yearPickerEl.querySelector('[data-role="year-picker-close"]').addEventListener('click', closeYearPicker)
+  yearPickerEl.querySelector('.year-picker-backdrop').addEventListener('click', closeYearPicker)
+  document.addEventListener('keydown', escClose)
+
+  updateArchiveThumb = (date, _mode) => {
+    const parts = date.split('-').map(Number)
+    if (parts[0] !== todayYear) return
+    const monthIdx = parts[1] - 1
+    const entry = monthCards[monthIdx]
+    if (!entry) return
+    const dayEl = entry.el.querySelector(`.day[data-date="${date}"]`)
+    if (dayEl) {
+      const oldGlyph = dayEl.querySelector('.glyph')
+      const data = getDayCompletionGlyphData(date)
+      const isToday = date === todayDate
+      const newGlyph = makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || isToday })
+      if (oldGlyph) oldGlyph.replaceWith(newGlyph)
+    }
+    refreshMonthMedals(monthIdx)
+    if (monthIdx === activeMonthIndex) updateNav()
+    refreshDots()
+    if (openDetailDate === date) {
+      fetchPuzzlePayload({ date }).then((payload) => {
+        if (openDetailDate === date) renderDetailThumbs(payload, date)
+      }).catch(() => {})
+    }
+  }
+
+  monthCards.forEach((_, i) => refreshMonthMedals(i))
+  refreshDots()
+  updateNav()
+  requestAnimationFrame(() => jumpToMonth(currentMonthIndex))
+
   archiveRendered = true
 }
 
