@@ -1901,12 +1901,80 @@ canvas.slice-image {
 
   /* Immersive archive & settings — no top-nav, own padding */
   .ls-default .archive-page {
-    padding: calc(1.5rem + var(--sai-top)) calc(1rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(1rem + var(--sai-left));
+    padding: calc(0.5rem + var(--sai-top)) calc(0.75rem + var(--sai-right)) calc(8px + var(--sai-bottom)) calc(0.75rem + var(--sai-left));
   }
 
   .ls-default .settings-page {
     padding: calc(1.5rem + var(--sai-top)) calc(2rem + var(--sai-right)) calc(1.5rem + var(--sai-bottom)) calc(2rem + var(--sai-left));
   }
+
+  /* Landscape archive: 2-column layout — calendar left, hero/week-strip right.
+     Day cells drop aspect-ratio:1 so the grid fills available height instead
+     of overflowing past the dots. */
+  .ls-default .archive-top-bar { margin-bottom: 0.4rem; padding: 0 0.5rem; }
+  .ls-default .archive-top-bar h2 { font-size: 1.05rem; }
+  .ls-default .cal-nav { padding: 2px 0 6px; }
+  .ls-default .cal-nav-arrow { width: 32px; height: 32px; font-size: 18px; }
+  .ls-default .cal-nav-title { gap: 8px; padding: 4px 8px; }
+  .ls-default .cal-nav-title .month-name { font-size: 16px; }
+  .ls-default .cal-nav-title .year-label { font-size: 10px; }
+  .ls-default .cal-nav-title .medal-mini { width: 26px; height: 26px; }
+
+  .ls-default .cal-deck > .month-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(180px, 30%, 260px);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 14px;
+    min-height: 0;
+  }
+  .ls-default .month-card > .dow {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0 0 4px;
+    gap: 4px;
+    font-size: 9px;
+  }
+  .ls-default .month-card > .grid {
+    grid-column: 1;
+    grid-row: 2;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 4px;
+    min-height: 0;
+  }
+  .ls-default .month-card > .grid .day {
+    aspect-ratio: auto;
+    padding: 2px;
+    border-radius: 6px;
+    min-height: 0;
+  }
+  .ls-default .month-card > .grid .day .num {
+    font-size: 8.5px;
+    top: 2px;
+    left: 4px;
+  }
+  .ls-default .month-card > .grid .day .glyph {
+    width: 70%;
+    margin: auto;
+  }
+
+  .ls-default .month-card > .month-hero {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    padding: 0;
+    gap: 6px;
+    flex: none;
+    overflow: hidden;
+    min-height: 0;
+    justify-content: center;
+  }
+  .ls-default .month-hero-caption { padding: 0 4px; font-size: 10px; }
+  .ls-default .month-hero-medal svg.tier-svg { width: 140px; height: 140px; }
+
+  .ls-default .month-card > .week-strip {
+    display: none;
+  }
+
+  .ls-default .cal-dots { margin-top: 8px; padding: 0 0.75rem; }
 
   /* Vertical spine title */
   .ls-default .slice-title {
