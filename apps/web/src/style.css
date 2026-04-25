@@ -946,6 +946,8 @@ h1 {
   padding: calc(52px + var(--sai-top) + 1.5rem) var(--sai-right) calc(2rem + var(--sai-bottom)) var(--sai-left);
   overflow-y: auto;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .archive-top-bar {
@@ -973,8 +975,13 @@ h1 {
 
 .cal-region {
   max-width: 980px;
+  width: 100%;
   margin: 0 auto;
   padding: 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .cal-nav {
@@ -1049,6 +1056,9 @@ h1 {
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   position: relative;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
 }
 .cal-deck::-webkit-scrollbar { display: none; }
 .cal-deck > .month-card {
@@ -1062,7 +1072,11 @@ h1 {
   background: transparent;
   border: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
+.month-card .grid { flex: 1; min-height: 0; }
 
 .dow {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1447,15 +1461,20 @@ h1 {
 /* ─── Phone-portrait tweaks ─── */
 
 @media (orientation: portrait), (max-width: 768px) {
-  .archive-page { padding-top: calc(52px + var(--sai-top) + 1rem); }
+  .archive-page { padding-top: calc(52px + var(--sai-top) + 0.5rem); padding-left: 0; padding-right: 0; padding-bottom: calc(0.5rem + var(--sai-bottom)); }
   .archive-top-bar { padding: 0 1rem; }
-  .cal-region { padding: 0 0.75rem; }
-  .grid { gap: 4px; }
-  .dow { gap: 4px; font-size: 9.5px; letter-spacing: 0.06em; }
-  .day { padding: 3px; border-radius: 8px; }
+  .cal-region { padding: 0; }
+  .cal-nav { padding: 4px 0.5rem 8px; }
+  .cal-tally { padding: 0 0.75rem; margin-bottom: 8px; }
+  .cal-dots { padding: 0 0.75rem; margin-top: 10px; }
+  .grid { gap: 4px; padding: 0 4px; grid-auto-rows: minmax(0, 1fr); }
+  .dow { gap: 4px; padding: 0 4px; font-size: 9.5px; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .day { padding: 3px; border-radius: 8px; aspect-ratio: auto; justify-content: center; }
   .day .num { top: 2px; left: 4px; font-size: 9px; }
-  .day .glyph { width: 80%; }
-  .week-strip { gap: 4px; padding-top: 10px; margin-top: 10px; }
+  .day .glyph { width: 78%; max-width: 64px; margin-top: 0; margin-bottom: 0; }
+  .week-strip { gap: 4px; padding: 10px 0.5rem 0; margin-top: 10px; }
+  .week-strip .week-cell { aspect-ratio: auto; }
+  .week-strip .week-cell svg { max-width: 56px; }
   .cal-nav-title .month-name { font-size: 18px; }
   .cal-nav-title .year-label { font-size: 11px; }
   .cal-nav-title .medal-mini { width: 30px; height: 30px; }
