@@ -1091,15 +1091,17 @@ h1 {
 .month-hero-medal {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 .month-hero-medal svg.tier-svg {
-  width: 100%;
-  max-width: 220px;
-  height: auto;
-  aspect-ratio: 1;
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  max-height: 100%;
   filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
 }
 .month-hero-caption {
@@ -1515,13 +1517,13 @@ h1 {
   .week-strip { gap: 4px; padding: 10px 0.5rem 0; margin-top: 10px; }
   .week-strip .week-cell svg { max-width: 56px; }
   .month-hero { padding: 1rem 0 4px; }
-  .month-hero svg.tier-svg { max-width: 200px; }
+  .month-hero svg.tier-svg { width: 200px; height: 200px; }
   .cal-nav-title .month-name { font-size: 18px; }
   .cal-nav-title .year-label { font-size: 11px; }
   .cal-nav-title .medal-mini { width: 30px; height: 30px; }
 }
 
-@media (orientation: portrait) and (max-height: 600px) {
+@media (orientation: portrait) and (max-height: 700px) {
   .month-hero-medal { display: none; }
   .month-hero { padding: 1rem 0 2px; }
 }
