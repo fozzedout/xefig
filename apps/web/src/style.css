@@ -1811,6 +1811,15 @@ canvas.slice-image {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
   }
+
+  /* More is narrower than a collapsed game slice (--flex 0.6 vs 0.8), so
+     --slice-center (calibrated on game slices) lands past its midpoint.
+     Center the title + icon within the slice itself instead. */
+  .ls-default .slice-more .slice-title,
+  .ls-default .slice-more .slice-icon {
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 /* ─── Portrait spine layout ─── */
@@ -2044,6 +2053,15 @@ canvas.slice-image {
   .ls-default .slice-more {
     background: linear-gradient(135deg, #12121f, #0a0a0f);
     cursor: pointer;
+  }
+
+  /* See landscape note: More is shorter than a collapsed game slice in
+     portrait, so center within itself. */
+  .ls-default .slice-more .slice-title {
+    top: 50%;
+  }
+  .ls-default .slice-more .slice-icon {
+    top: 50%;
   }
 }
 
