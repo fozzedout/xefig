@@ -1811,12 +1811,21 @@ function renderArchivePage() {
       }
     }
 
-    card.appendChild(grid)
-    card.appendChild(weekStrip)
     const hero = document.createElement('div')
     hero.className = 'month-hero'
     hero.dataset.role = 'month-hero'
-    card.appendChild(hero)
+
+    // Wrap the four pieces in a cal-square so landscape can lay them out as a
+    // single 8×7 grid (dow + month-medal corner + days + week-medal column).
+    // Default (portrait) behaviour keeps the original stacking via
+    // display:contents in CSS.
+    const square = document.createElement('div')
+    square.className = 'cal-square'
+    square.appendChild(dow)
+    square.appendChild(grid)
+    square.appendChild(weekStrip)
+    square.appendChild(hero)
+    card.replaceChildren(square)
     return { card, weeks, hero }
   }
 
