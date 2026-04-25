@@ -1077,9 +1077,9 @@ h1 {
   flex-direction: column;
   min-height: 0;
 }
-/* Wrapper around dow + grid + week-strip + month-hero. Default is
-   display:contents so portrait keeps its old stacked flex flow. Landscape
-   re-targets it as an 8×7 square grid (see landscape rules). */
+/* Wrapper around dow + grid + week-strip. Default (portrait) is
+   display:contents so children flow into the month-card flex column.
+   Landscape re-targets it as a 7×7 grid (see landscape rules). */
 .cal-square { display: contents; }
 .month-hero {
   flex: 1;
@@ -1088,7 +1088,7 @@ h1 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   padding: 10px 0 4px;
   overflow: hidden;
 }
@@ -1108,14 +1108,33 @@ h1 {
   max-height: 100%;
   filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
 }
-.month-hero-caption {
-  font: 600 12px/1.3 -apple-system, system-ui, sans-serif;
+.month-hero-counter {
+  font: 700 22px/1 -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  color: #e8e6e0;
+  text-align: center;
+  white-space: nowrap;
+}
+.month-hero-counter-unit {
+  font-weight: 500;
+  color: rgba(232,230,224,0.5);
+  font-size: 0.7em;
+  margin-left: 0.15em;
+  letter-spacing: 0.04em;
+}
+.month-hero-sub {
+  font: 600 11px/1.2 -apple-system, system-ui, sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(232,230,224,0.55);
+  color: rgba(232,230,224,0.4);
   text-align: center;
   padding: 0 12px;
 }
+/* "wk" column header and week-column background — used only by the
+   landscape grid where column 8 reads as a vertical track. Hidden in
+   portrait where the week-strip is a horizontal row at the bottom. */
+.wk-header { display: none; }
+.week-col-bg { display: none; }
 
 .dow {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1528,8 +1547,10 @@ h1 {
 }
 
 @media (orientation: portrait) and (max-height: 700px) {
-  .month-hero-medal { display: none; }
-  .month-hero { padding: 1rem 0 2px; }
+  .month-hero-medal,
+  .month-hero-counter,
+  .month-hero-sub { display: none; }
+  .month-hero { padding: 0; flex: 0; }
 }
 
 @media (max-width: 480px) {
@@ -1938,15 +1959,38 @@ canvas.slice-image {
   .ls-default .cal-nav-title .year-label { font-size: 10px; }
   .ls-default .cal-nav-title .medal-mini { width: 26px; height: 26px; }
 
-  /* Centre the square grid horizontally so wide desktops don't smear it. */
+  /* Landscape month card: side-panel (medal + counter) on the left,
+     calendar square on the right. The square self-sizes to its own height
+     via aspect-ratio; the side panel takes the leftover horizontal slack. */
   .ls-default .cal-deck > .month-card {
-    justify-content: center;
+    flex-direction: row;
     align-items: center;
+    justify-content: center;
+    gap: 16px;
     min-height: 0;
   }
 
-  /* The 8×7 calendar square: 7 day columns + 1 week-medal column,
-     1 dow row + 6 day rows. aspect-ratio 8/7 with all-1fr tracks keeps
+  /* Side panel — sits on the left of the row, anchors month progress. */
+  .ls-default .cal-deck > .month-card > .month-hero {
+    flex: 0 1 auto;
+    order: -1;
+    height: 100%;
+    max-width: 240px;
+    padding: 8px 4px;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+  .ls-default .month-hero-medal svg.tier-svg {
+    width: 100%;
+    height: auto;
+    max-width: 220px;
+    max-height: 60%;
+  }
+  .ls-default .month-hero-counter { font-size: 26px; }
+
+  /* The 8×7 calendar square: 7 day columns + 1 week column,
+     1 header row + 6 day rows. aspect-ratio 8/7 with all-1fr tracks keeps
      every cell perfectly square. */
   .ls-default .cal-square {
     display: grid;
@@ -1957,8 +2001,22 @@ canvas.slice-image {
     height: 100%;
     width: auto;
     max-width: 100%;
-    margin: 0 auto;
+    flex: 0 1 auto;
     min-height: 0;
+    position: relative;
+  }
+
+  /* Background panel painted behind column 8 — gives the week column a
+     distinct surface so it reads as a separate track from the days. */
+  .ls-default .cal-square > .week-col-bg {
+    grid-column: 8;
+    grid-row: 1 / -1;
+    background: rgba(240,192,64,0.06);
+    border: 1px solid rgba(240,192,64,0.12);
+    border-radius: 8px;
+    margin: -2px;
+    z-index: 0;
+    pointer-events: none;
   }
 
   /* dow labels — auto-place into row 1, cols 1-7 (7 spans). */
@@ -1973,6 +2031,23 @@ canvas.slice-image {
     color: rgba(232,230,224,0.32);
     text-transform: uppercase;
     letter-spacing: 0.08em;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* "wk" header — top of column 8, matches dow row styling but tinted. */
+  .ls-default .cal-square > .wk-header {
+    display: flex;
+    grid-column: 8;
+    grid-row: 1;
+    align-items: center;
+    justify-content: center;
+    font: 700 10px/1 -apple-system, system-ui, sans-serif;
+    color: rgba(240,192,64,0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    position: relative;
+    z-index: 1;
   }
 
   /* day cells — explicit columns by :nth-child so they pack into rows 2-7
@@ -1985,6 +2060,8 @@ canvas.slice-image {
     padding: 2px;
     border-radius: 6px;
     min-height: 0;
+    position: relative;
+    z-index: 1;
   }
   .ls-default .cal-square > .grid > .day:nth-child(7n+1) { grid-column: 1; }
   .ls-default .cal-square > .grid > .day:nth-child(7n+2) { grid-column: 2; }
@@ -2010,6 +2087,8 @@ canvas.slice-image {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 1;
   }
   .ls-default .cal-square > .week-strip > .week-cell:nth-child(1) { grid-row: 2; }
   .ls-default .cal-square > .week-strip > .week-cell:nth-child(2) { grid-row: 3; }
@@ -2024,32 +2103,6 @@ canvas.slice-image {
     max-height: 100%;
   }
   .ls-default .cal-square > .week-strip > .week-cell .w-label { display: none; }
-
-  /* month medal — top-right corner cell (row 1, col 8). Caption is hidden
-     in landscape; the medal carries the same progress signal. */
-  .ls-default .cal-square > .month-hero {
-    grid-column: 8;
-    grid-row: 1;
-    padding: 0;
-    gap: 0;
-    flex: none;
-    overflow: hidden;
-    min-height: 0;
-    align-items: center;
-    justify-content: center;
-  }
-  .ls-default .cal-square > .month-hero > .month-hero-caption { display: none; }
-  .ls-default .cal-square > .month-hero > .month-hero-medal {
-    flex: 0 0 auto;
-    width: 100%;
-    height: 100%;
-  }
-  .ls-default .cal-square > .month-hero > .month-hero-medal svg.tier-svg {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    max-height: 100%;
-  }
 
   .ls-default .cal-dots { margin-top: 8px; padding: 0 0.75rem; }
 

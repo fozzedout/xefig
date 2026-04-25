@@ -1811,21 +1811,33 @@ function renderArchivePage() {
       }
     }
 
+    // "wk" header sits at the top of the week column — visible only in
+    // landscape where the column reads as a vertical track alongside the days.
+    const wkHeader = document.createElement('div')
+    wkHeader.className = 'wk-header'
+    wkHeader.textContent = 'wk'
+
+    // Background panel painted behind the week column in landscape. Lives in
+    // the grid so it can span column 8 across all rows; hidden in portrait.
+    const weekColBg = document.createElement('div')
+    weekColBg.className = 'week-col-bg'
+
     const hero = document.createElement('div')
     hero.className = 'month-hero'
     hero.dataset.role = 'month-hero'
 
-    // Wrap the four pieces in a cal-square so landscape can lay them out as a
-    // single 8×7 grid (dow + month-medal corner + days + week-medal column).
-    // Default (portrait) behaviour keeps the original stacking via
-    // display:contents in CSS.
+    // cal-square holds the calendar surface (dow + days + week medals + wk
+    // header + column background). The hero (medal + counter) sits beside it
+    // as a sibling so landscape can flex them as [hero | cal-square] without
+    // the hero competing for a grid cell.
     const square = document.createElement('div')
     square.className = 'cal-square'
+    square.appendChild(weekColBg)
     square.appendChild(dow)
     square.appendChild(grid)
     square.appendChild(weekStrip)
-    square.appendChild(hero)
-    card.replaceChildren(square)
+    square.appendChild(wkHeader)
+    card.replaceChildren(square, hero)
     return { card, weeks, hero }
   }
 
@@ -1881,13 +1893,35 @@ function renderArchivePage() {
     const entry = monthCards[monthIndex]
     if (!entry || !entry.hero) return
     const meta = buildMonthMedalForCalendar(monthIndex)
-    const caption = document.createElement('div')
-    caption.className = 'month-hero-caption'
-    caption.textContent = captionForMonth(monthIndex)
     const wrap = document.createElement('div')
     wrap.className = 'month-hero-medal'
     wrap.appendChild(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
-    entry.hero.replaceChildren(caption, wrap)
+
+    const counter = document.createElement('div')
+    counter.className = 'month-hero-counter'
+    let counterText
+    let subText
+    if (!meta.playable) {
+      counterText = `0 / ${meta.total}`
+      subText = monthIndex > currentMonthIndex ? 'upcoming' : 'pre-launch'
+    } else {
+      counterText = `${meta.completedIdx.length} / ${meta.playable}`
+      const pct = Math.round((meta.completedIdx.length / meta.playable) * 100)
+      subText = meta.completedIdx.length === 0 ? 'untouched' : `${pct}% earned`
+    }
+    const num = document.createElement('span')
+    num.className = 'month-hero-counter-num'
+    num.textContent = counterText
+    const unit = document.createElement('span')
+    unit.className = 'month-hero-counter-unit'
+    unit.textContent = ' days'
+    counter.append(num, unit)
+
+    const sub = document.createElement('div')
+    sub.className = 'month-hero-sub'
+    sub.textContent = subText
+
+    entry.hero.replaceChildren(wrap, counter, sub)
   }
   for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
