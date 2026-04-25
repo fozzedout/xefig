@@ -1076,7 +1076,20 @@ h1 {
   flex-direction: column;
   min-height: 0;
 }
-.month-card .grid { flex: 1; min-height: 0; }
+.month-hero {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 0 6px;
+  min-height: 0;
+}
+.month-hero svg.tier-svg {
+  width: min(58vw, 220px);
+  max-width: 220px;
+  height: auto;
+  filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
+}
 
 .dow {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1467,14 +1480,15 @@ h1 {
   .cal-nav { padding: 4px 0.5rem 8px; }
   .cal-tally { padding: 0 0.75rem; margin-bottom: 8px; }
   .cal-dots { padding: 0 0.75rem; margin-top: 10px; }
-  .grid { gap: 4px; padding: 0 4px; grid-auto-rows: minmax(0, 1fr); }
+  .grid { gap: 4px; padding: 0 4px; }
   .dow { gap: 4px; padding: 0 4px; font-size: 9.5px; letter-spacing: 0.06em; margin-bottom: 4px; }
-  .day { padding: 3px; border-radius: 8px; aspect-ratio: auto; justify-content: center; }
+  .day { padding: 3px; border-radius: 8px; }
   .day .num { top: 2px; left: 4px; font-size: 9px; }
-  .day .glyph { width: 78%; max-width: 64px; margin-top: 0; margin-bottom: 0; }
+  .day .glyph { width: 80%; }
   .week-strip { gap: 4px; padding: 10px 0.5rem 0; margin-top: 10px; }
-  .week-strip .week-cell { aspect-ratio: auto; }
   .week-strip .week-cell svg { max-width: 56px; }
+  .month-hero { padding: 14px 0 4px; }
+  .month-hero svg.tier-svg { width: min(54vw, 200px); }
   .cal-nav-title .month-name { font-size: 18px; }
   .cal-nav-title .year-label { font-size: 11px; }
   .cal-nav-title .medal-mini { width: 30px; height: 30px; }

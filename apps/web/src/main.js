@@ -1814,7 +1814,11 @@ function renderArchivePage() {
 
     card.appendChild(grid)
     card.appendChild(weekStrip)
-    return { card, weeks }
+    const hero = document.createElement('div')
+    hero.className = 'month-hero'
+    hero.dataset.role = 'month-hero'
+    card.appendChild(hero)
+    return { card, weeks, hero }
   }
 
   function refreshMonthMedals(monthIndex) {
@@ -1862,9 +1866,16 @@ function renderArchivePage() {
 
   for (let m = 0; m < 12; m++) {
     const built = buildMonthCardEl(todayYear, m)
-    monthCards.push({ el: built.card, weeks: built.weeks, year: todayYear })
+    monthCards.push({ el: built.card, weeks: built.weeks, hero: built.hero, year: todayYear })
     deck.appendChild(built.card)
   }
+  function refreshMonthHero(monthIndex) {
+    const entry = monthCards[monthIndex]
+    if (!entry || !entry.hero) return
+    const meta = buildMonthMedalForCalendar(monthIndex)
+    entry.hero.replaceChildren(meta.svg)
+  }
+  for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
   for (let i = 0; i < 12; i++) {
     const dot = document.createElement('div')
@@ -2133,6 +2144,7 @@ function renderArchivePage() {
       if (oldGlyph) oldGlyph.replaceWith(newGlyph)
     }
     refreshMonthMedals(monthIdx)
+    refreshMonthHero(monthIdx)
     if (monthIdx === activeMonthIndex) updateNav()
     refreshDots()
     if (openDetailDate === date) {
