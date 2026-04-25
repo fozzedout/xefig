@@ -1108,6 +1108,32 @@ h1 {
   max-height: 100%;
   filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
 }
+.month-hero-title {
+  display: none; /* shown in landscape only */
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  line-height: 1;
+}
+.month-hero-title-month {
+  font: 700 28px/1 -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  color: #e8e6e0;
+}
+.month-hero-title-year {
+  font: 600 13px/1 -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  color: rgba(232,230,224,0.5);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
 .month-hero-counter {
   font: 700 22px/1 -apple-system, system-ui, sans-serif;
   letter-spacing: 0.01em;
@@ -1952,12 +1978,10 @@ canvas.slice-image {
   .ls-default .archive-top-spacer { display: none; }
   .ls-default .archive-top-bar .page-back-btn { width: 32px; height: 32px; }
   .ls-default .cal-region { padding: 0 0.5rem; }
-  .ls-default .cal-nav { padding: 2px 0 6px 44px; }
-  .ls-default .cal-nav-arrow { width: 32px; height: 32px; font-size: 18px; }
-  .ls-default .cal-nav-title { gap: 8px; padding: 4px 8px; }
-  .ls-default .cal-nav-title .month-name { font-size: 16px; }
-  .ls-default .cal-nav-title .year-label { font-size: 10px; }
-  .ls-default .cal-nav-title .medal-mini { width: 26px; height: 26px; }
+  /* Cal-nav is hidden in landscape — the side panel hosts month/year (and
+     the year-picker trigger) above the medal, freeing the full vertical
+     budget for the calendar grid. */
+  .ls-default .cal-nav { display: none; }
 
   /* Landscape month card: side-panel (medal + counter) on the left,
      calendar square on the right. The square self-sizes to its own height
@@ -1970,24 +1994,30 @@ canvas.slice-image {
     min-height: 0;
   }
 
-  /* Side panel — sits on the left of the row, anchors month progress. */
+  /* Side panel — sits on the left of the row, anchors month progress.
+     Order: month name + year, medal, counter, status sub-line. */
   .ls-default .cal-deck > .month-card > .month-hero {
     flex: 0 1 auto;
     order: -1;
     height: 100%;
-    max-width: 240px;
-    padding: 8px 4px;
-    gap: 8px;
+    width: 200px;
+    max-width: 28%;
+    padding: 8px 8px 8px calc(40px + var(--sai-left));
+    gap: 10px;
     align-items: center;
     justify-content: center;
+  }
+  .ls-default .month-hero-title {
+    display: flex;
   }
   .ls-default .month-hero-medal svg.tier-svg {
     width: 100%;
     height: auto;
-    max-width: 220px;
-    max-height: 60%;
+    max-width: 180px;
+    max-height: 45%;
   }
-  .ls-default .month-hero-counter { font-size: 26px; }
+  .ls-default .month-hero-counter { font-size: 28px; }
+  .ls-default .month-hero-sub { font-size: 11px; }
 
   /* The 8×7 calendar square: 7 day columns + 1 week column,
      1 header row + 6 day rows. aspect-ratio 8/7 with all-1fr tracks keeps
@@ -2006,15 +2036,12 @@ canvas.slice-image {
     position: relative;
   }
 
-  /* Background panel painted behind column 8 — gives the week column a
-     distinct surface so it reads as a separate track from the days. */
+  /* Subtle tint behind column 8 — denotes the week column as a separate
+     track without reading as a card (no border, no rounded corners). */
   .ls-default .cal-square > .week-col-bg {
     grid-column: 8;
     grid-row: 1 / -1;
-    background: rgba(240,192,64,0.06);
-    border: 1px solid rgba(240,192,64,0.12);
-    border-radius: 8px;
-    margin: -2px;
+    background: rgba(240,192,64,0.05);
     z-index: 0;
     pointer-events: none;
   }

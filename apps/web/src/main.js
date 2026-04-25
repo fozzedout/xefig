@@ -1893,6 +1893,24 @@ function renderArchivePage() {
     const entry = monthCards[monthIndex]
     if (!entry || !entry.hero) return
     const meta = buildMonthMedalForCalendar(monthIndex)
+
+    // Title row above the medal — month name + year, clickable to open the
+    // year picker. Shown in landscape (where the top cal-nav is hidden) and
+    // in portrait (a quiet duplicate of the cal-nav title that anchors the
+    // hero block).
+    const title = document.createElement('button')
+    title.type = 'button'
+    title.className = 'month-hero-title'
+    title.setAttribute('aria-label', `Pick month for ${entry.year}`)
+    const titleMonth = document.createElement('span')
+    titleMonth.className = 'month-hero-title-month'
+    titleMonth.textContent = MONTH_NAMES[monthIndex]
+    const titleYear = document.createElement('span')
+    titleYear.className = 'month-hero-title-year'
+    titleYear.textContent = String(entry.year)
+    title.append(titleMonth, titleYear)
+    title.addEventListener('click', openYearPicker)
+
     const wrap = document.createElement('div')
     wrap.className = 'month-hero-medal'
     wrap.appendChild(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
@@ -1921,7 +1939,7 @@ function renderArchivePage() {
     sub.className = 'month-hero-sub'
     sub.textContent = subText
 
-    entry.hero.replaceChildren(wrap, counter, sub)
+    entry.hero.replaceChildren(title, wrap, counter, sub)
   }
   for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
