@@ -115,6 +115,11 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'bright celebratory tone', 'awe-inspiring grandeur', 'intimate and quiet',
     'wild and untamed', 'romantic and warm', 'solemn and reverent',
     'joyful and energetic', 'contemplative and still', 'dramatic and powerful',
+    'melancholic and wistful', 'eerie and unsettling', 'triumphant and victorious',
+    'peaceful and pastoral', 'fierce and primal', 'curious and exploratory',
+    'lonely and isolated', 'magical and enchanted', 'gritty and raw',
+    'elegant and refined', 'chaotic and lively', 'sacred and transcendent',
+    'brooding and atmospheric', 'festive and exuberant',
   ],
 
   style: [
@@ -130,6 +135,9 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'fresco texture', 'mosaic tile style', 'stained glass rendering',
     'linocut print style', 'copper engraving style', 'digital collage',
     'hand-tinted photograph style', 'vintage travel poster style',
+    'cross-hatched pen and ink', 'cyanotype print style', 'crayon and pastel blend',
+    'encaustic wax painting', 'risograph two-tone print', 'sgraffito scratch texture',
+    'batik wax-resist pattern', 'Byzantine icon style',
   ],
 
   palette: [
@@ -153,6 +161,18 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'dusty pink and deep teal as dominant tones with natural colour variation throughout',
     'warm grey and saffron as dominant tones with natural colour variation throughout',
     'plum and bronze as dominant tones with natural colour variation throughout',
+    'steel blue and tangerine as dominant tones with natural colour variation throughout',
+    'charcoal and electric blue as dominant tones with natural colour variation throughout',
+    'moss green and dusty rose as dominant tones with natural colour variation throughout',
+    'midnight blue and copper as dominant tones with natural colour variation throughout',
+    'clay and sage as dominant tones with natural colour variation throughout',
+    'vermilion and slate as dominant tones with natural colour variation throughout',
+    'apricot and deep purple as dominant tones with natural colour variation throughout',
+    'seafoam and coral pink as dominant tones with natural colour variation throughout',
+    'walnut and cream as dominant tones with natural colour variation throughout',
+    'sapphire and gold leaf as dominant tones with natural colour variation throughout',
+    'mauve and olive as dominant tones with natural colour variation throughout',
+    'graphite and sunflower as dominant tones with natural colour variation throughout',
   ],
 
   camera: [
@@ -165,6 +185,12 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'telephoto compression shot', 'fish-eye distortion',
     'through-the-archway framing', 'reflection framing',
     'layered depth with bokeh foreground', 'silhouette framing against sky',
+    'three-quarter angle portrait view', 'split-level above-and-below shot',
+    'diagonal leading-line composition', 'centered vanishing-point corridor',
+    'top-down flat lay arrangement', 'shallow depth isolating subject',
+    'rule-of-thirds off-centre placement', 'tilt-shift miniature effect',
+    'long exposure motion blur', 'golden spiral composition',
+    'environmental portrait with context', 'receding planes depth shot',
   ],
 }
 
@@ -236,7 +262,9 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'garden', 'meadow', 'hillside', 'lakeside', 'seaside', 'riverside',
     'rooftop', 'balcony', 'courtyard', 'field', 'orchard',
     'tropical island', 'snowy peak', 'forest clearing',
-    'harbour', 'pier',
+    'harbour', 'pier', 'village square', 'mountain pass',
+    'riverbank', 'desert vista', 'market street', 'parkland',
+    'clifftop', 'terrace', 'canal side', 'woodland path',
   ],
 
   state: [
@@ -244,18 +272,26 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'poster-like', 'graphic', 'high-contrast', 'colour-blocked', 'cel-shaded',
     'posterised', 'stylised', 'decorative', 'detailed but flat',
     'intricate in silhouette', 'densely composed but clean-edged',
-    'layered flat shapes',
+    'layered flat shapes', 'richly patterned', 'hand-crafted',
+    'retro-styled', 'folk-inspired', 'whimsical', 'ornamental',
+    'jewel-toned',
   ],
 
   lighting: [
     'bright even lighting', 'warm golden light', 'clear daylight',
     'soft diffused light', 'bold sunset glow', 'flat studio lighting',
     'overhead noon light', 'warm afternoon light',
+    'cool morning light', 'rosy dawn light', 'late afternoon amber',
+    'overcast silvery light', 'pastel twilight glow', 'strong midday sun',
+    'gentle backlit haze', 'crisp autumn light',
   ],
 
   mood: [
     'cheerful and bright', 'calm and peaceful', 'warm and inviting',
     'playful and colourful', 'bold and graphic', 'nostalgic and cozy',
+    'dreamy and soft', 'festive and lively', 'mysterious and dusky',
+    'serene and spacious', 'tender and intimate', 'vibrant and energetic',
+    'stately and elegant', 'whimsical and charming',
   ],
 
   // Styles that produce clean, paintable regions — no "intricate /
@@ -273,6 +309,12 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'mid-century modern illustration with flat shapes',
     'travel poster style with strong silhouettes',
     'cel-shaded animation style',
+    'textile pattern style with embroidered shapes',
+    'tile mosaic style with tessellated panels',
+    'batik wax-print style with layered colour',
+    'collage style with overlapping cut shapes',
+    'mural painting style with broad confident strokes',
+    'painted sign style with hand-lettered charm',
   ],
 
   palette: [
@@ -286,6 +328,14 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'autumn flat palette: red, orange, gold, ochre, brown — each as substantial shapes',
     'botanical flat palette: a few greens plus one or two petal colours as solid fills',
     'muted Scandinavian palette: pale sky, warm wood, soft red, cream — flat and spacious',
+    'seaside palette: navy, white, sky blue, sand, coral — clean and fresh',
+    'sunset palette: peach, magenta, gold, violet, deep blue — warm and vivid',
+    'earth and spice palette: terracotta, turmeric, olive, cream, charcoal — rich and grounded',
+    'winter palette: ice blue, slate, white, berry red, pine green — crisp and cool',
+    'Mediterranean palette: cobalt, white, terracotta, lemon, olive — sun-drenched',
+    'candy palette: pink, mint, lavender, lemon, peach — sweet and bright',
+    'woodland palette: moss, bark brown, fern, amber, mushroom grey — natural and warm',
+    'fiesta palette: vermilion, cobalt, sunflower, emerald, hot pink — bold and festive',
   ],
 
   camera: [
@@ -294,6 +344,13 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'centered symmetrical framing with generous negative space',
     'medium shot with one hero subject and a simple backdrop',
     'wide landscape framing with a clear horizon line',
+    'gentle three-quarter angle with the subject off-centre',
+    'low angle looking up at the subject against the sky',
+    'overhead view looking down on the scene',
+    'panoramic wide shot with layered horizontal bands',
+    'intimate close framing filling most of the canvas',
+    'diagonal composition with the subject on a leading line',
+    'eye-level view with foreground and background layers',
   ],
 }
 
@@ -357,7 +414,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
     composition:
       'A vivid scene rendered as flat, unmixed colour panels with crisp hard edges between every region — the visual language of a mid-century travel poster, a screen-printed folk-art illustration, or a bold cel-shaded storybook painting. The scene may be a single hero subject against a supporting backdrop, or a busy composition packed with characters, buildings, plants, and objects. Small details — riggings, leaves, windows, flags, figures, petals, patterned roofs — are welcome, each rendered as a confident flat shape in its own solid colour.',
     qualityTarget:
-      'The final image will be quantized to roughly 16 flat colours and painted cell-by-cell, so every shape — large or small — should read as a single solid colour panel meeting its neighbours along a crisp hard edge. Think woodblock print or screen print: bold silhouettes, clean colour separation, flat fills. Small detail shapes stay at least a handful of cells wide in a ~100×75 grid so each lands as a paintable chip. A crowded market of confident flat shapes reads beautifully; a soft minimalist wash does not.',
+      'The final image will be quantized to 16 flat colours and painted cell-by-cell, so every shape — large or small — should read as a single solid colour panel enshrining the shapes by colour and not outlines.',
   },
 }
 
@@ -391,9 +448,9 @@ const PROMPT_OUTPUT_TEMPLATES = [
 // because it encourages the model to crop the subject — removing the very
 // perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
-  'Output: one landscape 4:3 image rendered as flat-colour panels with crisp hard edges — the visual language of a screen print, travel poster, or cel-shaded illustration. Every region, large or small, is a single solid colour meeting its neighbours along a clean boundary. Small details (leaves, birds, figures, flags, windows) each stay at least a few cells wide in a ~100×75 grid. The composition fills the full frame. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
-  'Deliver a single landscape 4:3 image built from clean flat-colour shapes separated by crisp edges, rendered in a tight ~16-colour palette. The composition can be busy or spare; every shape — from a whole sky down to a single petal — reads as one solid panel of colour. Small accents stay paintable in a ~100×75 cell grid. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
-  'Single 4:3 landscape image, designed to survive quantization to ~16 flat colours on a ~100×75 cell grid. Use clean flat-colour shapes with crisp boundaries at every scale — a crowded festival of confident silhouettes is ideal. Keep the smallest shapes at least a couple of cells wide. Compose edge to edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
+  'Output: one landscape 4:3 image that fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 image with the composition extending to every edge of the frame. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape image, the scene extending to every edge so it fills the full frame. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
