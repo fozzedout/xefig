@@ -4687,32 +4687,60 @@ canvas.slice-image {
 }
 .completion-progress.all-done .completion-progress-label {
   color: #FFD700;
+  animation: glyph-label-glow 0.6s calc(var(--just-done-delay) + 0.7s) ease-out both;
+}
+@keyframes glyph-label-glow {
+  0%   { opacity: 0; transform: scale(0.8); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
+/* Previously-done arms: fade in with stagger */
+.completion-glyph [data-done="1"]:not([data-just-done]) .petal,
+.completion-glyph [data-done="1"]:not([data-just-done]) .arm {
+  animation: glyph-prior-reveal 0.4s ease-out both;
+  animation-delay: inherit;
+}
+@keyframes glyph-prior-reveal {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.completion-glyph [data-done="1"]:not([data-just-done]) .arm { fill: #FFD700; }
+
+/* Just-completed arm: dramatic pop-in after priors settle */
 .completion-glyph [data-just-done="1"][data-done="1"] .petal {
-  animation: glyph-petal-pop 0.8s 0.3s ease-out both;
+  animation: glyph-new-petal var(--just-done-delay) ease-out both;
 }
 .completion-glyph [data-just-done="1"][data-done="1"] .arm {
-  fill: #FFD700;
-  animation: glyph-arm-flash 0.8s 0.3s ease-out both;
+  animation: glyph-new-arm var(--just-done-delay) ease-out both;
 }
-@keyframes glyph-petal-pop {
-  0%   { opacity: 0.1; filter: brightness(2.5); }
-  40%  { opacity: 1; filter: brightness(1.8); }
-  100% { opacity: 0.95; filter: brightness(1); }
+@keyframes glyph-new-petal {
+  0%, 70%  { opacity: 0; filter: brightness(1); }
+  80%      { opacity: 1; filter: brightness(2.5); }
+  100%     { opacity: 0.95; filter: brightness(1); }
 }
-@keyframes glyph-arm-flash {
-  0%   { fill: #fff; filter: brightness(2); }
-  40%  { fill: #FFD700; filter: brightness(1.6); }
-  100% { fill: #FFD700; filter: brightness(1); }
+@keyframes glyph-new-arm {
+  0%, 70%  { fill: transparent; }
+  80%      { fill: #fff; }
+  100%     { fill: #FFD700; }
 }
+
+/* All-done celebration: ring + star pulse */
 .completion-progress.all-done .completion-glyph .ring-bg {
-  animation: glyph-ring-glow 0.8s 0.8s ease-out both;
+  animation: glyph-ring-glow 0.7s calc(var(--just-done-delay) + 0.3s) ease-out both;
 }
 @keyframes glyph-ring-glow {
-  0%   { stroke: rgba(255,255,255,0.06); stroke-width: 1; }
-  50%  { stroke: #FFD700; stroke-width: 5; }
-  100% { stroke: #FFD700; stroke-width: 3; }
+  0%   { stroke: rgba(255,255,255,0.06); stroke-width: 1; fill: rgba(255,215,0,0); }
+  50%  { stroke: #FFD700; stroke-width: 6; fill: rgba(255,215,0,0.08); }
+  100% { stroke: #FFD700; stroke-width: 3; fill: rgba(255,215,0,0.06); }
+}
+.completion-progress.all-done .completion-glyph {
+  animation: glyph-star-pulse 0.8s calc(var(--just-done-delay) + 0.3s) ease-out both;
+}
+@keyframes glyph-star-pulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  35%  { transform: scale(1.15); filter: brightness(1.5) drop-shadow(0 0 12px rgba(255,215,0,0.6)); }
+  100% { transform: scale(1); filter: brightness(1) drop-shadow(0 0 4px rgba(255,215,0,0.3)); }
 }
 
 .completion-stats {

@@ -2437,17 +2437,22 @@ function showCompletionOverlay({
   const progressLabel = allDone
     ? 'All puzzles complete!'
     : `${doneCount} of ${ARCHIVE_GLYPH_MODES.length}`
+  let priorIndex = 0
   const progressGlyphArms = ARCHIVE_GLYPH_MODES.map((m) => {
     const isDone = completedModes.has(m.key)
     const isJustDone = m.key === gameMode
-    return `<g data-mode="${m.key}"${isDone ? ' data-done="1"' : ''}${isJustDone ? ' data-just-done="1"' : ''}>` +
+    const delayAttr = isDone && !isJustDone
+      ? ` style="animation-delay:${0.15 + priorIndex++ * 0.12}s"`
+      : ''
+    return `<g data-mode="${m.key}"${isDone ? ' data-done="1"' : ''}${isJustDone ? ' data-just-done="1"' : ''}${delayAttr}>` +
       `<use href="#xefig-petal" transform="rotate(${m.baseRot})" fill="${m.color}" class="petal"/>` +
       `<use href="#xefig-arm" transform="rotate(${m.baseRot})" class="arm"/>` +
       `</g>`
   }).join('')
+  const justDoneDelay = (0.15 + priorIndex * 0.12 + 0.25).toFixed(2)
   const progressGlyph = `
-    <div class="completion-progress${allDone ? ' all-done' : ''}">
-      <svg class="glyph completion-glyph${allDone ? '' : ''}" viewBox="-100 -100 200 200"${allDone ? ' data-complete="1"' : ''}>
+    <div class="completion-progress${allDone ? ' all-done' : ''}" style="--just-done-delay:${justDoneDelay}s">
+      <svg class="glyph completion-glyph" viewBox="-100 -100 200 200"${allDone ? ' data-complete="1"' : ''}>
         <circle r="88" class="ring-bg"/>
         <g transform="rotate(-20)">
           <use href="#xefig-star-outline" class="star-ghost"/>
