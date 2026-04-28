@@ -2464,32 +2464,45 @@ function showCompletionOverlay({
     </div>
   `
 
-  overlay.innerHTML = `
-    <div class="completion-card">
-      <h2>Puzzle Complete!</h2>
-      ${progressGlyph}
-      <div class="completion-stats">
-        <div class="completion-stat">
-          <span class="stat-value">${duration}</span>
-          <span class="stat-label">Time</span>
-        </div>
-        <div class="completion-stat ${pbStatClass}">
-          <span class="stat-value">${pbStatValue}</span>
-          <span class="stat-label">${pbStatLabel}</span>
-        </div>
-      </div>
-      ${rankLine}
-      ${leaderboardBlock}
-      <button type="button" class="completion-dismiss">Continue</button>
-    </div>
-  `
-
   if (isFirstRender) {
+    overlay.innerHTML = `
+      <div class="completion-card">
+        <h2>Puzzle Complete!</h2>
+        ${progressGlyph}
+        <div class="completion-stats">
+          <div class="completion-stat">
+            <span class="stat-value">${duration}</span>
+            <span class="stat-label">Time</span>
+          </div>
+          <div class="completion-stat ${pbStatClass}">
+            <span class="stat-value">${pbStatValue}</span>
+            <span class="stat-label">${pbStatLabel}</span>
+          </div>
+        </div>
+        <div class="completion-updatable">
+          ${rankLine}
+          ${leaderboardBlock}
+        </div>
+        <button type="button" class="completion-dismiss">Continue</button>
+      </div>
+    `
     document.body.appendChild(overlay)
     requestAnimationFrame(() => overlay.classList.add('is-visible'))
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) dismiss()
     })
+  } else {
+    const card = overlay.querySelector('.completion-card')
+    if (card) {
+      const pbStat = card.querySelectorAll('.completion-stat')[1]
+      if (pbStat) {
+        pbStat.className = `completion-stat ${pbStatClass}`
+        pbStat.querySelector('.stat-value').textContent = pbStatValue
+        pbStat.querySelector('.stat-label').textContent = pbStatLabel
+      }
+      const updatable = card.querySelector('.completion-updatable')
+      if (updatable) updatable.innerHTML = rankLine + leaderboardBlock
+    }
   }
 
   overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
