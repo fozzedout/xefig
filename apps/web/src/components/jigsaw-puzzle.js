@@ -563,6 +563,9 @@ export class JigsawPuzzle {
     )
     ctx.restore()
 
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
+    ctx.lineWidth = 2.5
+    ctx.stroke(piecePath)
     ctx.strokeStyle = this.getBoardOutlineStroke()
     ctx.lineWidth = 1
     ctx.stroke(piecePath)
