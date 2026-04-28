@@ -39,8 +39,8 @@
         try{
           var c=JSON.parse(localStorage.getItem('xefig:daily-cache'));
           if(!c||!c.categories||!c.date)return;
-          // Only preload if cache is from today
-          var today=new Date().toISOString().slice(0,10);
+          // Only preload if cache is from today (local time)
+          var d=new Date();var today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
           if(c.date!==today)return;
           var a=c.categories.jigsaw;
           var u=a&&(a.thumbnailUrl||a.imageUrl);
@@ -62,7 +62,9 @@
     </div>
     <script>
       // Start the daily puzzle fetch immediately — runs in parallel with module download.
-      window.__earlyPuzzle=fetch('/api/puzzles/today').then(function(r){
+      // Uses local date so the puzzle matches the device's calendar day.
+      var _d=new Date();var _localDate=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+      window.__earlyPuzzle=fetch('/api/puzzles/'+_localDate).then(function(r){
         if(!r.ok)throw new Error('Puzzle fetch failed');
         return r.json();
       }).then(function(p){

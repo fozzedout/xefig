@@ -14,7 +14,7 @@ const TODAY_PAYLOAD = {
 test('jigsaw board uses most of the available board frame in immersive desktop layout', async ({ page }) => {
   await page.setViewportSize({ width: 1720, height: 980 })
 
-  await page.route('**/api/puzzles/today**', async (route) => {
+  await page.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -54,7 +54,7 @@ test('jigsaw board uses most of the available board frame in immersive desktop l
 test('jigsaw immersive controls fade when idle and reappear on interaction', async ({ page }) => {
   await page.setViewportSize({ width: 1720, height: 980 })
 
-  await page.route('**/api/puzzles/today**', async (route) => {
+  await page.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

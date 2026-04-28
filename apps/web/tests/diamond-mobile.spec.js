@@ -12,7 +12,7 @@ const TODAY_PAYLOAD = {
 }
 
 async function openDiamondGame(page) {
-  await page.route('**/api/puzzles/today**', async (route) => {
+  await page.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

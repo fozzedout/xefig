@@ -19,7 +19,7 @@ function createTodayPayload() {
 test('cached daily puzzle and cached image still open when live requests stall', async ({ page }) => {
   const payload = createTodayPayload()
 
-  await page.route('**/api/puzzles/today**', async (route) => {
+  await page.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -37,8 +37,8 @@ test('cached daily puzzle and cached image still open when live requests stall',
     await cache.put(heroUrl, response.clone())
   }, { heroUrl: HERO_URL, cachedPayload: payload })
 
-  await page.unroute('**/api/puzzles/today**')
-  await page.route('**/api/puzzles/today**', async () => {
+  await page.unroute('**/api/puzzles/*')
+  await page.route('**/api/puzzles/*', async () => {
     await new Promise(() => {})
   })
   await page.route('**/src/assets/hero.png', async () => {
