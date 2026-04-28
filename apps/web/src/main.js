@@ -184,6 +184,7 @@ let puzzle = null
 let currentRun = null
 let activeElapsedBaseMs = 0
 let activeStartedAtMs = null
+let activeTimerArmed = false
 let autosaveIntervalId = null
 let gameVisibilityBound = false
 // `let` rather than `const` because linkSync replaces the local GUID with
@@ -717,6 +718,7 @@ function getNowMs() {
 function startActiveTimer(initialElapsedMs = 0) {
   activeElapsedBaseMs = Math.max(0, Number(initialElapsedMs) || 0)
   activeStartedAtMs = isSessionActive() ? getNowMs() : null
+  activeTimerArmed = true
 }
 
 // Freeze the active timer at an exact elapsed — used by the BETA
@@ -726,6 +728,7 @@ function startActiveTimer(initialElapsedMs = 0) {
 function setFixedActiveElapsed(ms) {
   activeElapsedBaseMs = Math.max(0, Number(ms) || 0)
   activeStartedAtMs = null
+  activeTimerArmed = true
 }
 
 function isSessionActive() {
@@ -733,7 +736,7 @@ function isSessionActive() {
 }
 
 function pauseActiveTimer() {
-  if (activeStartedAtMs === null) {
+  if (!activeTimerArmed || activeStartedAtMs === null) {
     return
   }
   activeElapsedBaseMs += Math.max(0, getNowMs() - activeStartedAtMs)
@@ -741,7 +744,7 @@ function pauseActiveTimer() {
 }
 
 function resumeActiveTimer() {
-  if (activeStartedAtMs !== null || !isSessionActive()) {
+  if (!activeTimerArmed || activeStartedAtMs !== null || !isSessionActive()) {
     return
   }
   activeStartedAtMs = getNowMs()
@@ -3935,6 +3938,7 @@ function destroyPuzzle() {
   unbindGameActivity()
   pauseActiveTimer()
   activeElapsedBaseMs = 0
+  activeTimerArmed = false
   onStatusChange(null)
 
   if (puzzle) {
