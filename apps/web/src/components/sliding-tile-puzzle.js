@@ -646,6 +646,14 @@ export class SlidingTilePuzzle {
     }
 
     this.completed = Boolean(state.completed) || this.isSolved()
+
+    const gridIsLandscape = this.cols > this.rows
+    const deviceIsLandscape = this.getOrientation() === 'landscape'
+    if (this.cols !== this.rows && gridIsLandscape !== deviceIsLandscape) {
+      this.transposeGrid(gridIsLandscape ? 'cw' : 'ccw')
+      this.applyBoardSize()
+    }
+
     this.syncAllTilePositions({ animate: false })
     this.showVictoryTile(this.completed)
     this.emitProgress()
