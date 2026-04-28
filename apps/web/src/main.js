@@ -340,12 +340,14 @@ document.addEventListener('visibilitychange', () => {
   } else {
     resumeMusicIfEnabled()
     pullOnForeground()
+    handleDayRollover()
   }
 })
 window.addEventListener('blur', pauseMusicTemporary)
 window.addEventListener('focus', () => {
   resumeMusicIfEnabled()
   pullOnForeground()
+  handleDayRollover()
 })
 
 if (getMusicVolume() > 0) {
@@ -382,7 +384,10 @@ function resolveAssetUrl(path) {
 }
 
 function getIsoDate(value) {
-  return value.toISOString().slice(0, 10)
+  const y = value.getFullYear()
+  const m = String(value.getMonth() + 1).padStart(2, '0')
+  const d = String(value.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function normalizeGameMode(mode) {
@@ -1010,12 +1015,11 @@ async function fetchPuzzlePayloadFromApi(url, timeoutMs = PUZZLE_FETCH_TIMEOUT_M
 
 async function fetchPuzzlePayload({ date = null } = {}) {
   const today = getIsoDate(new Date())
-  const isTodayRequest = !date || date === today
+  const requestDate = date || today
+  const isTodayRequest = requestDate === today
   const cachedToday = isTodayRequest ? getCachedDailyPayload(today) : null
 
-  // For the default "today" request, use the early fetch started in index.html
-  // so we don't wait for the module to load before hitting the API.
-  if (!date && window.__earlyPuzzle) {
+  if (isTodayRequest && window.__earlyPuzzle) {
     const earlyPromise = window.__earlyPuzzle
     window.__earlyPuzzle = null
 
@@ -1024,7 +1028,6 @@ async function fetchPuzzlePayload({ date = null } = {}) {
         earlyPromise,
         timeoutAfter(EARLY_PUZZLE_WAIT_MS, 'Timed out waiting for early puzzle fetch.'),
       ])
-      // Only use the early result if it matches today's date
       if (early && early.date === today) {
         cacheDailyPayload(early)
         return early
@@ -1036,12 +1039,10 @@ async function fetchPuzzlePayload({ date = null } = {}) {
     }
   }
 
-  const endpoint = date ? `/api/puzzles/${encodeURIComponent(date)}` : '/api/puzzles/today'
-  // Bust browser cache for "today" if the day has rolled over
-  const cacheBust = !date ? `?_=${today}` : ''
+  const endpoint = `/api/puzzles/${encodeURIComponent(requestDate)}`
   try {
-    const payload = await fetchPuzzlePayloadFromApi(apiUrl(endpoint + cacheBust))
-    if (!date) cacheDailyPayload(payload)
+    const payload = await fetchPuzzlePayloadFromApi(apiUrl(endpoint))
+    if (isTodayRequest) cacheDailyPayload(payload)
     return payload
   } catch (error) {
     if (cachedToday) {
@@ -1763,7 +1764,7 @@ function renderArchivePage() {
     weekStrip.className = 'week-strip'
 
     const total = daysInMonth(year, monthIndex)
-    const startOffset = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay()
+    const startOffset = new Date(year, monthIndex, 1).getDay()
 
     const weeks = []
     const seq = []
@@ -1782,7 +1783,7 @@ function renderArchivePage() {
         if (dayNum == null) {
           cell.className = rowHasDay ? 'day outside' : 'day spacer'
         } else {
-          const dateKey = getIsoDate(new Date(Date.UTC(year, monthIndex, dayNum)))
+          const dateKey = getIsoDate(new Date(year, monthIndex, dayNum))
           const isToday = dateKey === todayDate
           const locked = isLockedDate(dateKey)
           cell.className = 'day' + (isToday ? ' today' : '') + (locked && !isToday ? ' locked' : '')
@@ -1864,7 +1865,7 @@ function renderArchivePage() {
     const completedIdx = []
     let playable = 0
     for (let d = 1; d <= total; d++) {
-      const dateKey = getIsoDate(new Date(Date.UTC(todayYear, monthIndex, d)))
+      const dateKey = getIsoDate(new Date(todayYear, monthIndex, d))
       if (isLockedDate(dateKey)) continue
       playable += 1
       if (getCompletedModesForDate(dateKey).size === ARCHIVE_GLYPH_MODES.length) {
@@ -3331,6 +3332,7 @@ function renderGame({ resumeRun = null } = {}) {
               </div>
             </div>
           </div>
+          <span id="timer" class="gt-timer floating-timer">00:00</span>
           <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
         ` : ''}
         ${useImmersiveDiamondChrome ? `
@@ -3340,6 +3342,7 @@ function renderGame({ resumeRun = null } = {}) {
           <button id="restart-btn" class="diamond-floating-btn diamond-floating-btn--restart" type="button" aria-label="Restart puzzle" title="Restart">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
           </button>
+          <span id="timer" class="gt-timer floating-timer">00:00</span>
           <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
         ` : ''}
       </section>
@@ -3879,6 +3882,7 @@ function renderGame({ resumeRun = null } = {}) {
 function destroyPuzzle() {
   unbindGameActivity()
   pauseActiveTimer()
+  activeElapsedBaseMs = 0
   onStatusChange(null)
 
   if (puzzle) {
@@ -3924,6 +3928,61 @@ const NAV_HTML = `
 let currentPage = 'play'
 let archiveRendered = false
 let settingsRendered = false
+let dayRolloverDate = getIsoDate(new Date())
+let dayRolloverTimer = null
+
+function msUntilLocalMidnight() {
+  const now = new Date()
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0)
+  return midnight - now
+}
+
+function prefetchNextDayPuzzle() {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowDate = getIsoDate(tomorrow)
+  const endpoint = apiUrl(`/api/puzzles/${encodeURIComponent(tomorrowDate)}`)
+  fetch(endpoint).then(r => r.ok ? r.json() : null).then(payload => {
+    if (!payload?.categories) return
+    const modes = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
+    modes.forEach(cat => {
+      const urls = [payload.categories[cat]?.thumbnailUrl, payload.categories[cat]?.imageUrl].filter(Boolean)
+      urls.forEach(u => {
+        const img = new Image()
+        img.src = resolveAssetUrl(u)
+      })
+    })
+  }).catch(() => {})
+}
+
+function scheduleDayRollover() {
+  if (dayRolloverTimer) clearTimeout(dayRolloverTimer)
+  const prefetchMs = msUntilLocalMidnight() - 12 * 60 * 60 * 1000
+  if (prefetchMs > 0) {
+    setTimeout(prefetchNextDayPuzzle, prefetchMs)
+  } else {
+    prefetchNextDayPuzzle()
+  }
+  dayRolloverTimer = setTimeout(() => {
+    handleDayRollover()
+  }, msUntilLocalMidnight() + 500)
+}
+
+function handleDayRollover() {
+  const newDate = getIsoDate(new Date())
+  if (newDate === dayRolloverDate) {
+    scheduleDayRollover()
+    return
+  }
+  dayRolloverDate = newDate
+  archiveRendered = false
+  if (currentPage === 'play') {
+    renderLauncher()
+  } else if (currentPage === 'archive') {
+    renderArchivePage()
+  }
+  scheduleDayRollover()
+}
 
 function initAppShell() {
   applyLandscapeLayout()
@@ -4483,6 +4542,7 @@ onConflict(handleSyncConflicts)
 await Promise.race([initSync(), new Promise((r) => setTimeout(r, 3000))])
 
 initAppShell()
+scheduleDayRollover()
 
 // ─── Sync link boot handler ───
 // If the page was opened with ?sync=ABC123, try to link that code so the
