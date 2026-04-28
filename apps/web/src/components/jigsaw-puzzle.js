@@ -822,21 +822,18 @@ export class JigsawPuzzle {
     piece.pointerId = event.pointerId
     this.draggingPiece = piece
 
-    const rect = piece.canvas.getBoundingClientRect()
-    piece.dragScale = Math.max(0.1, rect.width / this.pieceCanvasWidth)
-
     if (centerOnPointer) {
-      const scaledW = this.pieceCanvasWidth * piece.dragScale
-      const scaledH = this.pieceCanvasHeight * piece.dragScale
-      piece.dragOffsetX = scaledW / 2
-      piece.dragOffsetY = scaledH / 2
+      piece.dragOffsetX = this.pieceCanvasWidth / 2
+      piece.dragOffsetY = this.pieceCanvasHeight / 2
       piece.dragLeft = event.clientX - piece.dragOffsetX
       piece.dragTop = event.clientY - piece.dragOffsetY
     } else {
-      piece.dragOffsetX = event.clientX - rect.left
-      piece.dragOffsetY = event.clientY - rect.top
-      piece.dragLeft = rect.left
-      piece.dragTop = rect.top
+      const rect = piece.canvas.getBoundingClientRect()
+      const prevScale = Math.max(0.1, rect.width / this.pieceCanvasWidth)
+      piece.dragOffsetX = (event.clientX - rect.left) / prevScale
+      piece.dragOffsetY = (event.clientY - rect.top) / prevScale
+      piece.dragLeft = event.clientX - piece.dragOffsetX
+      piece.dragTop = event.clientY - piece.dragOffsetY
     }
 
     piece.canvas.classList.add('is-dragging')
@@ -851,7 +848,7 @@ export class JigsawPuzzle {
     piece.canvas.style.width = `${this.pieceCanvasWidth}px`
     piece.canvas.style.height = `${this.pieceCanvasHeight}px`
     piece.canvas.style.transformOrigin = 'top left'
-    piece.canvas.style.transform = `scale(${piece.dragScale})`
+    piece.canvas.style.transform = ''
     piece.canvas.style.zIndex = `${++this.zIndexCounter}`
 
     document.body.append(piece.canvas)
