@@ -4663,6 +4663,58 @@ canvas.slice-image {
   color: var(--text);
 }
 
+.completion-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1.2rem;
+}
+.completion-glyph {
+  width: 96px;
+  height: 96px;
+}
+.completion-progress-date {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.completion-progress-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.completion-progress.all-done .completion-progress-label {
+  color: #FFD700;
+}
+
+.completion-glyph [data-just-done="1"][data-done="1"] .petal {
+  animation: glyph-petal-pop 0.8s 0.3s ease-out both;
+}
+.completion-glyph [data-just-done="1"][data-done="1"] .arm {
+  fill: #FFD700;
+  animation: glyph-arm-flash 0.8s 0.3s ease-out both;
+}
+@keyframes glyph-petal-pop {
+  0%   { opacity: 0.1; filter: brightness(2.5); }
+  40%  { opacity: 1; filter: brightness(1.8); }
+  100% { opacity: 0.95; filter: brightness(1); }
+}
+@keyframes glyph-arm-flash {
+  0%   { fill: #fff; filter: brightness(2); }
+  40%  { fill: #FFD700; filter: brightness(1.6); }
+  100% { fill: #FFD700; filter: brightness(1); }
+}
+.completion-progress.all-done .completion-glyph .ring-bg {
+  animation: glyph-ring-glow 0.8s 0.8s ease-out both;
+}
+@keyframes glyph-ring-glow {
+  0%   { stroke: rgba(255,255,255,0.06); stroke-width: 1; }
+  50%  { stroke: #FFD700; stroke-width: 5; }
+  100% { stroke: #FFD700; stroke-width: 3; }
+}
+
 .completion-stats {
   display: flex;
   gap: 1rem;
@@ -4941,7 +4993,7 @@ canvas.slice-image {
     padding: 1rem 1.2rem;
     display: grid;
     grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: auto auto auto auto auto;
     column-gap: 1.4rem;
     row-gap: 0;
     align-items: start;
@@ -4955,22 +5007,32 @@ canvas.slice-image {
     margin: 0 0 0.5rem;
   }
 
-  .completion-stats {
+  .completion-progress {
     grid-column: 1;
     grid-row: 2;
+    margin-bottom: 0.4rem;
+  }
+  .completion-glyph {
+    width: 64px;
+    height: 64px;
+  }
+
+  .completion-stats {
+    grid-column: 1;
+    grid-row: 3;
     margin: 0 0 0.4rem;
     gap: 1.2rem;
   }
 
   .completion-rankline {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 4;
     margin: 0 0 0.6rem;
   }
 
   .completion-leaderboard {
     grid-column: 2;
-    grid-row: 1 / span 4;
+    grid-row: 1 / span 5;
     margin: 0;
     max-height: calc(92vh - 2rem);
     display: flex;
@@ -4991,7 +5053,7 @@ canvas.slice-image {
 
   .completion-dismiss {
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 5;
     justify-self: center;
     padding: 0.5rem 1.6rem;
     font-size: 0.85rem;

@@ -1686,7 +1686,6 @@ function renderArchivePage() {
         <div class="cal-dots" data-role="cal-dots"></div>
       </div>
     </div>
-    ${ARCHIVE_SVG_DEFS_HTML}
     <div class="day-detail-overlay" data-role="day-detail" hidden>
       <div class="day-detail-backdrop"></div>
       <div class="day-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="day-detail-title">
@@ -2426,9 +2425,44 @@ function showCompletionOverlay({
     ? `<div class="completion-rankline">Rank #${headerRank}</div>`
     : ''
 
+  const puzzleDate = completedRun?.puzzleDate || getIsoDate(new Date())
+  const completedModes = getCompletedModesForDate(puzzleDate)
+  const doneCount = completedModes.size
+  const allDone = doneCount === ARCHIVE_GLYPH_MODES.length
+  const progressDateLabel = (() => {
+    const [y, m, d] = puzzleDate.split('-').map(Number)
+    const dt = new Date(y, m - 1, d)
+    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  })()
+  const progressLabel = allDone
+    ? 'All puzzles complete!'
+    : `${doneCount} of ${ARCHIVE_GLYPH_MODES.length}`
+  const progressGlyphArms = ARCHIVE_GLYPH_MODES.map((m) => {
+    const isDone = completedModes.has(m.key)
+    const isJustDone = m.key === gameMode
+    return `<g data-mode="${m.key}"${isDone ? ' data-done="1"' : ''}${isJustDone ? ' data-just-done="1"' : ''}>` +
+      `<use href="#xefig-petal" transform="rotate(${m.baseRot})" fill="${m.color}" class="petal"/>` +
+      `<use href="#xefig-arm" transform="rotate(${m.baseRot})" class="arm"/>` +
+      `</g>`
+  }).join('')
+  const progressGlyph = `
+    <div class="completion-progress${allDone ? ' all-done' : ''}">
+      <svg class="glyph completion-glyph${allDone ? '' : ''}" viewBox="-100 -100 200 200"${allDone ? ' data-complete="1"' : ''}>
+        <circle r="88" class="ring-bg"/>
+        <g transform="rotate(-20)">
+          <use href="#xefig-star-outline" class="star-ghost"/>
+          ${progressGlyphArms}
+        </g>
+      </svg>
+      <span class="completion-progress-date">${progressDateLabel}</span>
+      <span class="completion-progress-label">${progressLabel}</span>
+    </div>
+  `
+
   overlay.innerHTML = `
     <div class="completion-card">
       <h2>Puzzle Complete!</h2>
+      ${progressGlyph}
       <div class="completion-stats">
         <div class="completion-stat">
           <span class="stat-value">${duration}</span>
@@ -3987,7 +4021,7 @@ function handleDayRollover() {
 function initAppShell() {
   applyLandscapeLayout()
   bindInstallPromptListeners()
-  app.innerHTML = NAV_HTML
+  app.innerHTML = ARCHIVE_SVG_DEFS_HTML + NAV_HTML
 
   const topNav = document.querySelector('#topNav')
   const topTabs = [...document.querySelectorAll('#navTabs .nav-tab')]
@@ -4014,6 +4048,9 @@ function initAppShell() {
       if (isSyncEnabled()) pullOnForeground().catch(() => {})
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
+      else if (typeof updateArchiveThumb === 'function') {
+        updateArchiveThumb(getIsoDate(new Date()))
+      }
     } else if (pageName === 'settings') {
       renderSettingsPage()
     }
