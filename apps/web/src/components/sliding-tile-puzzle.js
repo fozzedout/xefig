@@ -552,23 +552,18 @@ export class SlidingTilePuzzle {
   }
 
   isSolved() {
-    if (this.emptyIndex !== this.totalSlots - 1) {
-      return false
-    }
-
-    for (let index = 0; index < this.tileCount; index += 1) {
-      if (this.slots[index] !== index) {
+    for (const tile of this.tiles) {
+      if (tile.slotIndex !== tile.homeIndex) {
         return false
       }
     }
-
     return true
   }
 
   countCorrectTiles() {
     let count = 0
-    for (let index = 0; index < this.tileCount; index += 1) {
-      if (this.slots[index] === index) {
+    for (const tile of this.tiles) {
+      if (tile.slotIndex === tile.homeIndex) {
         count += 1
       }
     }
@@ -606,7 +601,8 @@ export class SlidingTilePuzzle {
       this._initialRows = savedRows
       this.totalSlots = savedCols * savedRows
       this.tileCount = this.totalSlots - 1
-      this.tileSize = Math.min(this.boardWidth / this.cols, this.boardHeight / this.rows)
+      const { availW, availH } = this.getAvailableSpace()
+      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
       this.boardWidth = this.tileSize * this.cols
       this.boardHeight = this.tileSize * this.rows
 

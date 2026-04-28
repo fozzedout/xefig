@@ -438,8 +438,8 @@ export class PictureSwapPuzzle {
   }
 
   isSolved() {
-    for (let index = 0; index < this.slots.length; index += 1) {
-      if (this.slots[index] !== index) {
+    for (const tile of this.tiles) {
+      if (tile.slotIndex !== tile.homeIndex) {
         return false
       }
     }
@@ -448,8 +448,8 @@ export class PictureSwapPuzzle {
 
   countCorrectTiles() {
     let count = 0
-    for (let index = 0; index < this.slots.length; index += 1) {
-      if (this.slots[index] === index) {
+    for (const tile of this.tiles) {
+      if (tile.slotIndex === tile.homeIndex) {
         count += 1
       }
     }
@@ -599,8 +599,17 @@ export class PictureSwapPuzzle {
       this._initialCols = savedCols
       this._initialRows = savedRows
       this.totalTiles = savedCols * savedRows
-      this.tileWidth = this.boardWidth / this.cols
-      this.tileHeight = this.boardHeight / this.rows
+
+      const { availW, availH } = this.getAvailableSpace()
+      this.tileSize = Math.min(availW / this.cols, availH / this.rows)
+      this.boardWidth = this.tileSize * this.cols
+      this.boardHeight = this.tileSize * this.rows
+      this.tileWidth = this.tileSize
+      this.tileHeight = this.tileSize
+      if (this.board) {
+        this.board.style.width = `${this.boardWidth}px`
+        this.board.style.height = `${this.boardHeight}px`
+      }
 
       // Rebuild tiles if count changed
       if (this.tiles.length !== this.totalTiles) {
@@ -610,6 +619,10 @@ export class PictureSwapPuzzle {
         this.tileLayer.innerHTML = ''
         this.tiles = []
         this.createTiles()
+      } else {
+        for (const tile of this.tiles) {
+          this.paintTileFace(tile)
+        }
       }
     }
 

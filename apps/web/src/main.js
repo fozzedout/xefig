@@ -2272,161 +2272,24 @@ function showCompletionOverlay({
   gameMode,
   duration,
   elapsedMs,
-  rank,
-  bestMs,
-  previousBestMs,
-  submissionRank,
   submissionElapsedMs,
-  totalEntries,
-  leaderboardEntries,
   playerGuid: myGuid,
   completedRun,
+  showRankPill,
 }) {
-  // If an overlay is already mounted (from a first-pass render before
-  // the leaderboard network round-trip resolved), reuse its element so
-  // we update in place instead of fading out and back in.
-  const existing = document.querySelector('.completion-overlay')
-  const overlay = existing || document.createElement('div')
-  const isFirstRender = !existing
-  if (isFirstRender) overlay.className = 'completion-overlay'
+  const overlay = document.createElement('div')
+  overlay.className = 'completion-overlay'
 
   const dismiss = () => {
     if (overlay.dataset.dismissed === '1') return
     overlay.dataset.dismissed = '1'
     if (completedRun) clearRunForMode(completedRun)
     overlay.classList.remove('is-visible')
-    // Stop absorbing taps immediately — the DOM removal is async (200ms
-    // fade-out), so without this a tap during the fade lands on the
-    // invisible overlay instead of the puzzle.
     overlay.style.pointerEvents = 'none'
     setTimeout(() => overlay.remove(), 200)
   }
 
-  let leaderboardBlock = ''
-  if (leaderboardEntries && leaderboardEntries.length > 0) {
-    const submissionTime = formatDuration(submissionElapsedMs)
-    const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
-    const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
-    const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
-    const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
-
-    // Trend marker for the pinned row's right column. Slower = dropped
-    // down the board (▼), faster = climbed up (▲), tied = flat (—).
-    const trendArrow = fasterThanPb
-      ? '<span class="lb-trend lb-trend-better" aria-label="faster than PB">▲</span>'
-      : slowerThanPb
-        ? '<span class="lb-trend lb-trend-worse" aria-label="slower than PB">▼</span>'
-        : '<span class="lb-trend lb-trend-tied" aria-label="same as PB">—</span>'
-
-    // The user's own name if they've set one — used for their in-list
-    // row (local source of truth in case sync hasn't pushed yet), plus
-    // the pinned and ghost rows which are synthesised client-side.
-    const myProfileName = (getProfileName() || '').trim()
-    const myDisplayName = displayPlayerName({ isMe: true, profileName: myProfileName, playerGuid: myGuid })
-
-    // Build the list rows. When this run is slower than the stored PB,
-    // splice a ghost row into the visible list at the position it would
-    // occupy — so the player sees "here's where you'd be with this
-    // attempt" in context with the real entries. The PB entry stays
-    // starred wherever it already sits. When the run tied or beat PB,
-    // it IS the in-list starred entry, so no ghost is needed.
-    const rows = leaderboardEntries.map((entry) => ({
-      kind: 'real',
-      rank: entry.rank,
-      elapsedMs: entry.elapsedMs,
-      playerGuid: entry.playerGuid,
-      profileName: entry.playerGuid === myGuid ? (myProfileName || entry.profileName) : entry.profileName,
-      isMe: entry.playerGuid === myGuid,
-      isBest: entry.playerGuid === myGuid,
-    }))
-    if (slowerThanPb && submissionRank) {
-      const insertAt = Math.min(Math.max(submissionRank - 1, 0), rows.length)
-      rows.splice(insertAt, 0, {
-        kind: 'ghost',
-        rank: submissionRank,
-        elapsedMs: submissionElapsedMs,
-        playerGuid: myGuid,
-        profileName: myProfileName,
-        isMe: true,
-        isBest: false,
-      })
-    }
-    const rowsHtml = rows.map((r) => renderLeaderboardRow({
-      rank: r.rank,
-      elapsedMs: r.elapsedMs,
-      playerGuid: r.playerGuid,
-      profileName: r.profileName,
-      isMe: r.isMe,
-      isBest: r.isBest,
-      extraClass: r.kind === 'ghost' ? 'lb-row-ghost lb-row-ghost-inline' : '',
-      // Existing server ranks don't shift when we splice a ghost in,
-      // so showing #26 on both the ghost and the real #26 reads as a
-      // duplicate. Hide the ghost's rank — its list position is the rank.
-      hideRank: r.kind === 'ghost',
-    })).join('')
-
-    // Shared colgroup so both the list table and the pinned table get
-     // identical column widths under table-layout: fixed, regardless of
-     // which row the browser measures first.
-    const lbColgroup = `
-      <colgroup>
-        <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
-      </colgroup>`
-
-    leaderboardBlock = `
-      <div class="completion-leaderboard">
-        <h3>Leaderboard</h3>
-        <div class="lb-scroll" id="lb-scroll">
-          <table class="lb-table">
-            ${lbColgroup}
-            <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
-        <table class="lb-table lb-pinned" id="lb-pinned">
-          ${lbColgroup}
-          <tbody>
-            <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
-              <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
-              <td class="lb-time">${submissionTime}</td>
-              <td class="lb-player">${myDisplayName}</td>
-              <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : trendArrow}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    `
-  }
-
-  // Header focuses on the PERSONAL story: the time the player just
-  // clocked + where that sits versus their own best. Rank on the global
-  // board is a quieter secondary line underneath — still present for
-  // the competitive / viral hook, just not the emotional lead.
-  const headerRank = submissionRank ?? rank
-  let pbStatValue = formatDuration(submissionElapsedMs)
-  let pbStatLabel = 'Your Time'
-  let pbStatClass = 'completion-stat-pb-neutral'
-  if (Number.isFinite(previousBestMs)) {
-    const delta = submissionElapsedMs - previousBestMs
-    if (delta < 0) {
-      pbStatValue = formatDelta(delta)
-      pbStatLabel = 'New PB!'
-      pbStatClass = 'completion-stat-pb-better'
-    } else if (delta === 0) {
-      pbStatValue = '00:00'
-      pbStatLabel = 'Tied PB'
-      pbStatClass = 'completion-stat-pb-neutral'
-    } else {
-      pbStatValue = formatDelta(delta)
-      pbStatLabel = 'vs PB'
-      pbStatClass = 'completion-stat-pb-worse'
-    }
-  } else {
-    pbStatLabel = 'First Solve'
-  }
-  const rankLine = headerRank
-    ? `<div class="completion-rankline">Rank #${headerRank}</div>`
-    : ''
+  const pbStatValue = formatDuration(submissionElapsedMs)
 
   const puzzleDate = completedRun?.puzzleDate || getIsoDate(new Date())
   const completedModes = getCompletedModesForDate(puzzleDate)
@@ -2467,57 +2330,123 @@ function showCompletionOverlay({
     </div>
   `
 
-  if (isFirstRender) {
-    overlay.innerHTML = `
-      <div class="completion-card">
-        <h2>Puzzle Complete!</h2>
-        ${progressGlyph}
-        <div class="completion-stats">
-          <div class="completion-stat">
-            <span class="stat-value">${duration}</span>
-            <span class="stat-label">Time</span>
-          </div>
-          <div class="completion-stat ${pbStatClass}">
-            <span class="stat-value">${pbStatValue}</span>
-            <span class="stat-label">${pbStatLabel}</span>
-          </div>
-        </div>
-        <div class="completion-updatable">
-          ${rankLine}
-          ${leaderboardBlock}
-        </div>
-        <button type="button" class="completion-dismiss">Continue</button>
-      </div>
-    `
-    document.body.appendChild(overlay)
-    requestAnimationFrame(() => overlay.classList.add('is-visible'))
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) dismiss()
-    })
-  } else {
-    const card = overlay.querySelector('.completion-card')
-    if (card) {
-      const pbStat = card.querySelectorAll('.completion-stat')[1]
-      if (pbStat) {
-        pbStat.className = `completion-stat ${pbStatClass}`
-        pbStat.querySelector('.stat-value').textContent = pbStatValue
-        pbStat.querySelector('.stat-label').textContent = pbStatLabel
-      }
-      const updatable = card.querySelector('.completion-updatable')
-      if (updatable) updatable.innerHTML = rankLine + leaderboardBlock
-    }
-  }
+  const rankStampHtml = showRankPill
+    ? '<button type="button" class="completion-rank-stamp is-loading" aria-live="polite"><span class="rank-stamp-text">Rank…</span></button>'
+    : ''
 
+  overlay.innerHTML = `
+    <div class="completion-card">
+      <h2>Puzzle Complete!</h2>
+      ${progressGlyph}
+      <div class="completion-stats">
+        <div class="completion-stat">
+          <span class="stat-value">${duration}</span>
+          <span class="stat-label">Time</span>
+        </div>
+        <div class="completion-stat completion-stat-pb-neutral">
+          <span class="stat-value">${pbStatValue}</span>
+          <span class="stat-label">First Solve</span>
+        </div>
+      </div>
+      ${rankStampHtml}
+      <button type="button" class="completion-dismiss">Continue</button>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismiss()
+  })
   overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
 
-  const pinned = overlay.querySelector('#lb-pinned')
-  const scrollEl = overlay.querySelector('#lb-scroll')
-  if (pinned && scrollEl) {
-    pinned.addEventListener('click', () => {
-      const target = scrollEl.querySelector('.lb-row-best') || scrollEl.querySelector('.lb-row-me')
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  return overlay
+}
+
+function buildLeaderboardHtml({
+  rank,
+  bestMs,
+  previousBestMs,
+  submissionRank,
+  submissionElapsedMs,
+  leaderboardEntries,
+  playerGuid: myGuid,
+}) {
+  if (!leaderboardEntries || leaderboardEntries.length === 0) return ''
+
+  const submissionTime = formatDuration(submissionElapsedMs)
+  const submissionRankLabel = submissionRank ? `#${submissionRank}` : (rank ? `#${rank}` : '—')
+  const pinnedIsBest = Number.isFinite(bestMs) && submissionElapsedMs === bestMs
+  const slowerThanPb = Number.isFinite(bestMs) && submissionElapsedMs > bestMs
+  const fasterThanPb = Number.isFinite(bestMs) && submissionElapsedMs < bestMs
+
+  const trendArrow = fasterThanPb
+    ? '<span class="lb-trend lb-trend-better" aria-label="faster than PB">▲</span>'
+    : slowerThanPb
+      ? '<span class="lb-trend lb-trend-worse" aria-label="slower than PB">▼</span>'
+      : '<span class="lb-trend lb-trend-tied" aria-label="same as PB">—</span>'
+
+  const myProfileName = (getProfileName() || '').trim()
+  const myDisplayName = displayPlayerName({ isMe: true, profileName: myProfileName, playerGuid: myGuid })
+
+  const rows = leaderboardEntries.map((entry) => ({
+    kind: 'real',
+    rank: entry.rank,
+    elapsedMs: entry.elapsedMs,
+    playerGuid: entry.playerGuid,
+    profileName: entry.playerGuid === myGuid ? (myProfileName || entry.profileName) : entry.profileName,
+    isMe: entry.playerGuid === myGuid,
+    isBest: entry.playerGuid === myGuid,
+  }))
+  if (slowerThanPb && submissionRank) {
+    const insertAt = Math.min(Math.max(submissionRank - 1, 0), rows.length)
+    rows.splice(insertAt, 0, {
+      kind: 'ghost',
+      rank: submissionRank,
+      elapsedMs: submissionElapsedMs,
+      playerGuid: myGuid,
+      profileName: myProfileName,
+      isMe: true,
+      isBest: false,
     })
   }
+  const rowsHtml = rows.map((r) => renderLeaderboardRow({
+    rank: r.rank,
+    elapsedMs: r.elapsedMs,
+    playerGuid: r.playerGuid,
+    profileName: r.profileName,
+    isMe: r.isMe,
+    isBest: r.isBest,
+    extraClass: r.kind === 'ghost' ? 'lb-row-ghost lb-row-ghost-inline' : '',
+    hideRank: r.kind === 'ghost',
+  })).join('')
+
+  const lbColgroup = `
+    <colgroup>
+      <col class="lb-col-rank"><col class="lb-col-time"><col class="lb-col-player"><col class="lb-col-best">
+    </colgroup>`
+
+  return `
+    <div class="completion-leaderboard">
+      <div class="lb-scroll" id="lb-scroll">
+        <table class="lb-table">
+          ${lbColgroup}
+          <thead><tr><th></th><th>Time</th><th>Player</th><th aria-hidden="true"></th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <table class="lb-table lb-pinned" id="lb-pinned">
+        ${lbColgroup}
+        <tbody>
+          <tr class="lb-row lb-row-me lb-row-pinned" title="Tap to find your entry on the leaderboard">
+            <td class="lb-rank"><span class="lb-rank-num">${submissionRankLabel}</span></td>
+            <td class="lb-time">${submissionTime}</td>
+            <td class="lb-player">${myDisplayName}</td>
+            <td class="lb-best">${pinnedIsBest ? LEADERBOARD_STAR_SVG : trendArrow}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `
 }
 
 function forceCompletePuzzlePreview(gameMode, puzzle) {
@@ -3781,14 +3710,33 @@ function renderGame({ resumeRun = null } = {}) {
           // tapped elsewhere). Fill in the rank + leaderboard section as
           // soon as the network resolves.
           const presentOverlay = () => {
-            showCompletionOverlay({
+            const syncActive = isSyncEnabled()
+            const overlay = showCompletionOverlay({
               gameMode,
               duration: durationLabel,
               elapsedMs: currentRun.elapsedActiveMs,
               submissionElapsedMs: currentRun.elapsedActiveMs,
               playerGuid,
               completedRun,
+              showRankPill: syncActive,
             })
+
+            if (!syncActive) return
+
+            const stamp = overlay.querySelector('.completion-rank-stamp')
+            if (!stamp) return
+
+            const stampShownAt = performance.now()
+            let pulseTimer
+            let dimmed = false
+            let period = 900
+            const tick = () => {
+              dimmed = !dimmed
+              stamp.classList.toggle('is-dim', dimmed)
+              period = Math.max(100, period * 0.78)
+              pulseTimer = setTimeout(tick, period)
+            }
+            pulseTimer = setTimeout(tick, period)
 
             ;(async () => {
               let rank = null
@@ -3819,31 +3767,76 @@ function renderGame({ resumeRun = null } = {}) {
                 // Non-fatal
               }
 
-              // Only re-render if the overlay is still mounted and
-              // hasn't been dismissed. If the user already dismissed it
-              // (or navigated away), don't summon a new one over
-              // whatever they're looking at now.
-              const existing = document.querySelector('.completion-overlay')
-              if (existing && existing.dataset.dismissed !== '1') {
-                showCompletionOverlay({
-                  gameMode,
-                  duration: durationLabel,
-                  elapsedMs: currentRun.elapsedActiveMs,
-                  rank,
-                  bestMs,
-                  previousBestMs,
-                  submissionRank,
-                  submissionElapsedMs,
-                  leaderboardEntries,
-                  totalEntries,
-                  playerGuid,
-                  completedRun,
-                })
+              const elapsed = performance.now() - stampShownAt
+              if (elapsed < 2000) {
+                await new Promise(r => setTimeout(r, 2000 - elapsed))
+              }
+
+              clearTimeout(pulseTimer)
+              stamp.classList.remove('is-dim')
+
+              if (overlay.dataset.dismissed === '1') return
+
+              const headerRank = submissionRank ?? rank
+
+              // Update PB stat now that we have server data
+              if (Number.isFinite(previousBestMs)) {
+                const pbStat = overlay.querySelectorAll('.completion-stat')[1]
+                if (pbStat) {
+                  const delta = submissionElapsedMs - previousBestMs
+                  if (delta < 0) {
+                    pbStat.className = 'completion-stat completion-stat-pb-better'
+                    pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
+                    pbStat.querySelector('.stat-label').textContent = 'New PB!'
+                  } else if (delta === 0) {
+                    pbStat.className = 'completion-stat completion-stat-pb-neutral'
+                    pbStat.querySelector('.stat-value').textContent = '00:00'
+                    pbStat.querySelector('.stat-label').textContent = 'Tied PB'
+                  } else {
+                    pbStat.className = 'completion-stat completion-stat-pb-worse'
+                    pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
+                    pbStat.querySelector('.stat-label').textContent = 'vs PB'
+                  }
+                }
+              }
+
+              if (headerRank) {
+                const stampText = stamp.querySelector('.rank-stamp-text')
+                stampText.textContent = `Rank #${headerRank}`
+                stamp.classList.remove('is-loading')
+                stamp.classList.add('is-revealed')
+
+                if (leaderboardEntries && leaderboardEntries.length > 0) {
+                  const lbData = { rank, bestMs, previousBestMs, submissionRank, submissionElapsedMs, leaderboardEntries, playerGuid }
+                  stamp.addEventListener('click', () => {
+                    const existing = overlay.querySelector('.completion-leaderboard')
+                    if (existing) {
+                      const willClose = existing.classList.contains('is-expanded')
+                      existing.classList.toggle('is-expanded')
+                      if (willClose) return
+                    } else {
+                      const html = buildLeaderboardHtml(lbData)
+                      stamp.insertAdjacentHTML('afterend', html)
+                      const lb = overlay.querySelector('.completion-leaderboard')
+                      requestAnimationFrame(() => lb.classList.add('is-expanded'))
+                      const pinned = lb.querySelector('#lb-pinned')
+                      const scrollEl = lb.querySelector('#lb-scroll')
+                      if (pinned && scrollEl) {
+                        pinned.addEventListener('click', () => {
+                          const target = scrollEl.querySelector('.lb-row-best') || scrollEl.querySelector('.lb-row-me')
+                          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        })
+                      }
+                    }
+                  })
+                }
+              } else {
+                stamp.remove()
               }
 
               setStatus(
-                rank
-                  ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${rank}.`
+                headerRank
+                  ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${headerRank}.`
                   : `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
                 'ok',
               )
