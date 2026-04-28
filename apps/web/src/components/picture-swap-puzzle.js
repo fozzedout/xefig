@@ -1,8 +1,8 @@
 import { loadImage, releaseLoadedImage } from './image-loader.js'
 
-const MIN_COLS = 4
-const MIN_ROWS = 3
-const TARGET_TILE_COUNTS = { easy: 24, medium: 42, hard: 72 }
+const MIN_COLS = 5
+const MIN_ROWS = 5
+const TARGET_TILE_COUNTS = { easy: 30, medium: 45, hard: 72 }
 
 const SWAP_COMPLETION_STORAGE_KEY = 'xefig:picture-swap:completion:v1'
 const CONFETTI_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#118ab2', '#ef476f', '#8338ec']

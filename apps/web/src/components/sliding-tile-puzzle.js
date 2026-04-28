@@ -1,8 +1,8 @@
 import { loadImage, releaseLoadedImage } from './image-loader.js'
 
-const MIN_COLS = 3
-const MIN_ROWS = 3
-const TARGET_TILE_COUNTS = { easy: 20, medium: 35, hard: 56 }
+const MIN_COLS = 5
+const MIN_ROWS = 5
+const TARGET_TILE_COUNTS = { easy: 30, medium: 45, hard: 70 }
 
 // Pick the (cols, rows) shape near targetTotal that maximises the area
 // covered by square tiles in availW × availH. Square tiles always leave
