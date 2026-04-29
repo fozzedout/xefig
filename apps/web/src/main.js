@@ -325,14 +325,57 @@ function applyMusicVolume() {
   }
 }
 
+let musicFadeTimer = null
+
 function pauseMusicTemporary() {
-  if (musicAudio && !musicAudio.paused) musicAudio.pause()
+  if (!musicAudio || musicAudio.paused) return
+  clearTimeout(musicFadeTimer)
+  const gain = tryEnsureAudioGraph()
+  if (gain && audioContext) {
+    const now = audioContext.currentTime
+    gain.gain.cancelScheduledValues(now)
+    gain.gain.setValueAtTime(gain.gain.value, now)
+    gain.gain.linearRampToValueAtTime(0.0001, now + 0.8)
+    musicFadeTimer = setTimeout(() => { if (musicAudio) musicAudio.pause() }, 850)
+  } else {
+    let step = 0
+    const startVol = musicAudio.volume
+    const fadeOut = () => {
+      step++
+      const t = Math.min(step / 16, 1)
+      musicAudio.volume = startVol * (1 - t)
+      if (t < 1) musicFadeTimer = setTimeout(fadeOut, 50)
+      else musicAudio.pause()
+    }
+    fadeOut()
+  }
 }
 
 function resumeMusicIfEnabled() {
   if (!musicShouldPlay) return
+  clearTimeout(musicFadeTimer)
+  const audio = ensureMusicAudio()
+  const gain = tryEnsureAudioGraph()
   resumeAudioContextIfNeeded()
-  ensureMusicAudio().play().catch(() => {})
+  if (gain && audioContext) {
+    const vol = getMusicVolume()
+    const now = audioContext.currentTime
+    gain.gain.cancelScheduledValues(now)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.linearRampToValueAtTime(vol, now + 1.2)
+  } else {
+    audio.volume = 0
+    const vol = getMusicVolume()
+    let step = 0
+    const fadeIn = () => {
+      step++
+      const t = Math.min(step / 24, 1)
+      audio.volume = vol * t
+      if (t < 1) musicFadeTimer = setTimeout(fadeIn, 50)
+    }
+    fadeIn()
+  }
+  audio.play().catch(() => {})
 }
 
 document.addEventListener('visibilitychange', () => {
