@@ -1796,6 +1796,17 @@ function renderArchivePage() {
           cell.appendChild(num)
           const data = locked ? { done: [], inprogress: false } : getDayCompletionGlyphData(dateKey)
           cell.appendChild(makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || (isToday && !locked) }))
+          if (!locked) {
+            const resumeMode = ARCHIVE_MODES.find((m) => hasActiveRun(dateKey, m))
+            if (resumeMode) {
+              const badge = document.createElement('div')
+              badge.className = 'resume-badge'
+              badge.textContent = MODE_LABELS[resumeMode]
+              badge.dataset.resumeMode = resumeMode
+              badge.dataset.resumeDate = dateKey
+              cell.appendChild(badge)
+            }
+          }
           weekDates.push({ dateKey, locked })
           weekHasContent = true
         }
@@ -2118,6 +2129,20 @@ function renderArchivePage() {
   detailOverlay.querySelector('[data-role="day-detail-close"]').addEventListener('click', closeDayDetail)
   detailOverlay.querySelector('.day-detail-backdrop').addEventListener('click', closeDayDetail)
 
+  function handleResumeFromBadge(puzzleDate, mode) {
+    const savedRun = getRunForMode(puzzleDate, normalizeGameMode(mode))
+    if (!savedRun) {
+      openDayDetail(puzzleDate)
+      return
+    }
+    archiveLastFocusKey = `${puzzleDate}:${mode}`
+    state.sourceMode = 'archive'
+    state.archiveDate = puzzleDate
+    state.gameMode = normalizeGameMode(mode)
+    state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+    renderGame({ resumeRun: savedRun })
+  }
+
   function handleThumbClick(puzzlePayload, mode, puzzleDate) {
     archiveLastFocusKey = `${puzzleDate}:${mode}`
     state.sourceMode = 'archive'
@@ -2152,7 +2177,17 @@ function renderArchivePage() {
   monthCards.forEach((entry) => {
     entry.el.querySelectorAll('.day[data-date]').forEach((dayEl) => {
       if (dayEl.classList.contains('locked')) return
-      dayEl.addEventListener('click', () => openDayDetail(dayEl.dataset.date))
+      dayEl.addEventListener('click', (e) => {
+        const badge = e.target.closest('.resume-badge')
+        if (badge) {
+          e.stopPropagation()
+          const resumeDate = badge.dataset.resumeDate
+          const resumeMode = badge.dataset.resumeMode
+          handleResumeFromBadge(resumeDate, resumeMode)
+          return
+        }
+        openDayDetail(dayEl.dataset.date)
+      })
     })
   })
 
@@ -2216,6 +2251,17 @@ function renderArchivePage() {
       const isToday = date === todayDate
       const newGlyph = makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || isToday })
       if (oldGlyph) oldGlyph.replaceWith(newGlyph)
+      const oldBadge = dayEl.querySelector('.resume-badge')
+      if (oldBadge) oldBadge.remove()
+      const resumeMode = ARCHIVE_MODES.find((m) => hasActiveRun(date, m))
+      if (resumeMode) {
+        const badge = document.createElement('div')
+        badge.className = 'resume-badge'
+        badge.textContent = MODE_LABELS[resumeMode]
+        badge.dataset.resumeMode = resumeMode
+        badge.dataset.resumeDate = date
+        dayEl.appendChild(badge)
+      }
     }
     refreshMonthMedals(monthIdx)
     refreshMonthHero(monthIdx)

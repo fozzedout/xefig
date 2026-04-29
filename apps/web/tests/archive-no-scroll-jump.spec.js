@@ -81,18 +81,12 @@ test('locked future and pre-launch days do not open the day-detail sheet', async
   await openArchive(page)
 
   // Pre-launch (before 2026-03-17) — pick 2026-03-01 which is in March
-  // Switch to March via the prev arrow first.
-  const navTitle = page.locator('.cal-nav-title .month-name')
-  const initialMonth = await navTitle.textContent()
-  // Try to navigate back until we reach March (or the prev button disables)
-  for (let i = 0; i < 12; i++) {
-    const txt = await navTitle.textContent()
-    if (txt?.trim() === 'March') break
-    const prev = page.locator('.cal-nav-arrow[data-action="prev"]')
-    if (await prev.isDisabled()) break
-    await prev.click()
-    await page.waitForTimeout(80)
-  }
+  // Navigate to March via the year picker (prev arrow is hidden in portrait).
+  await page.locator('.cal-nav-title').click()
+  await expect(page.locator('.year-picker.open')).toBeVisible()
+  const marchCell = page.locator('.year-picker-cell').nth(2)
+  await marchCell.click()
+  await page.waitForTimeout(200)
   // March 1 is locked (pre-launch), should have .locked
   const marchOne = page.locator('.day[data-date="2026-03-01"]')
   if (await marchOne.count() > 0) {
