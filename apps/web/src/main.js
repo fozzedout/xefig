@@ -3710,7 +3710,7 @@ function renderGame({ resumeRun = null } = {}) {
           // tapped elsewhere). Fill in the rank + leaderboard section as
           // soon as the network resolves.
           const presentOverlay = () => {
-            const syncActive = isSyncEnabled()
+            const syncActive = isSyncEnabled() && navigator.onLine
             const overlay = showCompletionOverlay({
               gameMode,
               duration: durationLabel,
@@ -3831,7 +3831,10 @@ function renderGame({ resumeRun = null } = {}) {
                   })
                 }
               } else {
-                stamp.remove()
+                const stampText = stamp.querySelector('.rank-stamp-text')
+                stampText.textContent = 'Unranked'
+                stamp.classList.remove('is-loading')
+                stamp.classList.add('is-unranked')
               }
 
               setStatus(

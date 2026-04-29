@@ -5011,6 +5011,17 @@ canvas.slice-image {
 .completion-rank-stamp.is-revealed:active {
   transform: rotate(-2deg) scale(0.96);
 }
+.completion-rank-stamp.is-unranked {
+  border-color: var(--muted);
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+  animation: rank-stamp-fade 0.6s ease-out both;
+}
+@keyframes rank-stamp-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 0.5; }
+}
 
 /* Leaderboard accordion revealed on rank stamp tap */
 .completion-leaderboard {
