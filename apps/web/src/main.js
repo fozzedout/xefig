@@ -1728,6 +1728,7 @@ function renderArchivePage() {
           </button>
           <button class="cal-nav-arrow" data-action="next" aria-label="Next month">›</button>
         </div>
+        <button class="archive-resume-btn" data-role="archive-resume-btn" hidden></button>
         <div class="cal-deck" data-role="cal-deck"></div>
         <div class="cal-dots" data-role="cal-dots"></div>
       </div>
@@ -1839,17 +1840,6 @@ function renderArchivePage() {
           cell.appendChild(num)
           const data = locked ? { done: [], inprogress: false } : getDayCompletionGlyphData(dateKey)
           cell.appendChild(makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || (isToday && !locked) }))
-          if (!locked) {
-            const resumeMode = ARCHIVE_MODES.find((m) => hasActiveRun(dateKey, m))
-            if (resumeMode) {
-              const badge = document.createElement('div')
-              badge.className = 'resume-badge'
-              badge.textContent = MODE_LABELS[resumeMode]
-              badge.dataset.resumeMode = resumeMode
-              badge.dataset.resumeDate = dateKey
-              cell.appendChild(badge)
-            }
-          }
           weekDates.push({ dateKey, locked })
           weekHasContent = true
         }
@@ -2220,15 +2210,7 @@ function renderArchivePage() {
   monthCards.forEach((entry) => {
     entry.el.querySelectorAll('.day[data-date]').forEach((dayEl) => {
       if (dayEl.classList.contains('locked')) return
-      dayEl.addEventListener('click', (e) => {
-        const badge = e.target.closest('.resume-badge')
-        if (badge) {
-          e.stopPropagation()
-          const resumeDate = badge.dataset.resumeDate
-          const resumeMode = badge.dataset.resumeMode
-          handleResumeFromBadge(resumeDate, resumeMode)
-          return
-        }
+      dayEl.addEventListener('click', () => {
         openDayDetail(dayEl.dataset.date)
       })
     })
@@ -2294,22 +2276,12 @@ function renderArchivePage() {
       const isToday = date === todayDate
       const newGlyph = makeArchiveGlyph({ done: data.done, inprogress: data.inprogress || isToday })
       if (oldGlyph) oldGlyph.replaceWith(newGlyph)
-      const oldBadge = dayEl.querySelector('.resume-badge')
-      if (oldBadge) oldBadge.remove()
-      const resumeMode = ARCHIVE_MODES.find((m) => hasActiveRun(date, m))
-      if (resumeMode) {
-        const badge = document.createElement('div')
-        badge.className = 'resume-badge'
-        badge.textContent = MODE_LABELS[resumeMode]
-        badge.dataset.resumeMode = resumeMode
-        badge.dataset.resumeDate = date
-        dayEl.appendChild(badge)
-      }
     }
     refreshMonthMedals(monthIdx)
     refreshMonthHero(monthIdx)
     if (monthIdx === activeMonthIndex) updateNav()
     refreshDots()
+    refreshArchiveResume()
     if (openDetailDate === date) {
       fetchPuzzlePayload({ date }).then((payload) => {
         if (openDetailDate === date) renderDetailThumbs(payload, date)
@@ -2317,9 +2289,48 @@ function renderArchivePage() {
     }
   }
 
+  function refreshArchiveResume() {
+    const btn = pageEl.querySelector('[data-role="archive-resume-btn"]')
+    if (!btn) return
+    pageEl.querySelectorAll('.day.resume-highlight').forEach((el) => el.classList.remove('resume-highlight'))
+    let best = null
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith('xefig:run:')) continue
+      const run = readJsonStorage(key)
+      if (!run || typeof run !== 'object') continue
+      if (run.completed) continue
+      if (!run.puzzleDate || !run.imageUrl || !run.difficulty) continue
+      if (getCompletionEntry(run.puzzleDate, normalizeGameMode(run.gameMode || ''))) continue
+      const updatedAt = Date.parse(run.updatedAt || run.startedAt || '')
+      if (!Number.isFinite(updatedAt)) continue
+      if (!best || updatedAt > best._updatedAtMs) {
+        best = { ...run, gameMode: normalizeGameMode(run.gameMode), _updatedAtMs: updatedAt }
+      }
+    }
+    if (!best) {
+      btn.hidden = true
+      return
+    }
+    const dayEl = pageEl.querySelector(`.day[data-date="${best.puzzleDate}"]`)
+    if (dayEl) dayEl.classList.add('resume-highlight')
+    btn.hidden = false
+    const modeLabel = MODE_LABELS[best.gameMode] || best.gameMode
+    btn.textContent = ''
+    const modeSpan = document.createElement('span')
+    modeSpan.className = 'archive-resume-mode'
+    modeSpan.textContent = `Resume ${modeLabel}`
+    const arrow = document.createElement('span')
+    arrow.className = 'archive-resume-arrow'
+    arrow.textContent = '▸'
+    btn.append(modeSpan, arrow)
+    btn.onclick = () => handleResumeFromBadge(best.puzzleDate, best.gameMode)
+  }
+
   monthCards.forEach((_, i) => refreshMonthMedals(i))
   refreshDots()
   updateNav()
+  refreshArchiveResume()
   requestAnimationFrame(() => jumpToMonth(currentMonthIndex))
 
   archiveRendered = true

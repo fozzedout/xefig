@@ -33,11 +33,13 @@ async function mockBaseline(page) {
   })
 }
 
-function todayUtc() {
-  return new Date().toISOString().slice(0, 10)
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-function yesterdayUtc() {
-  return new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+function yesterdayLocal() {
+  const d = new Date(Date.now() - 86400000)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 async function openArchive(page) {
@@ -51,7 +53,7 @@ test('archive renders the current-month calendar with the brand glyph per day', 
   await mockBaseline(page)
   await openArchive(page)
 
-  const today = todayUtc()
+  const today = todayLocal()
   const todayCell = page.locator(`.day[data-date="${today}"]`)
   await expect(todayCell).toBeVisible()
   await expect(todayCell).toHaveClass(/today/)
@@ -64,7 +66,7 @@ test('archive renders the current-month calendar with the brand glyph per day', 
 })
 
 test('tapping a playable day opens the day-detail sheet with all five mode thumbs', async ({ page }) => {
-  const yesterday = yesterdayUtc()
+  const yesterday = yesterdayLocal()
   await mockBaseline(page)
   await openArchive(page)
 
@@ -113,7 +115,7 @@ test('year picker opens and jumps to the selected month', async ({ page }) => {
 })
 
 test('day-detail thumb launches game; returning preserves the calendar DOM', async ({ page }) => {
-  const yesterday = yesterdayUtc()
+  const yesterday = yesterdayLocal()
   await mockBaseline(page)
   await page.addInitScript((date) => {
     localStorage.setItem(
@@ -147,7 +149,7 @@ test('day-detail thumb launches game; returning preserves the calendar DOM', asy
 })
 
 test('seeded completed run shows a gold ring on its day glyph', async ({ page }) => {
-  const yesterday = yesterdayUtc()
+  const yesterday = yesterdayLocal()
   await mockBaseline(page)
   await page.addInitScript((date) => {
     const allModes = ['jigsaw', 'sliding', 'swap', 'polygram', 'diamond']
