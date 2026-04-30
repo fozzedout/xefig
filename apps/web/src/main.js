@@ -1199,33 +1199,57 @@ function bindMoreSheetSyncIndicator(sheetEl) {
 // ─── PWA install detection ──────────────────────────────────────────────────
 // Platform detection logic adapted from khmyznikov/pwa-install (MIT, © 2023
 // Gleb Khmyznikov). See showInstallGuide() below for the lifted SVG icons.
+const INSTALLED_FLAG_KEY = 'xefig-installed'
 let deferredInstallPrompt = null
 let appAlreadyInstalled = false
+function readInstalledFlag() {
+  try { return localStorage.getItem(INSTALLED_FLAG_KEY) === '1' } catch { return false }
+}
+function writeInstalledFlag() {
+  try { localStorage.setItem(INSTALLED_FLAG_KEY, '1') } catch {}
+}
+function rerenderMoreSheet() {
+  const open = document.querySelector('.more-sheet-overlay')
+  if (open && typeof open.__rerender === 'function') open.__rerender()
+}
 // Bind synchronously at module load — Chrome only fires beforeinstallprompt
 // once per page load, so registering inside initAppShell can miss it.
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault()
   deferredInstallPrompt = e
-  const open = document.querySelector('.more-sheet-overlay')
-  if (open && typeof open.__rerender === 'function') open.__rerender()
+  rerenderMoreSheet()
 })
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null
   appAlreadyInstalled = true
-  const open = document.querySelector('.more-sheet-overlay')
-  if (open && typeof open.__rerender === 'function') open.__rerender()
+  writeInstalledFlag()
+  rerenderMoreSheet()
 })
-// Chromium tells us whether the user has already installed this PWA. The
-// manifest declares related_applications: [{ platform: "webapp", url: ... }]
-// pointing at our own manifest so this returns truthy when installed.
+// Persisted flag from an earlier install/standalone visit (localStorage is
+// shared between the standalone PWA and the regular tab on desktop Chrome
+// and Android — getInstalledRelatedApps is mostly Android-only).
+if (readInstalledFlag()) {
+  appAlreadyInstalled = true
+}
+// If we're running in standalone mode right now, the PWA is installed —
+// persist the flag so a future visit in a regular tab can detect it.
+if (typeof window !== 'undefined' && window.matchMedia) {
+  try {
+    if (window.matchMedia('(display-mode: standalone)').matches) writeInstalledFlag()
+    else if (typeof navigator !== 'undefined' && navigator.standalone === true) writeInstalledFlag()
+  } catch {}
+}
+// Chromium also exposes getInstalledRelatedApps (mostly Android). The manifest
+// declares related_applications: [{ platform: "webapp", url: ... }] pointing
+// at our own manifest so this returns truthy when installed.
 ;(async () => {
   try {
     if (typeof navigator.getInstalledRelatedApps !== 'function') return
     const apps = await navigator.getInstalledRelatedApps()
     if (apps.some((app) => app.platform === 'webapp')) {
       appAlreadyInstalled = true
-      const open = document.querySelector('.more-sheet-overlay')
-      if (open && typeof open.__rerender === 'function') open.__rerender()
+      writeInstalledFlag()
+      rerenderMoreSheet()
     }
   } catch {}
 })()
