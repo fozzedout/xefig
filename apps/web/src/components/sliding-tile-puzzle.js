@@ -357,18 +357,45 @@ export class SlidingTilePuzzle {
   }
 
   shuffleBoard() {
-    const moveTarget = this.tileCount * 10
-    let previousEmpty = -1
+    if (this.tileCount < 2) {
+      return
+    }
 
-    for (let step = 0; step < moveTarget; step += 1) {
-      const neighbors = this.getNeighborIndices(this.emptyIndex)
-      const options = neighbors.filter((index) => index !== previousEmpty)
-      const validMoves = options.length ? options : neighbors
+    const emptySlot = Math.floor(Math.random() * this.totalSlots)
 
-      const chosen = validMoves[Math.floor(Math.random() * validMoves.length)]
-      const oldEmpty = this.emptyIndex
-      this.swapWithEmpty(chosen, { animate: false, emitProgress: false })
-      previousEmpty = oldEmpty
+    const order = Array.from({ length: this.tileCount }, (_, i) => i)
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[order[i], order[j]] = [order[j], order[i]]
+    }
+
+    this.slots = new Array(this.totalSlots).fill(null)
+    let cursor = 0
+    for (let slot = 0; slot < this.totalSlots; slot += 1) {
+      if (slot === emptySlot) continue
+      this.slots[slot] = order[cursor]
+      cursor += 1
+    }
+    this.emptyIndex = emptySlot
+
+    if (!this.isSolvable()) {
+      // Swap any two non-empty tiles to flip inversion parity.
+      let a = -1
+      for (let s = 0; s < this.totalSlots; s += 1) {
+        if (s === emptySlot) continue
+        if (a === -1) { a = s; continue }
+        const tmp = this.slots[a]
+        this.slots[a] = this.slots[s]
+        this.slots[s] = tmp
+        break
+      }
+    }
+
+    for (let s = 0; s < this.totalSlots; s += 1) {
+      const id = this.slots[s]
+      if (id !== null && id !== undefined) {
+        this.tiles[id].slotIndex = s
+      }
     }
 
     if (this.isSolved()) {
@@ -380,6 +407,26 @@ export class SlidingTilePuzzle {
     this.completed = false
     this.showVictoryTile(false)
     this.syncAllTilePositions({ animate: false })
+  }
+
+  isSolvable() {
+    const seq = []
+    for (let s = 0; s < this.totalSlots; s += 1) {
+      const id = this.slots[s]
+      if (id !== null && id !== undefined) seq.push(id)
+    }
+    let inversions = 0
+    for (let i = 0; i < seq.length; i += 1) {
+      for (let j = i + 1; j < seq.length; j += 1) {
+        if (seq[i] > seq[j]) inversions += 1
+      }
+    }
+    if (this.cols % 2 === 1) {
+      return inversions % 2 === 0
+    }
+    const emptyRowFromTop = Math.floor(this.emptyIndex / this.cols)
+    const rowFromBottom = this.rows - emptyRowFromTop
+    return (inversions + rowFromBottom) % 2 === 1
   }
 
   getNeighborIndices(index) {
