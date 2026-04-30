@@ -330,12 +330,11 @@ let musicFadeTimer = null
 function pauseMusicTemporary() {
   if (!musicAudio || musicAudio.paused) return
   clearTimeout(musicFadeTimer)
-  const gain = tryEnsureAudioGraph()
-  if (gain && audioContext) {
+  if (audioGainNode && audioContext) {
     const now = audioContext.currentTime
-    gain.gain.cancelScheduledValues(now)
-    gain.gain.setValueAtTime(gain.gain.value, now)
-    gain.gain.linearRampToValueAtTime(0.0001, now + 0.8)
+    audioGainNode.gain.cancelScheduledValues(now)
+    audioGainNode.gain.setValueAtTime(audioGainNode.gain.value, now)
+    audioGainNode.gain.linearRampToValueAtTime(0.0001, now + 0.8)
     musicFadeTimer = setTimeout(() => { if (musicAudio) musicAudio.pause() }, 850)
   } else {
     let step = 0
@@ -352,10 +351,10 @@ function pauseMusicTemporary() {
 }
 
 function resumeMusicIfEnabled() {
-  if (!musicShouldPlay) return
+  if (!musicShouldPlay || !musicAudio) return
   clearTimeout(musicFadeTimer)
-  const audio = ensureMusicAudio()
-  const gain = tryEnsureAudioGraph()
+  const audio = musicAudio
+  const gain = audioGainNode
   resumeAudioContextIfNeeded()
   if (gain && audioContext) {
     const vol = getMusicVolume()
