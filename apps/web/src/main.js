@@ -222,14 +222,21 @@ let audioContext = null
 let audioGainNode = null
 let audioSourceNode = null
 let audioGraphFailed = false
+let musicUnlockListenersBound = false
+let musicStartAttempt = null
 
-function tryEnsureAudioGraph() {
+const MUSIC_UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'mousedown', 'click', 'touchend', 'keydown']
+
+function tryEnsureAudioGraph({ allowContextCreate = true } = {}) {
   if (audioGainNode || audioGraphFailed) return audioGainNode
   if (!musicAudio) return null
   try {
     const AC = window.AudioContext || window.webkitAudioContext
     if (!AC) { audioGraphFailed = true; return null }
-    if (!audioContext) audioContext = new AC()
+    if (!audioContext) {
+      if (!allowContextCreate) return null
+      audioContext = new AC()
+    }
     if (!audioSourceNode) audioSourceNode = audioContext.createMediaElementSource(musicAudio)
     audioGainNode = audioContext.createGain()
     audioGainNode.gain.value = getMusicVolume()
@@ -246,10 +253,101 @@ function tryEnsureAudioGraph() {
   }
 }
 
-function resumeAudioContextIfNeeded() {
-  if (audioContext && audioContext.state === 'suspended') {
-    audioContext.resume().catch(() => {})
+function hasTransientUserActivation() {
+  return navigator.userActivation?.isActive === true
+}
+
+function isMusicPlaybackStarted(audio) {
+  if (!audio || audio.paused) return false
+  if (audioGainNode && audioContext && audioContext.state !== 'running') return false
+  return true
+}
+
+function bindMusicUnlockListeners() {
+  if (musicUnlockListenersBound || !musicShouldPlay || getMusicVolume() <= 0) return
+  musicUnlockListenersBound = true
+  // Autoplay policy failures are recoverable; keep listening until playback
+  // and the Web Audio graph are both confirmed running.
+  for (const eventName of MUSIC_UNLOCK_EVENTS) {
+    document.addEventListener(eventName, onMusicUnlockGesture, { capture: true, passive: true })
   }
+}
+
+function unbindMusicUnlockListeners() {
+  if (!musicUnlockListenersBound) return
+  musicUnlockListenersBound = false
+  for (const eventName of MUSIC_UNLOCK_EVENTS) {
+    document.removeEventListener(eventName, onMusicUnlockGesture, { capture: true })
+  }
+}
+
+function isMusicUnlockGesture(event) {
+  if (event.isTrusted === false) return false
+  if (event.type === 'pointerdown') return event.pointerType === 'mouse'
+  if (event.type === 'pointerup') return event.pointerType !== 'mouse'
+  return true
+}
+
+function onMusicUnlockGesture(event) {
+  if (!isMusicUnlockGesture(event)) return
+  startMusicPlayback({ fromGesture: true })
+}
+
+function startMusicPlayback({ fromGesture = false } = {}) {
+  const vol = getMusicVolume()
+  if (!musicShouldPlay || vol <= 0) {
+    unbindMusicUnlockListeners()
+    return Promise.resolve(false)
+  }
+  if (musicStartAttempt) return musicStartAttempt
+
+  const canUnlockAudioContext = fromGesture || hasTransientUserActivation()
+  const audio = ensureMusicAudio()
+  const gain = tryEnsureAudioGraph({ allowContextCreate: canUnlockAudioContext || Boolean(audioContext) })
+
+  if (gain) {
+    gain.gain.value = vol
+  } else {
+    audio.volume = vol
+  }
+
+  if (audioContext && audioContext.state === 'suspended' && !canUnlockAudioContext) {
+    bindMusicUnlockListeners()
+    return Promise.resolve(false)
+  }
+
+  let resumeAttempt = Promise.resolve()
+  if (audioContext && audioContext.state === 'suspended') {
+    try {
+      resumeAttempt = audioContext.resume()
+    } catch (error) {
+      resumeAttempt = Promise.reject(error)
+    }
+  }
+
+  let playAttempt = Promise.resolve()
+  try {
+    playAttempt = audio.play()
+  } catch (error) {
+    playAttempt = Promise.reject(error)
+  }
+
+  musicStartAttempt = Promise.allSettled([resumeAttempt, playAttempt]).then(() => {
+    if (!musicShouldPlay || getMusicVolume() <= 0) {
+      unbindMusicUnlockListeners()
+      return false
+    }
+    if (isMusicPlaybackStarted(audio)) {
+      unbindMusicUnlockListeners()
+      return true
+    }
+    bindMusicUnlockListeners()
+    return false
+  }).finally(() => {
+    musicStartAttempt = null
+  })
+
+  return musicStartAttempt
 }
 
 function pickRandomTrackIndex(excluding) {
@@ -292,35 +390,28 @@ function ensureMusicAudio() {
     // past the start, the element probably didn't actually finish.
     if (musicAudio.currentTime < 1) {
       if (musicShouldPlay) {
-        setTimeout(() => musicAudio.play().catch(() => {}), 300)
+        setTimeout(() => startMusicPlayback(), 300)
       }
       return
     }
     lastTrackIndex = nextTrackIndex
     musicAudio.src = MUSIC_TRACKS[lastTrackIndex]
-    if (musicShouldPlay) musicAudio.play().catch(() => {})
+    if (musicShouldPlay) startMusicPlayback()
     nextTrackIndex = pickRandomTrackIndex(lastTrackIndex)
     prefetchTrack(nextTrackIndex)
   })
   return musicAudio
 }
 
-function applyMusicVolume() {
+function applyMusicVolume({ fromGesture = false } = {}) {
   const vol = getMusicVolume()
   if (vol > 0) {
     lastNonZeroVolume = vol
     musicShouldPlay = true
-    const audio = ensureMusicAudio()
-    const gain = tryEnsureAudioGraph()
-    if (gain) {
-      gain.gain.value = vol
-    } else {
-      audio.volume = vol
-    }
-    resumeAudioContextIfNeeded()
-    audio.play().catch(() => {})
+    startMusicPlayback({ fromGesture })
   } else {
     musicShouldPlay = false
+    unbindMusicUnlockListeners()
     if (musicAudio) musicAudio.pause()
   }
 }
@@ -355,7 +446,6 @@ function resumeMusicIfEnabled() {
   clearTimeout(musicFadeTimer)
   const audio = musicAudio
   const gain = audioGainNode
-  resumeAudioContextIfNeeded()
   if (gain && audioContext) {
     const vol = getMusicVolume()
     const now = audioContext.currentTime
@@ -374,7 +464,7 @@ function resumeMusicIfEnabled() {
     }
     fadeIn()
   }
-  audio.play().catch(() => {})
+  startMusicPlayback()
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -395,21 +485,7 @@ window.addEventListener('focus', () => {
 
 if (getMusicVolume() > 0) {
   musicShouldPlay = true
-  const onFirstGesture = () => {
-    const audio = ensureMusicAudio()
-    const gain = tryEnsureAudioGraph()
-    if (gain) {
-      gain.gain.value = getMusicVolume()
-    } else {
-      audio.volume = getMusicVolume()
-    }
-    resumeAudioContextIfNeeded()
-    audio.play().catch(() => {})
-    document.removeEventListener('pointerdown', onFirstGesture)
-    document.removeEventListener('keydown', onFirstGesture)
-  }
-  document.addEventListener('pointerdown', onFirstGesture, { once: true })
-  document.addEventListener('keydown', onFirstGesture, { once: true })
+  bindMusicUnlockListeners()
 }
 
 function apiUrl(path) {
@@ -1174,20 +1250,20 @@ function bindMoreSheetSyncIndicator(sheetEl) {
   // subscription, and returns a teardown to call when the sheet closes.
   const card = sheetEl.querySelector('#more-devices-card')
   if (!card) return () => {}
-  const dot = card.querySelector('.more-card-sync-dot')
-  if (!dot) return () => {}
+  const cloud = card.querySelector('.more-card-sync-cloud')
+  if (!cloud) return () => {}
   const apply = (status) => {
     const hasChanges = hasPendingChanges()
-    let dotState = 'saved'
+    let cloudState = 'saved'
     let label = 'Saved to cloud — tap to send to another device'
     if (status === 'syncing') {
-      dotState = 'syncing'; label = 'Syncing...'
+      cloudState = 'syncing'; label = 'Syncing...'
     } else if (status === 'error') {
-      dotState = 'error'; label = 'Sync failed — open Settings to retry'
+      cloudState = 'error'; label = 'Sync failed — open Settings to retry'
     } else if (hasChanges) {
-      dotState = 'pending'; label = 'Pending changes — syncing soon'
+      cloudState = 'pending'; label = 'Pending changes — syncing soon'
     }
-    dot.dataset.state = dotState
+    cloud.dataset.state = cloudState
     card.title = label
     card.setAttribute('aria-label', label)
   }
@@ -2854,6 +2930,12 @@ function requestPersistentStorage() {
   } catch {}
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div')
+  div.textContent = str || ''
+  return div.innerHTML
+}
+
 // Step 2 of the first-completion flow: reveal the sync code that was just
 // minted and make it easy to hand off to another device. Shown only after
 // `enableSync` succeeds — on failure we just present the completion overlay.
@@ -3017,7 +3099,11 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
               <circle cx="43" cy="52" r="1.2" fill="currentColor"/>
               <path d="M24 24 L40 32" stroke-dasharray="3 2"/>
             </svg>
-            <span class="more-card-sync-dot" data-state="saved" aria-hidden="true"></span>
+            <span class="more-card-sync-cloud" data-state="saved" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 19Z"/>
+              </svg>
+            </span>
           </span>
           <span class="more-sheet-card-text">
             <span class="more-sheet-card-title">Devices</span>
@@ -3089,7 +3175,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
           const nowEnabled = !getMusicEnabled()
           const nextVol = nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0
           setMusicVolume(nextVol)
-          applyMusicVolume()
+          applyMusicVolume({ fromGesture: e.isTrusted !== false })
           // Re-render the sheet so card class + label reflect new state.
           populate()
           return
@@ -4756,17 +4842,17 @@ function renderAudioSettings() {
     if (sub) sub.textContent = on ? 'Playing' : 'Muted'
   }
 
-  toggle.addEventListener('click', () => {
+  toggle.addEventListener('click', (event) => {
     const nowEnabled = !getMusicEnabled()
     setMusicVolume(nowEnabled ? (lastNonZeroVolume || MUSIC_DEFAULT_VOLUME) : 0)
-    applyMusicVolume()
+    applyMusicVolume({ fromGesture: event.isTrusted !== false })
     refresh()
   })
 
-  slider.addEventListener('input', () => {
+  slider.addEventListener('input', (event) => {
     const v = Number(slider.value)
     setMusicVolume(v)
-    applyMusicVolume()
+    applyMusicVolume({ fromGesture: event.isTrusted !== false })
     refresh()
   })
 }

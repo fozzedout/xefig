@@ -3408,21 +3408,25 @@ canvas.slice-image {
   stroke: rgba(232, 230, 224, 0.55);
 }
 
-/* Sync status dot anchored to the Devices card icon. */
-.more-card-sync-dot {
+/* Sync status cloud overlaid on the top-right of the Devices card icon. */
+.more-card-sync-cloud {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 10px;
-  height: 10px;
+  top: -4px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
-  background: #4ade80;
-  border: 2px solid #1a1a2a;
-  transition: background 0.2s;
+  background: #1a1a2a;
+  color: #4ade80;
+  transition: color 0.2s;
 }
-.more-card-sync-dot[data-state="syncing"] { background: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
-.more-card-sync-dot[data-state="pending"] { background: #fbbf24; }
-.more-card-sync-dot[data-state="error"] { background: #f87171; }
+.more-card-sync-cloud svg { width: 16px; height: 16px; }
+.more-card-sync-cloud[data-state="syncing"] { color: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
+.more-card-sync-cloud[data-state="pending"] { color: #fbbf24; }
+.more-card-sync-cloud[data-state="error"] { color: #f87171; }
 
 /* Portrait: snap to bottom-sheet. */
 @media (max-width: 768px) {
