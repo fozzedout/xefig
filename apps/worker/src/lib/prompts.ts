@@ -318,8 +318,6 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
   ],
 
   palette: [
-    'around 16 well-spaced flat colours filling broad, clearly separated regions',
-    'a tight palette of 10–16 flat colours — no gradients — in big confident shapes',
     'jewel tones laid down in large flat panels with clean boundaries',
     'stained-glass palette: a dozen saturated flat panels separated by bold dark leading',
     'folk-art palette: primaries, earth tones and one accent in simple, bold shapes',
@@ -414,7 +412,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
     composition:
       'A vivid scene rendered as flat, unmixed colour panels with crisp hard edges between every region — the visual language of a mid-century travel poster, a screen-printed folk-art illustration, or a bold cel-shaded storybook painting. The scene may be a single hero subject against a supporting backdrop, or a busy composition packed with characters, buildings, plants, and objects. Small details — riggings, leaves, windows, flags, figures, petals, patterned roofs — are welcome, each rendered as a confident flat shape in its own solid colour.',
     qualityTarget:
-      'The final image will be quantized to 16 flat colours and painted cell-by-cell, so every shape — large or small — should read as a single solid colour panel enshrining the shapes by colour and not outlines.',
+      'The final image will be quantized to 16 colours and painted cell-by-cell, so every shape — large or small — should enshrine the shapes by colour and not outlines.',
   },
 }
 
@@ -599,11 +597,11 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   const pack: PromptPack = {
     // Per-category details
     categories: {
-      jigsaw:   buildCategoryPromptDetails('jigsaw',   descriptorSetsByCategory.jigsaw),
-      slider:   buildCategoryPromptDetails('slider',   descriptorSetsByCategory.slider),
-      swap:     buildCategoryPromptDetails('swap',     descriptorSetsByCategory.swap),
+      jigsaw: buildCategoryPromptDetails('jigsaw', descriptorSetsByCategory.jigsaw),
+      slider: buildCategoryPromptDetails('slider', descriptorSetsByCategory.slider),
+      swap: buildCategoryPromptDetails('swap', descriptorSetsByCategory.swap),
       polygram: buildCategoryPromptDetails('polygram', descriptorSetsByCategory.polygram),
-      diamond:  buildCategoryPromptDetails('diamond',  descriptorSetsByCategory.diamond),
+      diamond: buildCategoryPromptDetails('diamond', descriptorSetsByCategory.diamond),
     },
   }
 
@@ -665,8 +663,8 @@ export function buildImagePromptParts(
   const outputLine = category === 'polygram'
     ? pickRandom(PROMPT_OUTPUT_TEMPLATES_POLYGRAM)
     : category === 'diamond'
-    ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
-    : pickRandom(PROMPT_OUTPUT_TEMPLATES)
+      ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
+      : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
   return {
     descriptive: [subjectLine, narrativeLine].join(' '),
@@ -803,7 +801,7 @@ function shuffleCopy<T>(values: readonly T[]): T[] {
   const copy = [...values]
   for (let index = copy.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1))
-    ;[copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]]
+      ;[copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]]
   }
   return copy
 }
