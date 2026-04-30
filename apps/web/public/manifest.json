@@ -6,6 +6,13 @@
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://xefig.com/manifest.json"
+    }
+  ],
   "icons": [
     {
       "src": "/favicon.svg",

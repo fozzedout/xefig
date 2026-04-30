@@ -163,6 +163,30 @@ test.describe('Install guide overlay', () => {
     await expect(page.locator('.install-guide-section-label')).toHaveText(/desktop/)
   })
 
+  test('Installed PWA (regular tab) shows "Open app" card and the already-installed guide', async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    })
+    const page = await context.newPage()
+    await spoofPlatform(page, { touchPoints: 5, hasBIP: true })
+    await page.addInitScript(() => {
+      navigator.getInstalledRelatedApps = async () => [{ platform: 'webapp', url: 'https://xefig.com/manifest.json' }]
+    })
+    await mockBaseline(page)
+    await page.goto('/', { waitUntil: 'networkidle' })
+
+    const card = await openInstallCard(page)
+    await expect(card).toHaveAttribute('data-install-platform', 'installed')
+    await expect(card.locator('.more-sheet-card-title')).toHaveText('Open app')
+    await card.click()
+
+    const guide = page.locator('.install-guide')
+    await expect(guide).toBeVisible()
+    await expect(guide.locator('.install-guide-section-label')).toHaveText(/Already installed/)
+    await context.close()
+  })
+
   test('Captured beforeinstallprompt fires the JS prompt instead of the guide', async ({ browser }) => {
     const context = await browser.newContext({
       userAgent:

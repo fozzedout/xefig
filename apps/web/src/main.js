@@ -1200,6 +1200,7 @@ function bindMoreSheetSyncIndicator(sheetEl) {
 // Platform detection logic adapted from khmyznikov/pwa-install (MIT, © 2023
 // Gleb Khmyznikov). See showInstallGuide() below for the lifted SVG icons.
 let deferredInstallPrompt = null
+let appAlreadyInstalled = false
 // Bind synchronously at module load — Chrome only fires beforeinstallprompt
 // once per page load, so registering inside initAppShell can miss it.
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -1210,9 +1211,24 @@ window.addEventListener('beforeinstallprompt', (e) => {
 })
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null
+  appAlreadyInstalled = true
   const open = document.querySelector('.more-sheet-overlay')
   if (open && typeof open.__rerender === 'function') open.__rerender()
 })
+// Chromium tells us whether the user has already installed this PWA. The
+// manifest declares related_applications: [{ platform: "webapp", url: ... }]
+// pointing at our own manifest so this returns truthy when installed.
+;(async () => {
+  try {
+    if (typeof navigator.getInstalledRelatedApps !== 'function') return
+    const apps = await navigator.getInstalledRelatedApps()
+    if (apps.some((app) => app.platform === 'webapp')) {
+      appAlreadyInstalled = true
+      const open = document.querySelector('.more-sheet-overlay')
+      if (open && typeof open.__rerender === 'function') open.__rerender()
+    }
+  } catch {}
+})()
 function bindInstallPromptListeners() { /* listeners are bound at module load */ }
 
 function isStandaloneDisplay() {
@@ -1259,6 +1275,7 @@ function isAndroid() {
 
 function getInstallPlatform() {
   if (isStandaloneDisplay()) return 'standalone'
+  if (appAlreadyInstalled) return 'installed'
   if (deferredInstallPrompt) return 'chrome-prompt'
   if (isAppleMobileNonSafari()) return 'ios-other-browser'
   if (isIpad()) return 'ipad-safari'
@@ -1276,6 +1293,7 @@ function getInstallPlatform() {
 
 function getInstallCardCopy(platform) {
   switch (platform) {
+    case 'installed': return 'Already installed on this device'
     case 'chrome-prompt': return 'Add to your home screen'
     case 'chrome-no-prompt': return 'Use the address-bar install icon'
     case 'android-fallback': return 'Add via your browser menu'
@@ -2981,17 +2999,24 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
     const installPlatform = getInstallPlatform()
     if (installPlatform !== 'standalone' && installPlatform !== 'unsupported') {
       const sub = getInstallCardCopy(installPlatform)
+      const isInstalled = installPlatform === 'installed'
+      const title = isInstalled ? 'Open app' : 'Install app'
+      const iconSvg = isInstalled
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 4h6v6"/>
+            <path d="M20 4l-8 8"/>
+            <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+          </svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12"/>
+            <path d="M7 10l5 5 5-5"/>
+            <path d="M5 21h14"/>
+          </svg>`
       cards.push(`
         <button class="more-sheet-card more-sheet-card--install" data-action="install-app" data-install-platform="${installPlatform}">
-          <span class="more-sheet-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3v12"/>
-              <path d="M7 10l5 5 5-5"/>
-              <path d="M5 21h14"/>
-            </svg>
-          </span>
+          <span class="more-sheet-card-icon">${iconSvg}</span>
           <span class="more-sheet-card-text">
-            <span class="more-sheet-card-title">Install app</span>
+            <span class="more-sheet-card-title">${title}</span>
             <span class="more-sheet-card-sub">${sub}</span>
           </span>
         </button>`)
@@ -3134,6 +3159,12 @@ const INSTALL_GUIDE_ICONS = {
 function getInstallGuideContent(platform) {
   const safariOnlyNote = 'Make sure you\'re in Safari, not Chrome or Firefox.'
   switch (platform) {
+    case 'installed':
+      return {
+        label: 'Already installed',
+        body: 'Xefig is installed on this device. Launch it from your home screen, dock, taskbar, or Start menu — or use the <strong>Open in app</strong> button in your browser\'s address bar.',
+        steps: [],
+      }
     case 'ios-safari':
       return {
         label: 'Install on iPhone',
