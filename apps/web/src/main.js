@@ -1200,23 +1200,20 @@ function bindMoreSheetSyncIndicator(sheetEl) {
 // Platform detection logic adapted from khmyznikov/pwa-install (MIT, © 2023
 // Gleb Khmyznikov). See showInstallGuide() below for the lifted SVG icons.
 let deferredInstallPrompt = null
-let installPromptListenersBound = false
-function bindInstallPromptListeners() {
-  if (installPromptListenersBound) return
-  installPromptListenersBound = true
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault()
-    deferredInstallPrompt = e
-    // If the More sheet is open, refresh it so the Install card appears.
-    const open = document.querySelector('.more-sheet-overlay')
-    if (open && typeof open.__rerender === 'function') open.__rerender()
-  })
-  window.addEventListener('appinstalled', () => {
-    deferredInstallPrompt = null
-    const open = document.querySelector('.more-sheet-overlay')
-    if (open && typeof open.__rerender === 'function') open.__rerender()
-  })
-}
+// Bind synchronously at module load — Chrome only fires beforeinstallprompt
+// once per page load, so registering inside initAppShell can miss it.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  deferredInstallPrompt = e
+  const open = document.querySelector('.more-sheet-overlay')
+  if (open && typeof open.__rerender === 'function') open.__rerender()
+})
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null
+  const open = document.querySelector('.more-sheet-overlay')
+  if (open && typeof open.__rerender === 'function') open.__rerender()
+})
+function bindInstallPromptListeners() { /* listeners are bound at module load */ }
 
 function isStandaloneDisplay() {
   try {
@@ -3128,66 +3125,66 @@ const INSTALL_GUIDE_ICONS = {
   addHomeScreen: `<svg viewBox="0 0 25 25" aria-hidden="true"><g fill="currentColor"><path d="M23.405 1.608C22.08.283 20.214.039 17.808.039H7.156c-2.336 0-4.202.244-5.527 1.569C.305 2.95.061 4.781.061 7.117v10.583c0 2.406.227 4.254 1.552 5.579 1.342 1.325 3.19 1.569 5.596 1.569h10.6c2.406 0 4.272-.244 5.597-1.569 1.325-1.342 1.551-3.173 1.551-5.579V7.187c0-2.406-.226-4.254-1.551-5.579zm-.384 5.213v11.245c0 1.517-.209 2.946-1.028 3.783-.837.837-2.301 1.064-3.818 1.064H6.94c-1.517 0-2.964-.227-3.8-1.064-.837-.837-1.046-2.266-1.046-3.783V6.825c0-1.552.209-3.016 1.028-3.853.837-.837 2.319-1.046 3.871-1.046h11.28c1.517 0 2.981.227 3.818 1.064.819.819 1.028 2.266 1.028 3.783zM12.49 18.903c.645 0 1.029-.436 1.029-1.133v-4.341h4.533c.663 0 1.133-.366 1.133-.994 0-.645-.436-1.029-1.133-1.029h-4.533V6.872c0-.697-.384-1.133-1.029-1.133-.628 0-.994.453-.994 1.133v4.534H6.974c-.697 0-1.151.384-1.151 1.029 0 .628.488.994 1.151.994h4.522v4.341c0 .663.366 1.133.994 1.133z"/></g></svg>`,
   addToDock: `<svg viewBox="0 0 23.4 18" aria-hidden="true"><g fill="currentColor"><path d="M1.045 3.291v1.377h20.937V3.291Zm2.021 14.688h16.895c2.05 0 3.066-1.006 3.066-3.018V3.027C23.027 1.016 22.012 0 19.961 0H3.066C1.026 0 0 1.016 0 3.027v11.934c0 2.012 1.025 3.018 3.066 3.018Zm.02-1.573c-.977 0-1.514-.517-1.514-1.533V3.115c0-1.015.537-1.543 1.514-1.543H19.94c.967 0 1.514.528 1.514 1.543v11.758c0 1.016-.547 1.533-1.514 1.533Z"/><path d="M4.2 14.014c0 .508.35.85.868.85h12.92c.518 0 .87-.343.87-.85v-1.465c0-.508-.352-.85-.87-.85H5.068c-.517 0-.869.342-.869.85Z"/></g></svg>`,
   safariCompass: `<svg viewBox="0 0 20.3 19.9" aria-hidden="true"><g fill="currentColor"><path d="M9.96 19.922c5.45 0 9.962-4.522 9.962-9.961C19.922 4.51 15.4 0 9.952 0 4.511 0 0 4.512 0 9.96c0 5.44 4.521 9.962 9.96 9.962Zm0-1.66A8.26 8.26 0 0 1 1.67 9.96c0-4.61 3.672-8.3 8.281-8.3 4.61 0 8.31 3.69 8.31 8.3 0 4.61-3.69 8.3-8.3 8.3Z"/><path d="m5.87 14.883 5.605-2.735a1.47 1.47 0 0 0 .683-.673l2.725-5.596c.312-.664-.166-1.182-.85-.84L8.447 7.764c-.302.136-.508.341-.674.673L5.03 14.043c-.312.645.196 1.152.84.84Zm4.09-3.72A1.19 1.19 0 0 1 8.77 9.97c0-.664.527-1.201 1.19-1.201a1.2 1.2 0 0 1 1.202 1.2c0 .655-.537 1.192-1.201 1.192Z"/></g></svg>`,
-  // Material vertical-3-dots — Android browser menu.
+  // Material vertical-3-dots — Android / desktop browser menu.
   menuDots: `<svg viewBox="0 -960 960 960" aria-hidden="true"><path fill="currentColor" d="M480-160q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm0-240q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm0-240q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Z"/></svg>`,
   // Material phone-with-plus — Android "Add to Home screen".
   phonePlus: `<svg viewBox="0 -960 960 960" aria-hidden="true"><path fill="currentColor" d="M320-40q-33 0-56.5-23.5T240-120v-160h80v40h400v-480H320v40h-80v-160q0-33 23.5-56.5T320-920h400q33 0 56.5 23.5T800-840v720q0 33-23.5 56.5T720-40H320Zm0-120v40h400v-40H320ZM176-280l-56-56 224-224H200v-80h280v280h-80v-144L176-280Z"/></svg>`,
-  // Address-bar icon: monitor with a downward arrow indicating where to look.
-  addressBar: `<svg viewBox="0 0 64 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="58" height="34" rx="3"/><path d="M3 13h58"/><circle cx="9" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="13" cy="8" r="1.2" fill="currentColor" stroke="none"/><circle cx="17" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M48 9.5v0" stroke-dasharray="0 5"/><path d="M48 7v5"/><path d="M46.5 10.5l1.5 1.5 1.5-1.5"/></g></svg>`,
 }
 
-function getInstallGuideSteps(platform) {
-  const safariShareNote = 'Open the page in Safari, not Chrome or Firefox.'
+function getInstallGuideContent(platform) {
+  const safariOnlyNote = 'Make sure you\'re in Safari, not Chrome or Firefox.'
   switch (platform) {
     case 'ios-safari':
       return {
-        title: 'Install on iPhone',
+        label: 'Install on iPhone',
+        body: 'Add Xefig to your Home Screen for a full-screen, app-like experience.',
         steps: [
-          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap the <strong>Share</strong> button in Safari\'s toolbar.' },
-          { icon: INSTALL_GUIDE_ICONS.addHomeScreen, label: 'Choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.' },
+          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap <strong>Share</strong> in Safari\'s toolbar.' },
+          { icon: INSTALL_GUIDE_ICONS.addHomeScreen, label: 'Choose <strong>Add to Home Screen</strong>.' },
         ],
       }
     case 'ipad-safari':
       return {
-        title: 'Install on iPad',
+        label: 'Install on iPad',
+        body: 'Add Xefig to your Home Screen for a full-screen, app-like experience.',
         steps: [
-          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap the <strong>Share</strong> button in Safari\'s toolbar.' },
-          { icon: INSTALL_GUIDE_ICONS.addHomeScreen, label: 'Choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.' },
+          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap <strong>Share</strong> in Safari\'s toolbar.' },
+          { icon: INSTALL_GUIDE_ICONS.addHomeScreen, label: 'Choose <strong>Add to Home Screen</strong>.' },
         ],
       }
     case 'ios-other-browser':
       return {
-        title: 'Open in Safari to install',
+        label: 'Open in Safari first',
+        body: 'On iOS, only Safari can install web apps. Open xefig.com in Safari, then add it to your Home Screen.',
         steps: [
-          { icon: INSTALL_GUIDE_ICONS.safariCompass, label: 'Open this page in <strong>Safari</strong> — Chrome and Firefox can\'t install web apps on iOS.' },
-          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap the <strong>Share</strong> button in Safari.' },
-          { icon: INSTALL_GUIDE_ICONS.addHomeScreen, label: 'Choose <strong>Add to Home Screen</strong>.' },
+          { icon: INSTALL_GUIDE_ICONS.safariCompass, label: 'Open <strong>xefig.com</strong> in Safari.' },
+          { icon: INSTALL_GUIDE_ICONS.share, label: 'Tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.' },
         ],
       }
     case 'macos-safari':
       return {
-        title: 'Install on macOS',
+        label: 'Install on macOS',
+        body: 'Add Xefig to your Dock for one-click access.',
         steps: [
-          { icon: INSTALL_GUIDE_ICONS.share, label: 'Open Safari\'s <strong>Share</strong> menu (toolbar or File menu).' },
+          { icon: INSTALL_GUIDE_ICONS.share, label: 'Open Safari\'s <strong>Share</strong> menu.' },
           { icon: INSTALL_GUIDE_ICONS.addToDock, label: 'Choose <strong>Add to Dock</strong>.' },
         ],
-        note: safariShareNote,
+        note: safariOnlyNote,
       }
     case 'android-fallback':
       return {
-        title: 'Install on Android',
+        label: 'Install on Android',
+        body: 'Add Xefig to your home screen via your browser\'s menu.',
         steps: [
-          { icon: INSTALL_GUIDE_ICONS.menuDots, label: 'Open your browser\'s menu (the ⋮ button).' },
+          { icon: INSTALL_GUIDE_ICONS.menuDots, label: 'Open the browser menu (the <strong>⋮</strong> button).' },
           { icon: INSTALL_GUIDE_ICONS.phonePlus, label: 'Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.' },
         ],
       }
     case 'chrome-no-prompt':
       return {
-        title: 'Install on desktop',
-        steps: [
-          { icon: INSTALL_GUIDE_ICONS.addressBar, label: 'Look for the <strong>install icon</strong> at the right edge of the address bar.' },
-          { icon: INSTALL_GUIDE_ICONS.menuDots, label: 'No icon? Open the browser menu and choose <strong>Install xefig</strong> or <strong>Cast, save and share → Install</strong>.' },
-        ],
+        label: 'Install on desktop',
+        body: 'Look for the install icon at the right edge of your address bar. If it\'s not there, open the browser menu (⋮) and choose <strong>Install Xefig</strong>.',
+        steps: [],
       }
     default:
       return null
@@ -3195,8 +3192,8 @@ function getInstallGuideSteps(platform) {
 }
 
 function showInstallGuide(platform) {
-  const guide = getInstallGuideSteps(platform)
-  if (!guide) return
+  const content = getInstallGuideContent(platform)
+  if (!content) return
 
   const existing = document.querySelector('.install-guide-overlay')
   if (existing) existing.remove()
@@ -3204,21 +3201,33 @@ function showInstallGuide(platform) {
   const overlay = document.createElement('div')
   overlay.className = 'install-guide-overlay'
 
-  const stepsHtml = guide.steps.map((step) => `
-    <li class="install-guide-step">
-      <span class="install-guide-step-icon">${step.icon}</span>
-      <span class="install-guide-step-label">${step.label}</span>
-    </li>
-  `).join('')
+  const stepsHtml = content.steps && content.steps.length
+    ? `<ul class="install-guide-steps">${content.steps.map((step) => `
+        <li class="install-guide-step">
+          <span class="install-guide-step-icon">${step.icon}</span>
+          <span class="install-guide-step-label">${step.label}</span>
+        </li>`).join('')}</ul>`
+    : ''
+  const noteHtml = content.note
+    ? `<p class="install-guide-note">${content.note}</p>`
+    : ''
 
   overlay.innerHTML = `
-    <div class="install-guide" role="dialog" aria-modal="true" aria-label="${guide.title}">
+    <div class="install-guide" role="dialog" aria-modal="true" aria-label="${content.label}">
       <button type="button" class="install-guide-close" aria-label="Close">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 2 L14 14 M14 2 L2 14"/></svg>
       </button>
-      <h2 class="install-guide-title">${guide.title}</h2>
-      <ol class="install-guide-steps">${stepsHtml}</ol>
-      ${guide.note ? `<p class="install-guide-note">${guide.note}</p>` : ''}
+      <div class="install-guide-brand">
+        <img class="install-guide-brand-icon" src="/favicon.svg" alt="" aria-hidden="true" />
+        <div class="install-guide-brand-meta">
+          <span class="install-guide-brand-name">Xefig</span>
+          <span class="install-guide-brand-domain">xefig.com</span>
+        </div>
+      </div>
+      <p class="install-guide-section-label">${content.label}</p>
+      <p class="install-guide-body">${content.body}</p>
+      ${stepsHtml}
+      ${noteHtml}
       <button type="button" class="install-guide-done">Got it</button>
     </div>
   `

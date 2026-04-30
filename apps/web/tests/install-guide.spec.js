@@ -67,7 +67,7 @@ test.describe('Install guide overlay', () => {
 
     const guide = page.locator('.install-guide')
     await expect(guide).toBeVisible()
-    await expect(guide.locator('.install-guide-title')).toHaveText(/iPhone/)
+    await expect(guide.locator('.install-guide-section-label')).toHaveText(/iPhone/)
     await expect(guide.locator('.install-guide-step')).toHaveCount(2)
     await context.close()
   })
@@ -88,8 +88,8 @@ test.describe('Install guide overlay', () => {
 
     const guide = page.locator('.install-guide')
     await expect(guide).toBeVisible()
-    await expect(guide.locator('.install-guide-title')).toHaveText(/Safari/)
-    await expect(guide.locator('.install-guide-step')).toHaveCount(3)
+    await expect(guide.locator('.install-guide-section-label')).toHaveText(/Safari/)
+    await expect(guide.locator('.install-guide-step')).toHaveCount(2)
     await context.close()
   })
 
@@ -107,7 +107,7 @@ test.describe('Install guide overlay', () => {
     await expect(card).toHaveAttribute('data-install-platform', 'ipad-safari')
     await card.click()
 
-    await expect(page.locator('.install-guide-title')).toHaveText(/iPad/)
+    await expect(page.locator('.install-guide-section-label')).toHaveText(/iPad/)
     await context.close()
   })
 
@@ -125,7 +125,7 @@ test.describe('Install guide overlay', () => {
     await expect(card).toHaveAttribute('data-install-platform', 'macos-safari')
     await card.click()
 
-    await expect(page.locator('.install-guide-title')).toHaveText(/macOS/)
+    await expect(page.locator('.install-guide-section-label')).toHaveText(/macOS/)
     await context.close()
   })
 
@@ -143,7 +143,7 @@ test.describe('Install guide overlay', () => {
     await expect(card).toHaveAttribute('data-install-platform', 'android-fallback')
     await card.click()
 
-    await expect(page.locator('.install-guide-title')).toHaveText(/Android/)
+    await expect(page.locator('.install-guide-section-label')).toHaveText(/Android/)
   })
 
   test('Desktop Chromium without a captured prompt shows the address-bar guide', async ({ browser }) => {
@@ -160,7 +160,7 @@ test.describe('Install guide overlay', () => {
     await expect(card).toHaveAttribute('data-install-platform', 'chrome-no-prompt')
     await card.click()
 
-    await expect(page.locator('.install-guide-title')).toHaveText(/desktop/)
+    await expect(page.locator('.install-guide-section-label')).toHaveText(/desktop/)
   })
 
   test('Captured beforeinstallprompt fires the JS prompt instead of the guide', async ({ browser }) => {
