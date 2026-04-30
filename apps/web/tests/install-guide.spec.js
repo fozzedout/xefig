@@ -163,7 +163,7 @@ test.describe('Install guide overlay', () => {
     await expect(page.locator('.install-guide-section-label')).toHaveText(/desktop/)
   })
 
-  test('localStorage flag from a prior standalone visit triggers the "Open app" card', async ({ browser }) => {
+  test('localStorage flag from a prior standalone visit hides the install card', async ({ browser }) => {
     const context = await browser.newContext({
       userAgent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -176,13 +176,13 @@ test.describe('Install guide overlay', () => {
     await mockBaseline(page)
     await page.goto('/', { waitUntil: 'networkidle' })
 
-    const card = await openInstallCard(page)
-    await expect(card).toHaveAttribute('data-install-platform', 'installed')
-    await expect(card.locator('.more-sheet-card-title')).toHaveText('Open app')
+    await page.locator('.slice-more').click()
+    await expect(page.locator('.more-sheet')).toBeVisible()
+    await expect(page.locator('.more-sheet-card[data-action="install-app"]')).toHaveCount(0)
     await context.close()
   })
 
-  test('Installed PWA (regular tab) shows "Open app" card and the already-installed guide', async ({ browser }) => {
+  test('getInstalledRelatedApps reporting webapp hides the install card', async ({ browser }) => {
     const context = await browser.newContext({
       userAgent:
         'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
@@ -195,14 +195,9 @@ test.describe('Install guide overlay', () => {
     await mockBaseline(page)
     await page.goto('/', { waitUntil: 'networkidle' })
 
-    const card = await openInstallCard(page)
-    await expect(card).toHaveAttribute('data-install-platform', 'installed')
-    await expect(card.locator('.more-sheet-card-title')).toHaveText('Open app')
-    await card.click()
-
-    const guide = page.locator('.install-guide')
-    await expect(guide).toBeVisible()
-    await expect(guide.locator('.install-guide-section-label')).toHaveText(/Already installed/)
+    await page.locator('.slice-more').click()
+    await expect(page.locator('.more-sheet')).toBeVisible()
+    await expect(page.locator('.more-sheet-card[data-action="install-app"]')).toHaveCount(0)
     await context.close()
   })
 
