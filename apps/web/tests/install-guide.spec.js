@@ -201,6 +201,33 @@ test.describe('Install guide overlay', () => {
     await context.close()
   })
 
+  test('beforeinstallprompt clears a stale installed flag (post-uninstall recovery)', async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    })
+    const page = await context.newPage()
+    await spoofPlatform(page, { touchPoints: 0, hasBIP: true })
+    await page.addInitScript(() => {
+      try { localStorage.setItem('xefig-installed', '1') } catch {}
+    })
+    await mockBaseline(page)
+    await page.goto('/', { waitUntil: 'networkidle' })
+
+    await page.evaluate(() => {
+      const fakeEvent = new Event('beforeinstallprompt')
+      fakeEvent.prompt = async () => {}
+      Object.defineProperty(fakeEvent, 'userChoice', { value: Promise.resolve({ outcome: 'dismissed' }) })
+      window.dispatchEvent(fakeEvent)
+    })
+
+    const card = await openInstallCard(page)
+    await expect(card).toHaveAttribute('data-install-platform', 'chrome-prompt')
+    const flag = await page.evaluate(() => localStorage.getItem('xefig-installed'))
+    expect(flag).toBeNull()
+    await context.close()
+  })
+
   test('Captured beforeinstallprompt fires the JS prompt instead of the guide', async ({ browser }) => {
     const context = await browser.newContext({
       userAgent:

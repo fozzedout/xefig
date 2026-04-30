@@ -1208,15 +1208,22 @@ function readInstalledFlag() {
 function writeInstalledFlag() {
   try { localStorage.setItem(INSTALLED_FLAG_KEY, '1') } catch {}
 }
+function clearInstalledFlag() {
+  try { localStorage.removeItem(INSTALLED_FLAG_KEY) } catch {}
+}
 function rerenderMoreSheet() {
   const open = document.querySelector('.more-sheet-overlay')
   if (open && typeof open.__rerender === 'function') open.__rerender()
 }
 // Bind synchronously at module load — Chrome only fires beforeinstallprompt
 // once per page load, so registering inside initAppShell can miss it.
+// BIP only fires when the PWA is NOT installed, so receiving it means any
+// stale "installed" state (e.g. left over after the user uninstalled) is wrong.
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault()
   deferredInstallPrompt = e
+  appAlreadyInstalled = false
+  clearInstalledFlag()
   rerenderMoreSheet()
 })
 window.addEventListener('appinstalled', () => {
