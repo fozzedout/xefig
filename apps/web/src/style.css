@@ -1377,12 +1377,13 @@ h1 {
   background: #0e0e16;
   border: 1px solid rgba(232,230,224,0.16);
   border-radius: 18px;
-  padding: 18px 20px 22px;
-  max-width: 520px;
-  width: 100%;
-  max-height: 85vh;
+  padding: 22px 24px 26px;
+  width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
   overflow-y: auto;
   box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  display: flex;
+  flex-direction: column;
 }
 .day-detail-close {
   position: absolute; top: 10px; right: 10px;
@@ -1474,7 +1475,7 @@ h1 {
 }
 .day-detail-thumbs .thumb-pill {
   position: absolute;
-  bottom: 6px; right: 6px;
+  top: 6px; right: 6px;
   z-index: 2;
   font-family: ui-monospace, 'Fira Code', monospace;
   font-size: 0.6rem;
@@ -1638,14 +1639,27 @@ h1 {
   .month-hero-sub { font-size: 9px; }
 }
 
-@media (max-width: 480px) {
-  .day-detail-thumbs { grid-template-columns: 1fr; gap: 6px; }
+@media (max-width: 640px) {
+  .day-detail-overlay { padding: 12px; }
+  .day-detail-sheet {
+    padding: 16px 14px 18px;
+    height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+  }
+  .day-detail-thumbs {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
   .day-detail-thumbs .puzzle-thumb {
     aspect-ratio: auto;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    min-height: 60px;
+    min-height: 0;
+    height: 100%;
   }
   .day-detail-thumbs .thumb-image { inset: 0; }
   .day-detail-thumbs .thumb-info {
@@ -1653,7 +1667,10 @@ h1 {
     background: rgba(7,7,11,0.55);
     padding: 12px;
   }
-  .day-detail-thumbs .thumb-pill { position: absolute; right: 10px; bottom: 10px; }
+  .day-detail-thumbs .thumb-pill { position: absolute; top: auto; right: 10px; bottom: 10px; }
+}
+
+@media (max-width: 480px) {
   .year-picker { padding: 0; align-items: flex-end; }
   .year-picker-sheet {
     max-width: 100%;
