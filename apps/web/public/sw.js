@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v8'
+const CACHE_NAME = 'xefig-v9'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -73,7 +73,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          if (response.status === 200) {
             const clone = cleanResponse(response.clone())
             caches.open(CACHE_NAME).then((cache) => cache.put(key, clone))
           }
@@ -109,7 +109,7 @@ self.addEventListener('fetch', (event) => {
       const networkFetch = (async () => {
         try {
           const response = await fetch(request)
-          if (response.ok) {
+          if (response.status === 200) {
             cache.put(request, cleanResponse(response.clone()))
           }
           return response
@@ -147,13 +147,13 @@ self.addEventListener('fetch', (event) => {
         if (cached) {
           // Refresh in background so a newer ?v= is picked up next time.
           fetch(request).then((response) => {
-            if (response.ok) cache.put(request, cleanResponse(response.clone()))
+            if (response.status === 200) cache.put(request, cleanResponse(response.clone()))
           }).catch(() => {})
           return cleanResponse(cached)
         }
         try {
           const response = await fetch(request)
-          if (response.ok) cache.put(request, cleanResponse(response.clone()))
+          if (response.status === 200) cache.put(request, cleanResponse(response.clone()))
           return response
         } catch (err) {
           const stale = await cache.match(request, { ignoreSearch: true })
@@ -170,7 +170,7 @@ self.addEventListener('fetch', (event) => {
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(request).then((cached) => {
         const fetched = fetch(request).then((response) => {
-          if (response.ok) cache.put(request, cleanResponse(response.clone()))
+          if (response.status === 200) cache.put(request, cleanResponse(response.clone()))
           return response
         })
         return cleanResponse(cached) || fetched
