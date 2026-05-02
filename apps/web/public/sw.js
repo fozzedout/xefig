@@ -92,15 +92,18 @@ self.addEventListener('fetch', (event) => {
   // pass straight through to the network.
   if (request.method !== 'GET') return
 
-  // Navigations / HTML documents: network-first with a short timeout,
+  // Navigations / HTML documents: network-first with a generous timeout,
   // falling back to cache. Stale-while-revalidate bricks the app across
   // deploys because the old index.html references hashed asset filenames
   // that no longer exist on the server (404s → "Loading..." forever).
-  // We prefer network so a fresh deploy is picked up on the next load,
-  // but on a slow connection we'd rather show a cached copy than a
-  // blank screen. The background fetch still runs to completion and
-  // updates the cache, so post-deploy the next load recovers even if
-  // this one served the stale copy.
+  // The timeout is intentionally long (5s) — on a heavily-congested
+  // cellular network a fast fallback to stale cache is preferable to
+  // staring at a blank screen, but we want to prefer fresh HTML when the
+  // network is healthy. The background fetch always runs to completion
+  // and updates the cache, so a stale-cached load is recovered next
+  // time. The brick-recovery script in index.html catches the rare case
+  // where the stale-cached HTML's hashed asset is gone from both the
+  // server and the SW cache.
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME)
@@ -119,7 +122,7 @@ self.addEventListener('fetch', (event) => {
       })()
 
       if (cached) {
-        const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+        const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 5000))
         const winner = await Promise.race([networkFetch, timeout])
         if (winner) return winner
         return cleanResponse(cached)

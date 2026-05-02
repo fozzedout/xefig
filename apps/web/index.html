@@ -61,6 +61,46 @@
       </div>
     </div>
     <script>
+      // Brick-recovery: if the JS bundle never executes (cached HTML
+      // referencing a deleted asset hash → silent module-script 404 on
+      // iOS), unregister the service worker, clear all caches, and
+      // reload. Without this an iOS PWA can sit on "Loading…" until the
+      // user kills and relaunches the app multiple times. main.js sets
+      // window.__appBooted as its first line.
+      //
+      // The detection is conservative because a slow but functional
+      // mobile network can take a long time to deliver a fresh bundle
+      // and we don't want to nuke the cache just because we're patient.
+      // We only auto-recover on either (a) a captured `error` event for
+      // a /assets/main-*.js script tag (definite 404) or (b) a long
+      // backstop timer (45s) for cases iOS's silent module-script
+      // failure doesn't surface an error event.
+      window.__appBooted = false;
+      var __recovering = false;
+      function __recover(){
+        if (__recovering || window.__appBooted) return;
+        __recovering = true;
+        var ops = [];
+        if (window.caches) {
+          ops.push(caches.keys().then(function(keys){
+            return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+          }));
+        }
+        if ('serviceWorker' in navigator) {
+          ops.push(navigator.serviceWorker.getRegistrations().then(function(regs){
+            return Promise.all(regs.map(function(r){ return r.unregister(); }));
+          }));
+        }
+        Promise.all(ops).then(function(){ location.reload(); }, function(){ location.reload(); });
+      }
+      window.addEventListener('error', function(e){
+        var t = e && e.target;
+        if (!t || t.tagName !== 'SCRIPT' || !t.src) return;
+        if (/\/assets\/main-[^/]+\.js(\?|$)/.test(t.src)) __recover();
+      }, true);
+      setTimeout(__recover, 45000);
+    </script>
+    <script>
       // Start the daily puzzle fetch immediately — runs in parallel with module download.
       // Uses local date so the puzzle matches the device's calendar day.
       var _d=new Date();var _localDate=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
