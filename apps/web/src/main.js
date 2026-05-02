@@ -27,6 +27,14 @@ import {
   pullOnForeground,
   onRemoteChanged,
 } from './sync.js'
+
+// Flag the brick-recovery timer in index.html that the bundle reached
+// execution. Set as the first non-import statement so any later module
+// failure still allows the page to recover via SW unregister + reload.
+if (typeof window !== 'undefined') {
+  window.__appBooted = true
+}
+
 // Puzzle engines are loaded on demand in renderGame() via dynamic import()
 // to keep the homepage bundle free of gameplay code.
 const puzzleLoaders = {
@@ -1259,11 +1267,19 @@ function bindMoreSheetSyncIndicator(sheetEl) {
     if (status === 'syncing') {
       cloudState = 'syncing'; label = 'Syncing...'
     } else if (status === 'error') {
-      cloudState = 'error'; label = 'Sync failed — open Settings to retry'
+      cloudState = 'error'
+      label = hasChanges
+        ? 'Sync failed — changes queued, will retry'
+        : 'Sync failed — open Settings to retry'
     } else if (hasChanges) {
       cloudState = 'pending'; label = 'Pending changes — syncing soon'
     }
     cloud.dataset.state = cloudState
+    // The up-arrow tracks "data queued for upload" independent of the
+    // status colour. So an `error` state with queued changes still
+    // shows the arrow (red cloud + ↑ = "we tried, failed, but data is
+    // still waiting to go up").
+    cloud.dataset.pending = hasChanges ? 'true' : 'false'
     card.title = label
     card.setAttribute('aria-label', label)
   }
@@ -2951,8 +2967,9 @@ function showSyncCodeCelebration({ name, code, onDone }) {
     <div class="completion-card sync-celebrate-card">
       <h3 class="sync-celebrate-title">${greet}</h3>
       <p class="sync-celebrate-msg">Your sync code keeps your progress safe and lets you play on another device.</p>
-      <div class="sync-code-display sync-celebrate-code">
+      <div class="sync-code-display sync-celebrate-code sync-code-hidden">
         <span class="sync-code-value">${code}</span>
+        <button type="button" class="sync-code-reveal" aria-label="Reveal sync code">Tap to reveal</button>
       </div>
       <div class="sync-celebrate-actions">
         <button type="button" class="sync-celebrate-share">Send to another device</button>
@@ -2979,6 +2996,13 @@ function showSyncCodeCelebration({ name, code, onDone }) {
 
   const shareBtn = overlay.querySelector('.sync-celebrate-share')
   const copyBtn = overlay.querySelector('.sync-celebrate-copy')
+  const revealBtn = overlay.querySelector('.sync-code-reveal')
+  const codeDisplay = overlay.querySelector('.sync-code-display')
+  if (revealBtn && codeDisplay) {
+    revealBtn.addEventListener('click', () => {
+      codeDisplay.classList.remove('sync-code-hidden')
+    })
+  }
 
   shareBtn.addEventListener('click', async () => {
     try {
@@ -3127,6 +3151,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
             <span class="more-card-sync-cloud" data-state="saved" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 19Z"/>
+                <path class="more-card-sync-cloud-arrow" d="M12 17 V11 M9 14 L12 11 L15 14"/>
               </svg>
             </span>
           </span>
@@ -4790,8 +4815,9 @@ function renderProfileSettings() {
         <input type="text" id="sync-profile-name" class="sync-name-input" maxlength="30" placeholder="Anonymous" value="${nameSafe}" autocomplete="off" spellcheck="false" />
       </div>
       <p class="sync-description">Your sync code (use this on another device):</p>
-      <div class="sync-code-display">
+      <div class="sync-code-display sync-code-hidden">
         <span class="sync-code-value">${code}</span>
+        <button type="button" class="sync-code-reveal" aria-label="Reveal sync code">Tap to reveal</button>
         <button type="button" id="sync-copy-btn" class="sync-copy-btn" title="Copy code">Copy</button>
       </div>
       <p class="sync-hint">Tap the Devices card in More to send a quick link to another device.</p>
@@ -4810,6 +4836,13 @@ function renderProfileSettings() {
         setTimeout(() => { btn.textContent = 'Copy' }, 2000)
       } catch {}
     })
+    const revealBtn = el.querySelector('.sync-code-reveal')
+    const codeDisplay = el.querySelector('.sync-code-display')
+    if (revealBtn && codeDisplay) {
+      revealBtn.addEventListener('click', () => {
+        codeDisplay.classList.remove('sync-code-hidden')
+      })
+    }
   } else {
     el.innerHTML = `
       <div class="sync-field">

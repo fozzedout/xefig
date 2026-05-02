@@ -1003,6 +1003,23 @@ export async function initSync() {
   }
 
   startSyncTimer()
+  bindOnlineRecovery()
+}
+
+// When the device regains connectivity, retry sync immediately so the
+// indicator clears the error state and queued changes go up. Without
+// this the cloud icon stays red until the 5-minute interval timer
+// happens to fire next, which is a long time to look at a "broken" UI
+// after just toggling airplane mode off.
+let onlineRecoveryBound = false
+function bindOnlineRecovery() {
+  if (onlineRecoveryBound) return
+  onlineRecoveryBound = true
+  if (typeof window === 'undefined' || !window.addEventListener) return
+  window.addEventListener('online', () => {
+    if (!syncEnabled || syncInFlight) return
+    syncNow().catch(() => {})
+  })
 }
 
 // Throttled full sync for use when the page regains focus — catches

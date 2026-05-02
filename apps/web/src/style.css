@@ -695,6 +695,7 @@ h1 {
 }
 
 .sync-code-display {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -707,6 +708,38 @@ h1 {
   letter-spacing: 0.35em;
   color: #50e8a0;
   font-variant-numeric: tabular-nums;
+  transition: filter 0.18s ease;
+}
+
+/* Streamer-safe: codes start blurred and reveal on tap. The reveal
+   button is an absolutely-positioned overlay that disappears once
+   tapped. Copy still works without revealing — just shouldn't expose
+   the digits on screen. */
+.sync-code-display.sync-code-hidden .sync-code-value {
+  filter: blur(8px);
+  user-select: none;
+}
+.sync-code-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(232, 230, 224, 0.85);
+  background: rgba(10, 10, 15, 0.35);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+.sync-code-display:not(.sync-code-hidden) .sync-code-reveal {
+  display: none;
 }
 
 .sync-copy-btn {
@@ -3441,6 +3474,10 @@ canvas.slice-image {
   transition: color 0.2s;
 }
 .more-card-sync-cloud svg { width: 16px; height: 16px; }
+/* Up-arrow tracks "data queued for upload" independent of the status
+   colour, so error + queued changes shows a red cloud + ↑. */
+.more-card-sync-cloud-arrow { opacity: 0; }
+.more-card-sync-cloud[data-pending="true"] .more-card-sync-cloud-arrow { opacity: 1; }
 .more-card-sync-cloud[data-state="syncing"] { color: #fbbf24; animation: pulse-save 1s ease-in-out infinite; }
 .more-card-sync-cloud[data-state="pending"] { color: #fbbf24; }
 .more-card-sync-cloud[data-state="error"] { color: #f87171; }
