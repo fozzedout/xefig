@@ -575,6 +575,15 @@ export class PictureSwapPuzzle {
   }
 
   getProgressState() {
+    // homes[id] = the canonical slot tile `id` belongs to in this saved
+    // grid orientation. Without this, a destination device's init() would
+    // set homeIndex=id in its own grid frame, causing the destination's
+    // rotate-on-resize to pivot from a different starting frame than the
+    // source's ending frame — and the round-trip would silently rotate
+    // every tile's home (visible as image content "moving" across tiles
+    // even though slot positions are preserved).
+    const homes = new Array(this.totalTiles)
+    for (const tile of this.tiles) homes[tile.id] = tile.homeIndex
     return {
       cols: this.cols,
       rows: this.rows,
@@ -582,6 +591,7 @@ export class PictureSwapPuzzle {
       selectedTileId: this.selectedTileId,
       completed: this.completed,
       startedAtMs: this.startedAtMs,
+      homes,
     }
   }
 
@@ -638,6 +648,22 @@ export class PictureSwapPuzzle {
       if (tile) {
         tile.slotIndex = slotIndex
       }
+    }
+
+    // Restore each tile's home to whatever the source device ended at.
+    // Older saves (pre-fix) won't include `homes`; in that case we keep
+    // the init default (homeIndex = id) so legacy state still loads,
+    // even if its post-rotation alignment may drift on cross-device.
+    if (Array.isArray(state.homes) && state.homes.length === this.totalTiles) {
+      for (const tile of this.tiles) {
+        const saved = state.homes[tile.id]
+        if (Number.isInteger(saved) && saved >= 0 && saved < this.totalTiles) {
+          tile.homeIndex = saved
+        }
+      }
+      // homeIndex drives the image fragment each tile paints, so a
+      // restored homeIndex needs the face repainted.
+      for (const tile of this.tiles) this.paintTileFace(tile)
     }
 
     const startedAtMs = Number(state.startedAtMs)

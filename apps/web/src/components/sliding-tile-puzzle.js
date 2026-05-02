@@ -116,19 +116,15 @@ export class SlidingTilePuzzle {
     const containerHeight = this.container.clientHeight || window.innerHeight
     const padding = 6
     const saiTop = this.getSafeAreaInset('top')
-    const saiLeft = this.getSafeAreaInset('left')
-    const saiRight = this.getSafeAreaInset('right')
-    // Only the native safe-area insets are reserved. The floating
-    // back/menu buttons are translucent and overlay the board (same as
-    // landscape behaviour) — letting the board centre naturally in the
-    // viewport with equal slack top and bottom. Bottom is intentionally
-    // NOT reserved; iOS's home indicator is semi-transparent so tiles
-    // can run to the viewport edge.
+    // Reserve only the top notch / Dynamic Island in portrait. In
+    // landscape the side and bottom insets are translucent enough that
+    // letting tiles run under them keeps the grid edge-to-edge and
+    // makes pickBestGrid produce the same shape as portrait
+    // (transposed), which is what users expect across orientations.
     const isPortrait = window.innerHeight >= window.innerWidth
-    const topReserve = saiTop
-    const horizReserve = isPortrait ? 0 : saiLeft + saiRight
+    const topReserve = isPortrait ? saiTop : 0
     return {
-      availW: Math.max(240, containerWidth - padding * 2 - horizReserve),
+      availW: Math.max(240, containerWidth - padding * 2),
       availH: Math.max(180, containerHeight - padding * 2 - topReserve),
     }
   }
@@ -625,12 +621,22 @@ export class SlidingTilePuzzle {
   }
 
   getProgressState() {
+    // homes[id] = the canonical slot tile `id` belongs to in this saved
+    // grid orientation. Without this, a destination device's init() would
+    // set homeIndex=id in its own grid frame, causing the destination's
+    // transpose to pivot from a different starting frame than the source's
+    // ending frame — and the round-trip would silently rotate every
+    // tile's home (visible as image content "moving" across tiles even
+    // though slot positions are preserved).
+    const homes = new Array(this.tileCount)
+    for (const tile of this.tiles) homes[tile.id] = tile.homeIndex
     return {
       cols: this.cols,
       rows: this.rows,
       slots: [...this.slots],
       emptyIndex: this.emptyIndex,
       completed: this.completed,
+      homes,
     }
   }
 
@@ -686,6 +692,19 @@ export class SlidingTilePuzzle {
 
     for (const tile of this.tiles) {
       tile.slotIndex = this.slots.indexOf(tile.id)
+    }
+
+    // Restore each tile's home to whatever the source device ended at.
+    // Older saves (pre-fix) won't include `homes`; in that case we keep
+    // the init default (homeIndex = id) so legacy state still loads,
+    // even if its post-transpose alignment will drift on cross-device.
+    if (Array.isArray(state.homes) && state.homes.length === this.tileCount) {
+      for (const tile of this.tiles) {
+        const saved = state.homes[tile.id]
+        if (Number.isInteger(saved) && saved >= 0 && saved < this.totalSlots) {
+          tile.homeIndex = saved
+        }
+      }
     }
 
     this.completed = Boolean(state.completed) || this.isSolved()
