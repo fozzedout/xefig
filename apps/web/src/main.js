@@ -2957,6 +2957,7 @@ function showSyncCodeCelebration({ name, code, onDone }) {
       <div class="sync-celebrate-actions">
         <button type="button" class="sync-celebrate-share">Send to another device</button>
         <button type="button" class="sync-celebrate-copy">Copy code</button>
+        <button type="button" class="sync-celebrate-syncnow">Sync now</button>
       </div>
       <p class="sync-celebrate-hint">You can see this code again in Settings at any time.</p>
       <div class="confirm-actions sync-celebrate-done-row">
@@ -3003,6 +3004,30 @@ function showSyncCodeCelebration({ name, code, onDone }) {
       copyBtn.textContent = 'Copied!'
       setTimeout(() => { copyBtn.textContent = 'Copy code' }, 2000)
     } catch {}
+  })
+
+  const syncNowBtn = overlay.querySelector('.sync-celebrate-syncnow')
+  syncNowBtn.addEventListener('click', async () => {
+    if (syncNowBtn.disabled) return
+    syncNowBtn.disabled = true
+    const original = syncNowBtn.textContent
+    syncNowBtn.textContent = 'Syncing…'
+    try {
+      const result = await forcePush()
+      if (!result?.ran) {
+        syncNowBtn.textContent = 'Sync not enabled'
+      } else if (result.pulledChanges) {
+        syncNowBtn.textContent = 'Synced — pulled changes'
+      } else {
+        syncNowBtn.textContent = 'Synced'
+      }
+    } catch {
+      syncNowBtn.textContent = 'Sync failed'
+    }
+    setTimeout(() => {
+      syncNowBtn.textContent = original
+      syncNowBtn.disabled = false
+    }, 1800)
   })
 
   overlay.querySelector('.sync-celebrate-done').addEventListener('click', close)
