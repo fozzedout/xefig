@@ -490,18 +490,18 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
     }
 
     const pngBytes = new Uint8Array(await tempObject.arrayBuffer())
-    const { jpeg, thumbnail } = processPngImage(pngBytes)
-    encoded.push({ category, jpeg, thumbnail })
+    const encodedImage = await processPngImage(pngBytes)
+    encoded.push({ category, ...encodedImage })
   }
 
   // R2 writes are IO-bound — do them in parallel.
   await Promise.all(
-    encoded.flatMap(({ category, jpeg, thumbnail }) => [
-      env.assets.put(`puzzles/${targetDate}/${category}.jpg`, jpeg, {
-        httpMetadata: { contentType: 'image/jpeg' },
+    encoded.flatMap(({ category, image, thumbnail, contentType, extension }) => [
+      env.assets.put(`puzzles/${targetDate}/${category}.${extension}`, image, {
+        httpMetadata: { contentType },
       }),
-      env.assets.put(`puzzles/${targetDate}/${category}_thumb.jpg`, thumbnail, {
-        httpMetadata: { contentType: 'image/jpeg' },
+      env.assets.put(`puzzles/${targetDate}/${category}_thumb.${extension}`, thumbnail, {
+        httpMetadata: { contentType },
       }),
       env.assets.delete(`temp/${targetDate}/${category}.png`),
     ]),
@@ -530,14 +530,17 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
   const puzzleCategories = (existingRecord?.categories ?? {}) as Record<PuzzleCategory, PuzzleAsset>
   for (const category of jobCategories) {
     const meta = categoryMeta[category]
-    const imageKey = `puzzles/${targetDate}/${category}.jpg`
-    const thumbKey = `puzzles/${targetDate}/${category}_thumb.jpg`
+    // New puzzles are encoded as WebP; older puzzle records keep their
+    // existing .jpg paths since R2 still serves those files. Only new
+    // generations after this commit get .webp.
+    const imageKey = `puzzles/${targetDate}/${category}.webp`
+    const thumbKey = `puzzles/${targetDate}/${category}_thumb.webp`
 
     puzzleCategories[category] = {
       imageKey,
       imageUrl: toCdnUrl(imageKey) + cacheBuster,
-      contentType: 'image/jpeg',
-      fileName: `${category}.jpg`,
+      contentType: 'image/webp',
+      fileName: `${category}.webp`,
       theme: meta.theme,
       tags: meta.keywords,
       thumbnailKey: thumbKey,
