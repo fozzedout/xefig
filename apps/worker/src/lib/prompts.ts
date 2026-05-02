@@ -452,9 +452,9 @@ const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 image with directional lines, shadows, and tonal gradient reading clearly across the whole composition. Use heavy line work, ink work, or a stained glass style to define shapes. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
-  'Deliver a single landscape 4:3 image with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. Use heavy line work, ink work, or a stained glass style to define shapes. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
-  'Single 4:3 landscape image with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. Use heavy line work, ink work, or a stained glass style to define shapes. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
+  'Output: one landscape 4:3 image with directional lines, shadows, and tonal gradient reading clearly across the whole composition. Define shapes with strong contours so each region is clearly bounded. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 image with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. Use confident outlines and clear shape boundaries throughout. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape image with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. Keep shape edges crisp and well-separated so each region is distinct. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -702,6 +702,15 @@ const GRAPHIC_STYLE_DESCRIPTORS = new Set([
   'copper engraving style',
 ])
 
+// Polygram needs strong shape boundaries (so the cut-up pieces have
+// orientation cues), which is what was driving stained-glass and mosaic
+// to dominate. Penalise those specific descriptors so the polygram pool
+// reaches more often for ink, vector, linocut, engraving, etc. — all of
+// which still give the strong-contour look the puzzle needs.
+const POLYGRAM_OVERUSED_DESCRIPTORS = new Set([
+  'stained glass', 'stained glass rendering', 'mosaic', 'mosaic tile style',
+])
+
 const PHOTOGRAPHIC_CATEGORIES: ReadonlySet<PuzzleCategory> = new Set(['jigsaw', 'slider', 'swap'])
 
 // Pick one descriptor per role, preferring least-recently-used entries and
@@ -715,9 +724,14 @@ function pickDescriptorSet(
   const pool = category === 'diamond' ? DIAMOND_DESCRIPTOR_POOL : DESCRIPTOR_POOL
   const set = {} as DescriptorSet
 
-  // For photographic categories, penalise graphic/flat-art descriptors so
-  // they appear less often (but aren't completely excluded).
-  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category) ? GRAPHIC_STYLE_DESCRIPTORS : null
+  // For photographic categories, penalise the broad graphic/flat-art
+  // descriptor set. For polygram, penalise just stained-glass / mosaic
+  // so the pool still reaches the other shape-bounded styles
+  // (linocut, engraving, vector, ink) that work for cut-up pieces but
+  // don't all converge on the same look.
+  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category)
+    ? GRAPHIC_STYLE_DESCRIPTORS
+    : (category === 'polygram' ? POLYGRAM_OVERUSED_DESCRIPTORS : null)
 
   let working = new Set(excluded)
   for (const role of ROLES) {
