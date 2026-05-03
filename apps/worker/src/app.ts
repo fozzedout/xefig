@@ -40,6 +40,7 @@ import {
   handleBatchSubmit,
   handleSingleBatchSubmit,
   handleBatchPoll,
+  applyProcessedCategoryUpload,
   getBatchJobStatus,
   cancelBatchJob,
   isPipelinePaused,
@@ -581,12 +582,110 @@ export function createApp() {
       return c.json({ error: 'GOOGLE_AI_API_KEY is not configured.' }, 500)
     }
 
+    // Body is optional — default cron/auto path uses no body. The
+    // manual admin button passes { skipProcess: true } so the Worker
+    // stops once PNGs are in R2 temp and the browser can encode WebP.
+    let skipProcess = false
     try {
-      const result = await handleBatchPoll(c.env)
+      const body = (await c.req.json()) as { skipProcess?: boolean } | null
+      skipProcess = body?.skipProcess === true
+    } catch {
+      // No body / non-JSON — keep default.
+    }
+
+    try {
+      const result = await handleBatchPoll(c.env, { skipProcess })
       return c.json({ ok: true, ...result })
     } catch (error) {
       console.error('Batch poll failed', error)
       const message = error instanceof Error ? error.message : 'Batch poll failed.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  // Stream a temp PNG (saved during the Gemini-fetch step) so the
+  // admin browser can decode + WebP-encode it locally for the manual
+  // poll path. No public exposure: admin-session-gated.
+  app.get('/api/admin/generate-images/temp/:date/:category', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    const date = c.req.param('date')
+    const category = c.req.param('category') as PuzzleCategory
+    if (!date || !isValidDateKey(date)) {
+      return c.json({ error: 'Invalid date.' }, 400)
+    }
+    if (!CATEGORIES.includes(category)) {
+      return c.json({ error: 'Invalid category.' }, 400)
+    }
+
+    const tempKey = `temp/${date}/${category}.png`
+    const obj = await c.env.assets.get(tempKey)
+    if (!obj) {
+      return c.json({ error: `No temp image at ${tempKey}.` }, 404)
+    }
+
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'image/png',
+        'Cache-Control': 'no-store',
+      },
+    })
+  })
+
+  // Receives the locally-encoded WebP main + thumbnail from the manual
+  // poll flow and slots them into the same R2 keys / DB record that the
+  // server-side processRemainingCategories would have produced.
+  app.post('/api/admin/generate-images/upload-processed', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    try {
+      const body = (await c.req.parseBody({ all: true })) as Record<string, FormValue>
+      const batchName = getStringField(body.batchName)?.trim()
+      const date = getStringField(body.date)?.trim()
+      const category = getStringField(body.category)?.trim() as PuzzleCategory
+
+      if (!batchName) {
+        return c.json({ error: 'batchName is required.' }, 400)
+      }
+      if (!date || !isValidDateKey(date)) {
+        return c.json({ error: 'Date is required in YYYY-MM-DD format.' }, 400)
+      }
+      if (!CATEGORIES.includes(category)) {
+        return c.json({ error: 'Invalid category.' }, 400)
+      }
+
+      const imageFile = getFileField(body.image)
+      const thumbFile = getFileField(body.thumbnail)
+      if (!imageFile || imageFile.size === 0) {
+        return c.json({ error: 'image file is required.' }, 400)
+      }
+      if (!thumbFile || thumbFile.size === 0) {
+        return c.json({ error: 'thumbnail file is required.' }, 400)
+      }
+
+      const result = await applyProcessedCategoryUpload(c.env, {
+        batchName,
+        targetDate: date,
+        category,
+        image: await imageFile.arrayBuffer(),
+        thumbnail: await thumbFile.arrayBuffer(),
+        contentType: imageFile.type || 'image/webp',
+        extension: 'webp',
+      })
+
+      const status = result.found ? 200 : 404
+      return c.json({ ok: result.found, ...result }, status)
+    } catch (error) {
+      console.error('Upload-processed failed', error)
+      const message = error instanceof Error ? error.message : 'Upload-processed failed.'
       return c.json({ error: message }, 500)
     }
   })

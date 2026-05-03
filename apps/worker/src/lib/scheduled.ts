@@ -45,6 +45,17 @@ export type BatchPollResult = {
   savedDate?: string
   error?: string
   rawResponse?: unknown
+  // Set when handleBatchPoll runs in skipProcess mode and a job has
+  // PNGs sitting in R2 temp ready for the client to encode locally.
+  remainingCategories?: PuzzleCategory[]
+}
+
+export type BatchPollOptions = {
+  // When true, the manual admin path: poll Gemini and save raw PNGs to
+  // R2 temp, but stop short of decoding/encoding so the browser can do
+  // the WebP conversion locally and avoid Worker CPU limits. The cron
+  // path leaves this unset and processes server-side as before.
+  skipProcess?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -277,14 +288,22 @@ export async function handleSingleBatchSubmit(
 // Phase 2: Poll / fetch / process (periodic cron, one step per invocation)
 // ---------------------------------------------------------------------------
 
-export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
+export async function handleBatchPoll(
+  env: Bindings,
+  opts: BatchPollOptions = {},
+): Promise<BatchPollResult> {
   if (!env.GOOGLE_AI_API_KEY) {
     return { found: false, message: 'GOOGLE_AI_API_KEY not configured.' }
   }
 
   await ensurePuzzleTables(env.DB)
 
-  if (await isPipelinePaused(env.DB)) {
+  // The pause flag is there to stop automated cron work while the
+  // pipeline is being investigated. The manual local-encode button is
+  // explicitly user-driven (and is the typical reason for pausing —
+  // you pause cron, then drive a stuck batch through by hand), so it
+  // should bypass the pause.
+  if (!opts.skipProcess && (await isPipelinePaused(env.DB))) {
     return { found: false, message: 'Pipeline is paused. Resume it in admin settings to continue polling.' }
   }
 
@@ -299,6 +318,9 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
   // cron firing.
   const fetchedJob = jobs.find((j) => j.phase === 'fetched')
   if (fetchedJob) {
+    if (opts.skipProcess) {
+      return describeFetchedForLocalProcess(fetchedJob)
+    }
     return await processRemainingCategories(env, fetchedJob)
   }
 
@@ -400,6 +422,13 @@ export async function handleBatchPoll(env: Bindings): Promise<BatchPollResult> {
     // submits single-category regens with a sharper prompt.
     job.phase = 'fetched'
     await saveBatchJob(env.DB, job)
+
+    // Manual local-encode path stops here so the browser can pull the
+    // raw PNGs out of R2 temp, encode WebP itself, and POST the result
+    // back. Cron flow falls through and processes in-Worker.
+    if (opts.skipProcess) {
+      return describeFetchedForLocalProcess(job)
+    }
 
     // Fall through into processing in the same tick rather than
     // returning and waiting for the next cron firing.
@@ -509,6 +538,107 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
 
   job.processedCategories = [...processed, ...encoded.map((e) => e.category)]
   return await finalizeRecord(env, job)
+}
+
+// ---------------------------------------------------------------------------
+// Local-process (manual) helpers
+//
+// The "Poll & process (manual)" admin button avoids Worker CPU limits by
+// having the browser do the WebP encode. handleBatchPoll(skipProcess)
+// stops once raw PNGs are in R2 temp; the client then pulls each PNG,
+// encodes it locally, and POSTs the encoded bytes back via
+// applyProcessedCategoryUpload, which writes R2 + finalises when the
+// last category arrives.
+// ---------------------------------------------------------------------------
+
+function describeFetchedForLocalProcess(job: PendingBatchJob): BatchPollResult {
+  const jobCategories = job.requestedCategories ?? CATEGORIES
+  const processed = new Set(job.processedCategories)
+  const remaining = jobCategories.filter((c) => !processed.has(c))
+  return {
+    found: true,
+    message:
+      remaining.length === 0
+        ? `Job for ${job.targetDate} already fully processed; finalising.`
+        : `Batch for ${job.targetDate} ready for local processing (${remaining.length} categor${remaining.length === 1 ? 'y' : 'ies'} pending).`,
+    batchName: job.batchName,
+    targetDate: job.targetDate,
+    state: 'fetched',
+    submittedAt: job.submittedAt,
+    imagesProcessed: processed.size,
+    remainingCategories: remaining,
+  }
+}
+
+export async function applyProcessedCategoryUpload(
+  env: Bindings,
+  args: {
+    batchName: string
+    targetDate: string
+    category: PuzzleCategory
+    image: ArrayBuffer
+    thumbnail: ArrayBuffer
+    contentType?: string
+    extension?: string
+  },
+): Promise<BatchPollResult> {
+  const contentType = args.contentType ?? 'image/webp'
+  const extension = args.extension ?? 'webp'
+
+  await ensurePuzzleTables(env.DB)
+
+  const job = await getBatchJobByBatchName(env.DB, args.batchName)
+  if (!job) {
+    return {
+      found: false,
+      message: `No pending batch job for ${args.batchName}; it may have already been finalised.`,
+    }
+  }
+  if (job.targetDate !== args.targetDate) {
+    return {
+      found: false,
+      message: `Batch ${args.batchName} targets ${job.targetDate}, not ${args.targetDate}.`,
+    }
+  }
+
+  const requested = job.requestedCategories ?? CATEGORIES
+  if (!requested.includes(args.category)) {
+    return {
+      found: false,
+      message: `Category ${args.category} is not part of batch ${args.batchName}.`,
+    }
+  }
+
+  await Promise.all([
+    env.assets.put(`puzzles/${args.targetDate}/${args.category}.${extension}`, args.image, {
+      httpMetadata: { contentType },
+    }),
+    env.assets.put(`puzzles/${args.targetDate}/${args.category}_thumb.${extension}`, args.thumbnail, {
+      httpMetadata: { contentType },
+    }),
+    env.assets.delete(`temp/${args.targetDate}/${args.category}.png`),
+  ])
+
+  if (!job.processedCategories.includes(args.category)) {
+    job.processedCategories = [...job.processedCategories, args.category]
+  }
+
+  const stillRemaining = requested.filter((c) => !job.processedCategories.includes(c))
+  if (stillRemaining.length === 0) {
+    return await finalizeRecord(env, job)
+  }
+
+  await saveBatchJob(env.DB, job)
+  return {
+    found: true,
+    message: `Stored ${args.category} for ${args.targetDate}; ${stillRemaining.length} categor${stillRemaining.length === 1 ? 'y' : 'ies'} still to upload.`,
+    batchName: job.batchName,
+    targetDate: job.targetDate,
+    state: 'fetched',
+    submittedAt: job.submittedAt,
+    imagesProcessed: job.processedCategories.length,
+    remainingCategories: stillRemaining,
+  }
 }
 
 // ---------------------------------------------------------------------------

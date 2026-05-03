@@ -1523,7 +1523,79 @@ autoGenerateBtn.addEventListener('click', async () => {
   }
 })
 
-// ─── Manual Batch Poll ───
+// ─── Manual Batch Poll (local encode) ───
+//
+// Mirrors the cron Poll & Process but moves the WebP encode out of the
+// Worker and into the browser to dodge the Workers CPU budget. Worker
+// still polls Gemini and saves raw PNGs to R2 temp; this client then
+// pulls each PNG, encodes WebP main + thumbnail with canvas.toBlob,
+// and POSTs them back so the Worker can write R2 + finalise the DB.
+
+// Match the server-side defaults in apps/worker/src/lib/image.ts so
+// the manual path produces visually equivalent output to the cron
+// path. canvas.toBlob's quality is 0..1; libwebp q=78 maps to 0.78.
+const LOCAL_WEBP_QUALITY = 0.78
+const LOCAL_THUMB_WIDTH = 400
+
+async function blobToWebpAtSize(blob, width, height, quality) {
+  const url = URL.createObjectURL(blob)
+  try {
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = url
+    await img.decode()
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas unavailable')
+    ctx.drawImage(img, 0, 0, width, height)
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (out) => (out ? resolve(out) : reject(new Error('WebP encode failed'))),
+        'image/webp',
+        quality,
+      )
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function encodePuzzleImageLocally(pngBlob) {
+  // Load once to learn natural dimensions.
+  const url = URL.createObjectURL(pngBlob)
+  let naturalWidth, naturalHeight
+  try {
+    const probe = new Image()
+    probe.decoding = 'async'
+    probe.src = url
+    await probe.decode()
+    naturalWidth = probe.naturalWidth
+    naturalHeight = probe.naturalHeight
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+
+  if (!naturalWidth || !naturalHeight) {
+    throw new Error('Decoded PNG has no dimensions')
+  }
+
+  const fullBlob = await blobToWebpAtSize(pngBlob, naturalWidth, naturalHeight, LOCAL_WEBP_QUALITY)
+
+  let thumbBlob
+  if (naturalWidth <= LOCAL_THUMB_WIDTH) {
+    thumbBlob = fullBlob
+  } else {
+    const scale = LOCAL_THUMB_WIDTH / naturalWidth
+    const thumbHeight = Math.max(1, Math.round(naturalHeight * scale))
+    thumbBlob = await blobToWebpAtSize(pngBlob, LOCAL_THUMB_WIDTH, thumbHeight, LOCAL_WEBP_QUALITY)
+  }
+
+  return { fullBlob, thumbBlob }
+}
 
 batchPollBtn.addEventListener('click', async () => {
   if (!requireAuth()) {
@@ -1531,26 +1603,83 @@ batchPollBtn.addEventListener('click', async () => {
   }
 
   batchPollBtn.disabled = true
-  setStatus('Polling batch job status...', 'working')
+  setStatus('Polling batch (manual, local encode)...', 'working')
   try {
-    const { response, payload } = await adminFetch('/api/admin/generate-images/poll', {
-      method: 'POST',
-    })
-    if (response.status === 401) {
-      setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
+    const { response: pollResponse, payload: pollPayload } = await adminFetch(
+      '/api/admin/generate-images/poll',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skipProcess: true }),
+      },
+    )
+    if (pollResponse.status === 401) {
+      setStatus(pollPayload.error || 'Admin session expired. Sign in again.', 'error')
       return
     }
-    if (!response.ok) {
-      setStatus(payload.error || 'Batch poll failed.', 'error')
+    if (!pollResponse.ok) {
+      setStatus(pollPayload.error || 'Batch poll failed.', 'error')
       return
     }
 
-    setStatus(payload.message || 'Batch poll completed.', 'ok')
-    if (payload.savedDate) dateInput.value = payload.savedDate
+    const { batchName, targetDate, remainingCategories, message } = pollPayload
+    const ready = Array.isArray(remainingCategories) ? remainingCategories : []
+
+    // Nothing to encode locally: still pending at Gemini, paused, no
+    // jobs, or already finalised. Mirror the cron-poll status display.
+    if (!batchName || !targetDate || ready.length === 0) {
+      setStatus(message || 'Manual poll: nothing to process.', 'ok')
+      if (pollPayload.savedDate) dateInput.value = pollPayload.savedDate
+      await loadDateDetails()
+      refreshBatchStatus()
+      return
+    }
+
+    let lastSavedDate = null
+    for (let i = 0; i < ready.length; i++) {
+      const category = ready[i]
+      setStatus(
+        `Processing ${category} locally (${i + 1}/${ready.length}) for ${targetDate}...`,
+        'working',
+      )
+
+      const tempPath = `/api/admin/generate-images/temp/${encodeURIComponent(targetDate)}/${encodeURIComponent(category)}`
+      const tempResponse = await fetch(apiUrl(tempPath), { credentials: 'include' })
+      if (!tempResponse.ok) {
+        const err = await readJsonResponse(tempResponse)
+        setStatus(err.error || `Failed to fetch temp PNG for ${category}.`, 'error')
+        return
+      }
+      const pngBlob = await tempResponse.blob()
+
+      const { fullBlob, thumbBlob } = await encodePuzzleImageLocally(pngBlob)
+
+      const fd = new FormData()
+      fd.append('batchName', batchName)
+      fd.append('date', targetDate)
+      fd.append('category', category)
+      fd.append('image', fullBlob, `${category}.webp`)
+      fd.append('thumbnail', thumbBlob, `${category}_thumb.webp`)
+
+      const { response: upResponse, payload: upPayload } = await adminFetch(
+        '/api/admin/generate-images/upload-processed',
+        { method: 'POST', body: fd },
+      )
+      if (!upResponse.ok) {
+        setStatus(upPayload.error || `Upload failed for ${category}.`, 'error')
+        return
+      }
+      if (upPayload.savedDate) lastSavedDate = upPayload.savedDate
+    }
+
+    setStatus(`Manual processing complete for ${targetDate}.`, 'ok')
+    if (lastSavedDate) dateInput.value = lastSavedDate
+    else dateInput.value = targetDate
     await loadDateDetails()
     refreshBatchStatus()
-  } catch {
-    setStatus('Network error during batch poll.', 'error')
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Manual poll failed.'
+    setStatus(`Manual poll failed: ${msg}`, 'error')
   } finally {
     batchPollBtn.disabled = false
   }
