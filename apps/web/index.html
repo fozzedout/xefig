@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0a0a0f" />
+    <meta name="theme-color" content="#0a0a0f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Xefig" />
@@ -55,11 +56,29 @@
   </head>
   <body>
     <div id="app">
-      <!-- Pre-rendered shell: replaced by initAppShell() once the module loads. -->
-      <div class="app-page visible" style="background:#0a0a0f;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;height:100%">
+      <!-- Pre-rendered shell: replaced by initAppShell() once the module loads.
+           Background + text track prefers-color-scheme so the flash before
+           hydration doesn't fight the OS theme. -->
+      <div class="app-page visible boot-shell">
         Loading&hellip;
       </div>
     </div>
+    <style>
+      .boot-shell {
+        background: #0a0a0f;
+        color: rgba(232, 230, 224, 0.5);
+        display: grid;
+        place-items: center;
+        font-size: 0.9rem;
+        height: 100%;
+      }
+      @media (prefers-color-scheme: light) {
+        .boot-shell {
+          background: #f4f7fb;
+          color: rgba(16, 33, 49, 0.5);
+        }
+      }
+    </style>
     <script>
       // Brick-recovery: if the JS bundle never executes (cached HTML
       // referencing a deleted asset hash → silent module-script 404 on

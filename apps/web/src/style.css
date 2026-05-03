@@ -6217,3 +6217,264 @@ canvas.slice-image {
     }
   }
 }
+
+/* ─── Light-mode adaptation for app chrome ───────────────────────────────
+   The app's UI shell (top nav, settings, archive, modals, sheets, in-game
+   dropdown menu containers) flips to a light surface when the OS theme is
+   light. Game elements stay dark regardless: the slice-launcher home page
+   is puzzle-preview imagery, the game-shell + boards + trays are tuned
+   for a dark canvas, and in-game buttons (gt-icon-btn) keep their dark
+   styling so they read against any artwork. The dropdown menu trigger
+   stays dark; only the menu popover follows the OS theme.
+
+   Variables --bg/--surface/--surface-2/--text/--muted/--line/--accent
+   already flip in @media (prefers-color-scheme: dark) at the top of this
+   file, so light mode just needs to swap the hardcoded dark literals
+   that predate variableisation. */
+@media (prefers-color-scheme: light) {
+
+  /* Body / html: the dark fill behind everything is no longer wanted. */
+  html { background: var(--bg); }
+  body { background: var(--bg); color: var(--text); }
+
+  /* Top nav: dark gradient hood → light gradient hood. Over the dark
+     slice-launcher this leaves a subtle light fade at the very top, which
+     mirrors how the existing dark gradient sits over the daylight imagery
+     in dark mode. */
+  .top-nav {
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--bg) 92%, transparent) calc(var(--sai-top) + 31px),
+      color-mix(in oklab, var(--bg) 0%, transparent)
+    );
+  }
+  .top-nav.solid {
+    background: color-mix(in oklab, var(--bg) 95%, transparent);
+    border-bottom-color: color-mix(in oklab, var(--text) 8%, transparent);
+  }
+  .nav-brand { color: var(--text); }
+  .nav-brand::after { background: color-mix(in oklab, var(--text) 12%, transparent); }
+  .nav-tab { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  .nav-tab:hover,
+  .nav-tab.active { color: var(--text); }
+
+  /* Page back button (sub-pages). */
+  .page-back-btn {
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    background: color-mix(in oklab, var(--text) 6%, transparent);
+    color: color-mix(in oklab, var(--text) 70%, transparent);
+  }
+  .page-back-btn:hover {
+    color: var(--text);
+    background: color-mix(in oklab, var(--text) 12%, transparent);
+  }
+
+  /* Settings page. */
+  .settings-page { background: var(--bg); color: var(--text); }
+  .settings-header p,
+  .settings-row-sub,
+  .settings-subtitle,
+  .about-text,
+  .contact-label,
+  .sync-description,
+  .sync-divider,
+  .sync-field-label,
+  .sync-hint,
+  .settings-color-label { color: color-mix(in oklab, var(--text) 60%, transparent); }
+  .settings-section {
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    background: var(--surface);
+  }
+  .settings-section-summary { color: var(--text); }
+  .settings-section-summary:hover { background: color-mix(in oklab, var(--text) 5%, transparent); }
+  .settings-section-chevron { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  .settings-section-body { border-top-color: color-mix(in oklab, var(--text) 6%, transparent); }
+  .settings-toggle { background: color-mix(in oklab, var(--text) 18%, transparent); }
+  .settings-volume-slider { background: color-mix(in oklab, var(--text) 20%, transparent); }
+  .settings-volume-slider::-webkit-slider-thumb { background: var(--text); }
+  .settings-volume-slider::-moz-range-thumb { background: var(--text); }
+  .settings-color-swatch { border-color: color-mix(in oklab, var(--text) 15%, transparent); }
+  .settings-color-swatch:hover { border-color: color-mix(in oklab, var(--text) 35%, transparent); }
+  .settings-nav-link { color: color-mix(in oklab, var(--text) 65%, transparent); }
+  .settings-nav-link:hover {
+    background: color-mix(in oklab, var(--text) 6%, transparent);
+    color: var(--text);
+  }
+  .contact-input,
+  .sync-name-input,
+  .sync-code-input {
+    color: var(--text);
+    background: color-mix(in oklab, var(--text) 5%, transparent);
+    border-color: color-mix(in oklab, var(--text) 12%, transparent);
+  }
+  .contact-input:focus,
+  .sync-name-input:focus,
+  .sync-code-input:focus { border-color: color-mix(in oklab, var(--text) 35%, transparent); }
+  .contact-input::placeholder,
+  .sync-name-input::placeholder,
+  .sync-code-input::placeholder { color: color-mix(in oklab, var(--text) 35%, transparent); }
+  .sync-copy-btn {
+    color: color-mix(in oklab, var(--text) 65%, transparent);
+    background: color-mix(in oklab, var(--text) 6%, transparent);
+    border-color: color-mix(in oklab, var(--text) 12%, transparent);
+  }
+  .sync-copy-btn:hover {
+    color: var(--text);
+    border-color: color-mix(in oklab, var(--text) 30%, transparent);
+  }
+  .sync-code-reveal {
+    color: var(--text);
+    background: color-mix(in oklab, var(--bg) 35%, transparent);
+  }
+
+  /* Archive page (calendar). */
+  .archive-page {
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 90% 55% at 50% 0%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 0% 100%, rgba(160, 96, 240, 0.06), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(240, 192, 64, 0.06), transparent 70%),
+      radial-gradient(ellipse 40% 30% at 100% 0%, rgba(80, 232, 160, 0.06), transparent 70%),
+      linear-gradient(transparent 0, transparent 47px, color-mix(in oklab, var(--accent) 8%, transparent) 47px, color-mix(in oklab, var(--accent) 8%, transparent) 48px),
+      linear-gradient(90deg, transparent 0, transparent 47px, color-mix(in oklab, var(--accent) 8%, transparent) 47px, color-mix(in oklab, var(--accent) 8%, transparent) 48px);
+    color: var(--text);
+  }
+  .cal-nav-arrow {
+    background: var(--surface);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    color: color-mix(in oklab, var(--text) 60%, transparent);
+  }
+  .cal-nav-arrow:hover {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--text) 18%, transparent);
+    color: var(--text);
+  }
+  .cal-nav-title { color: var(--text); }
+  .cal-nav-title:hover { background: color-mix(in oklab, var(--text) 5%, transparent); }
+  .cal-nav-title .year-label { color: color-mix(in oklab, var(--text) 60%, transparent); }
+  .cal-nav-title .chevron { color: color-mix(in oklab, var(--text) 35%, transparent); }
+
+  /* Day-detail modal. */
+  .day-detail-sheet {
+    background: var(--surface);
+    border-color: color-mix(in oklab, var(--text) 14%, transparent);
+    color: var(--text);
+  }
+  .day-detail-close {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    color: color-mix(in oklab, var(--text) 60%, transparent);
+  }
+  .day-detail-close:hover {
+    color: var(--text);
+    border-color: color-mix(in oklab, var(--text) 18%, transparent);
+  }
+  .day-detail-title { color: var(--text); }
+  .day-detail-sub,
+  .day-detail-loading { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .day-detail-thumbs .puzzle-thumb {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+  }
+
+  /* Year-picker modal. */
+  .year-picker-sheet {
+    background: var(--surface);
+    border-color: color-mix(in oklab, var(--text) 14%, transparent);
+    color: var(--text);
+  }
+  .year-picker-close {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    color: color-mix(in oklab, var(--text) 60%, transparent);
+  }
+  .year-picker-close:hover {
+    color: var(--text);
+    border-color: color-mix(in oklab, var(--text) 18%, transparent);
+  }
+
+  /* Sync conflict modal. */
+  .sync-conflict-dialog {
+    background: var(--surface);
+    border-color: color-mix(in oklab, var(--text) 12%, transparent);
+    color: var(--text);
+  }
+  .sync-conflict-title,
+  .sync-conflict-card-label { color: var(--text); }
+  .sync-conflict-card {
+    background: color-mix(in oklab, var(--text) 5%, transparent);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+  }
+  .sync-conflict-card:hover,
+  .sync-conflict-card:focus-visible {
+    background: color-mix(in oklab, var(--text) 9%, transparent);
+  }
+  .sync-conflict-card-saved { color: color-mix(in oklab, var(--text) 80%, transparent); }
+  .sync-conflict-card-elapsed,
+  .sync-conflict-footer { color: color-mix(in oklab, var(--text) 60%, transparent); }
+
+  /* Install guide modal. */
+  .install-guide {
+    background: linear-gradient(160deg, var(--surface), var(--surface-2));
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    color: var(--text);
+  }
+  .install-guide-close { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  .install-guide-close:hover {
+    background: color-mix(in oklab, var(--text) 6%, transparent);
+    color: var(--text);
+  }
+  .install-guide-brand-icon {
+    border-color: color-mix(in oklab, var(--text) 8%, transparent);
+  }
+  .install-guide-brand-name { color: var(--text); }
+  .install-guide-brand-domain,
+  .install-guide-section-label,
+  .install-guide-note { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .install-guide-body,
+  .install-guide-step { color: color-mix(in oklab, var(--text) 80%, transparent); }
+  .install-guide-body strong,
+  .install-guide-step-label strong { color: var(--text); }
+  .install-guide-step-icon { color: color-mix(in oklab, var(--text) 65%, transparent); }
+
+  /* More sheet (the modal version of the More menu). */
+  .more-sheet {
+    background: linear-gradient(135deg, var(--surface), var(--surface-2));
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    color: var(--text);
+  }
+  .more-sheet-close { color: color-mix(in oklab, var(--text) 60%, transparent); }
+  .more-sheet-close:hover {
+    background: color-mix(in oklab, var(--text) 6%, transparent);
+    color: var(--text);
+  }
+  .more-sheet-title { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .more-sheet-card {
+    background: color-mix(in oklab, var(--text) 4%, transparent);
+    border-color: color-mix(in oklab, var(--text) 8%, transparent);
+    color: var(--text);
+  }
+  .more-sheet-card:hover {
+    background: color-mix(in oklab, var(--text) 8%, transparent);
+    border-color: color-mix(in oklab, var(--text) 14%, transparent);
+  }
+  .more-sheet-card-icon { color: color-mix(in oklab, var(--text) 80%, transparent); }
+  .more-sheet-card-sub { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .more-sheet-handle { background: color-mix(in oklab, var(--text) 22%, transparent); }
+  .more-card-sync-cloud { background: var(--surface-2); }
+  .more-sheet-card--music.is-off .music-off-slash {
+    stroke: color-mix(in oklab, var(--text) 55%, transparent);
+  }
+
+  /* In-game dropdown menu container.
+     Per spec: the menu *popover* follows the OS theme, but the trigger
+     button (.gt-icon-btn) stays dark — it lives in the game toolbar with
+     the rest of the in-game chrome. */
+  .gt-menu {
+    background: color-mix(in oklab, var(--surface) 96%, transparent);
+    border-color: color-mix(in oklab, var(--text) 12%, transparent);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  }
+  .gt-menu-item { color: var(--text); }
+  .gt-menu-item:hover { background: color-mix(in oklab, var(--text) 8%, transparent); }
+}
