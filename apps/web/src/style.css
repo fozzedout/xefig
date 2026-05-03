@@ -2707,6 +2707,36 @@ canvas.slice-image {
   }
 }
 
+/* ─── More slice — light-mode adaptation ─────────────────────────────
+   Android PWA: the system nav bar follows the OS theme (white in light
+   mode). With a hardcoded dark More slice the seam between them is
+   jarring. Flip the slice to a light surface in light mode so it blends
+   with the system bar; dark mode keeps the original look.
+   Selectors are 0,5,0 specific so they beat the .ls-default
+   .slice.active .slice-overlay rule. */
+@media (prefers-color-scheme: light) {
+  .ls-default .slice-more {
+    background: linear-gradient(135deg, var(--surface-2), var(--bg));
+  }
+  .ls-default .slice-more .slice-overlay,
+  .ls-default .slice.active.slice-more .slice-overlay {
+    background: transparent;
+  }
+  .ls-default .slice-more .slice-title {
+    color: color-mix(in oklab, var(--text) 70%, transparent);
+  }
+  .ls-default .slice.active.slice-more .slice-title {
+    color: var(--text);
+  }
+  .ls-default .slice-more .slice-icon {
+    color: color-mix(in oklab, var(--text) 50%, transparent);
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
+  }
+  .ls-default .slice.active.slice-more .slice-icon {
+    color: var(--text);
+  }
+}
+
 /* ─── Small screen adjustments ─── */
 @media (max-width: 768px) {
   .bar-title { font-size: clamp(1.1rem, 4vw, 1.6rem); }
