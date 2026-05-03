@@ -4414,6 +4414,25 @@ canvas.slice-image {
   opacity: 1;
 }
 
+/* Dashed marker that signals where the empty slot is supposed to end
+   up when the puzzle is solved. Sits behind the tile layer and the
+   victory tile so it never visually clashes with active gameplay. */
+.sliding-gap-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.35);
+  border-radius: 0.2rem;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 200ms ease;
+}
+
+.sliding-gap-marker.is-hidden {
+  opacity: 0;
+}
+
 .picture-swap-root {
   width: 100%;
   height: 100%;

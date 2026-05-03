@@ -67,6 +67,14 @@ export class SlidingTilePuzzle {
     this.calculateGrid()
     this.totalSlots = this.cols * this.rows
     this.tileCount = this.totalSlots - 1
+    // The slot that contains no tile when solved — i.e. where the
+    // empty space "lives." Starts at the last canonical slot, and is
+    // remapped alongside everything else when transposeGrid runs so
+    // it tracks rotation correctly. Both paintVictoryTileFace and
+    // paintGapMarker reference this rather than totalSlots-1 so the
+    // dashed marker / final piece appear in the right corner after
+    // landscape↔portrait rotations.
+    this.emptyHomeIndex = this.totalSlots - 1
 
     this.createLayout()
     this.createTiles()
@@ -80,10 +88,26 @@ export class SlidingTilePuzzle {
 
     this.lastOrientation = this.getOrientation()
     window.addEventListener('resize', this.handleWindowResize)
+
+    // The window-resize listener alone misses the case where the
+    // container itself changes size without the viewport changing —
+    // happens on first mount when the layout hasn't settled, after a
+    // sibling sheet/modal closes and reflows the page, etc. Without
+    // this the puzzle renders at whatever container size we measured
+    // during init() and stays at that wrong size until the user
+    // happens to resize the window.
+    if (typeof ResizeObserver !== 'undefined') {
+      this.containerObserver = new ResizeObserver(() => this.onWindowResize())
+      this.containerObserver.observe(this.container)
+    }
   }
 
   destroy() {
     window.removeEventListener('resize', this.handleWindowResize)
+    if (this.containerObserver) {
+      this.containerObserver.disconnect()
+      this.containerObserver = null
+    }
 
     if (this.tiles.length) {
       for (const tile of this.tiles) {
@@ -185,6 +209,9 @@ export class SlidingTilePuzzle {
     if (typeof this.emptyIndex === 'number') {
       this.emptyIndex = remap(this.emptyIndex)
     }
+    if (typeof this.emptyHomeIndex === 'number') {
+      this.emptyHomeIndex = remap(this.emptyHomeIndex)
+    }
 
     this.cols = newCols
     this.rows = newRows
@@ -210,10 +237,18 @@ export class SlidingTilePuzzle {
     this.tileLayer = document.createElement('div')
     this.tileLayer.className = 'sliding-tile-layer'
 
+    // Dashed marker at the canonical-last slot — shows new players
+    // where the empty space is supposed to end up when the puzzle is
+    // solved. Hidden once the board reaches the solved state (the
+    // victoryTile takes over and fills the cell).
+    this.gapMarker = document.createElement('div')
+    this.gapMarker.className = 'sliding-gap-marker'
+    this.gapMarker.setAttribute('aria-hidden', 'true')
+
     this.victoryTile = document.createElement('div')
     this.victoryTile.className = 'sliding-victory-tile'
 
-    this.board.append(this.referenceImage, this.tileLayer, this.victoryTile)
+    this.board.append(this.referenceImage, this.gapMarker, this.tileLayer, this.victoryTile)
     this.boardFrame.append(this.board)
     this.root.append(this.boardFrame)
     this.container.append(this.root)
@@ -285,9 +320,9 @@ export class SlidingTilePuzzle {
   }
 
   paintVictoryTileFace() {
-    const lastIndex = this.totalSlots - 1
-    const tileRow = Math.floor(lastIndex / this.cols)
-    const tileCol = lastIndex % this.cols
+    const slot = this.emptyHomeIndex ?? this.totalSlots - 1
+    const tileRow = Math.floor(slot / this.cols)
+    const tileCol = slot % this.cols
     const cover = this.getCoverMetrics()
 
     this.victoryTile.style.backgroundImage = `url("${this.displayImageUrl}")`
@@ -296,6 +331,16 @@ export class SlidingTilePuzzle {
     this.victoryTile.style.width = `${this.tileSize}px`
     this.victoryTile.style.height = `${this.tileSize}px`
     this.victoryTile.style.transform = `translate(${tileCol * this.tileSize}px, ${tileRow * this.tileSize}px)`
+  }
+
+  paintGapMarker() {
+    if (!this.gapMarker) return
+    const slot = this.emptyHomeIndex ?? this.totalSlots - 1
+    const tileRow = Math.floor(slot / this.cols)
+    const tileCol = slot % this.cols
+    this.gapMarker.style.width = `${this.tileSize}px`
+    this.gapMarker.style.height = `${this.tileSize}px`
+    this.gapMarker.style.transform = `translate(${tileCol * this.tileSize}px, ${tileRow * this.tileSize}px)`
   }
 
   applyBoardSize() {
@@ -314,6 +359,7 @@ export class SlidingTilePuzzle {
     if (this.victoryTile) {
       this.paintVictoryTileFace()
     }
+    this.paintGapMarker()
   }
 
   getOrientation() {
@@ -618,6 +664,12 @@ export class SlidingTilePuzzle {
       return
     }
     this.victoryTile.classList.toggle('is-visible', Boolean(visible))
+    // Gap marker complements the victory tile: visible while solving
+    // (showing where the gap belongs), hidden once the puzzle is
+    // solved (the victory tile fills that slot).
+    if (this.gapMarker) {
+      this.gapMarker.classList.toggle('is-hidden', Boolean(visible))
+    }
   }
 
   getProgressState() {
@@ -635,6 +687,11 @@ export class SlidingTilePuzzle {
       rows: this.rows,
       slots: [...this.slots],
       emptyIndex: this.emptyIndex,
+      // emptyHomeIndex is the slot the empty occupies in the solved
+      // state. After an in-session rotation it's no longer
+      // `totalSlots - 1`; without serializing it the destination device
+      // would put the gap-marker / victory tile in the wrong corner.
+      emptyHomeIndex: this.emptyHomeIndex ?? this.totalSlots - 1,
       completed: this.completed,
       homes,
     }
@@ -705,6 +762,23 @@ export class SlidingTilePuzzle {
           tile.homeIndex = saved
         }
       }
+    }
+
+    // Restore where the empty's "home" lives. Legacy saves don't have
+    // it — derive from `homes` (the missing slot in tile-home coverage)
+    // when possible, fall back to totalSlots-1 otherwise.
+    const savedEmptyHome = Number(state.emptyHomeIndex)
+    if (Number.isInteger(savedEmptyHome) && savedEmptyHome >= 0 && savedEmptyHome < this.totalSlots) {
+      this.emptyHomeIndex = savedEmptyHome
+    } else if (Array.isArray(state.homes) && state.homes.length === this.tileCount) {
+      const claimed = new Set(state.homes)
+      let missing = this.totalSlots - 1
+      for (let i = 0; i < this.totalSlots; i += 1) {
+        if (!claimed.has(i)) { missing = i; break }
+      }
+      this.emptyHomeIndex = missing
+    } else {
+      this.emptyHomeIndex = this.totalSlots - 1
     }
 
     this.completed = Boolean(state.completed) || this.isSolved()

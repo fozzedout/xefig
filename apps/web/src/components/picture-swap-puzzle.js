@@ -83,10 +83,22 @@ export class PictureSwapPuzzle {
 
     this.lastOrientation = this.getOrientation()
     window.addEventListener('resize', this.handleWindowResize)
+
+    // Same fix as the slider: window-resize alone misses the case
+    // where the container resizes without the viewport changing
+    // (initial mount before layout settles, parent reflow, etc.).
+    if (typeof ResizeObserver !== 'undefined') {
+      this.containerObserver = new ResizeObserver(() => this.onWindowResize())
+      this.containerObserver.observe(this.container)
+    }
   }
 
   destroy() {
     window.removeEventListener('resize', this.handleWindowResize)
+    if (this.containerObserver) {
+      this.containerObserver.disconnect()
+      this.containerObserver = null
+    }
     this.stopConfetti()
 
     if (this.tiles.length) {
