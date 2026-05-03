@@ -2490,9 +2490,17 @@ canvas.slice-image {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* ─── More slice (landscape) ─── */
+  /* ─── More slice (landscape) ───
+     Circuit-board image ties the slice to a "system / utility" feel
+     and makes the dark seam against a light Android nav bar read as
+     intentional texture rather than a solid black wall. The
+     .slice-more .slice-overlay rule below adds a subtle darken so
+     the title + icon stay legible against the image's traces. */
   .ls-default .slice-more {
-    background: linear-gradient(135deg, #12121f, #0a0a0f);
+    background-color: #0a0a0f;
+    background-image: url('/more-bg.jpg');
+    background-size: cover;
+    background-position: center;
     cursor: pointer;
   }
 
@@ -2735,9 +2743,13 @@ canvas.slice-image {
   /* Remove divider lines — gap handles separation */
   .ls-default .slice::after { display: none; }
 
-  /* ─── More slice (portrait) ─── */
+  /* ─── More slice (portrait) ─── See landscape note above for the
+     image rationale. */
   .ls-default .slice-more {
-    background: linear-gradient(135deg, #12121f, #0a0a0f);
+    background-color: #0a0a0f;
+    background-image: url('/more-bg.jpg');
+    background-size: cover;
+    background-position: center;
     cursor: pointer;
   }
 
@@ -2751,32 +2763,22 @@ canvas.slice-image {
   }
 }
 
-/* ─── More slice — light-mode adaptation ─────────────────────────────
-   Android PWA: the system nav bar follows the OS theme (white in light
-   mode). With a hardcoded dark More slice the seam between them is
-   jarring. Flip the slice to a light surface when the user is in light
-   mode so the slice blends with the system bar; dark mode keeps the
-   original look. Triggered by data-theme="light" on <html> (set by the
-   theme bootstrap in index.html — handles manual and auto cases). */
-:root[data-theme="light"] .ls-default .slice-more {
-  background: linear-gradient(135deg, var(--surface-2), var(--bg));
-}
-:root[data-theme="light"] .ls-default .slice-more .slice-overlay,
-:root[data-theme="light"] .ls-default .slice.active.slice-more .slice-overlay {
-  background: transparent;
-}
-:root[data-theme="light"] .ls-default .slice-more .slice-title {
-  color: color-mix(in oklab, var(--text) 70%, transparent);
-}
-:root[data-theme="light"] .ls-default .slice.active.slice-more .slice-title {
-  color: var(--text);
-}
-:root[data-theme="light"] .ls-default .slice-more .slice-icon {
-  color: color-mix(in oklab, var(--text) 50%, transparent);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
-}
-:root[data-theme="light"] .ls-default .slice.active.slice-more .slice-icon {
-  color: var(--text);
+/* ─── More slice overlay — text legibility ───────────────────────────
+   The default slice-overlay (defined per-orientation in the .ls-default
+   blocks above) was tuned for puzzle artwork — a strong horizontal/
+   vertical fade for the title + bottom bar. Over the circuit-board
+   image that gradient looks misplaced. Use a softer, centered darken
+   so the title + icon always have a readable patch beneath them
+   without dimming the image edges. The selectors are 0,5,0 specific so
+   they beat the .ls-default .slice .slice-overlay rule. */
+.ls-default .slice-more .slice-overlay,
+.ls-default .slice.active.slice-more .slice-overlay {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.35) 55%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
 }
 
 /* ─── Small screen adjustments ─── */
