@@ -1,6 +1,6 @@
 import UPNG from 'upng-js'
 import jpeg from 'jpeg-js'
-import encodeWebp from '@jsquash/webp/encode'
+import encodeWebp, { init as initWebpEncoder } from '@jsquash/webp/encode'
 
 // WebP at q=78 is visually equivalent to JPEG q=85 but ~50% smaller
 // for the photographic / illustrated puzzle imagery we generate. The
@@ -47,7 +47,29 @@ function decodeImage(bytes: Uint8Array): RgbaImage {
   throw new Error(`Unsupported image format (magic: 0x${bytes[0]?.toString(16)}${bytes[1]?.toString(16)})`)
 }
 
+// Cloudflare Workers can't fetch the .wasm at runtime via the
+// emscripten loader's `new URL(..., import.meta.url)` fallback, so we
+// bundle the SIMD encoder as a module asset and pass it to init().
+// Workers supports WASM SIMD, so wasm-feature-detect picks the SIMD
+// codec and this module matches. The import is dynamic so Node-side
+// tests that transitively import this file but never encode (the .wasm
+// loader isn't registered in Node) don't trip on it.
+let webpInitPromise: Promise<unknown> | null = null
+function ensureWebpEncoderInit(): Promise<unknown> {
+  if (!webpInitPromise) {
+    webpInitPromise = (async () => {
+      const wasmExports = (await import(
+        // @ts-expect-error wrangler bundles .wasm imports as WebAssembly.Module
+        '../../../../node_modules/@jsquash/webp/codec/enc/webp_enc_simd.wasm'
+      )) as { default: WebAssembly.Module }
+      return initWebpEncoder(wasmExports.default)
+    })()
+  }
+  return webpInitPromise
+}
+
 async function encodeWebpImage(image: RgbaImage): Promise<Uint8Array> {
+  await ensureWebpEncoderInit()
   // @jsquash/webp expects an ImageData-shaped object with a
   // Uint8ClampedArray. Wrapping the existing Uint8Array is enough — the
   // underlying buffer is shared, no copy.
