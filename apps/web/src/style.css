@@ -6333,6 +6333,38 @@ canvas.slice-image {
     background: color-mix(in oklab, var(--bg) 35%, transparent);
   }
 
+  /* Sync action buttons: the bright #50e8a0 fill makes the dark #0a0a0f
+     text read as illegible "dark on dark" against a saturated mint on
+     light backgrounds. Shift the fill to a deeper green and run white
+     text across all the sync action surfaces. */
+  .sync-enable-btn,
+  .sync-link-btn {
+    background: #167544;
+    color: #ffffff;
+  }
+  .sync-enable-btn:hover,
+  .sync-link-btn:hover { background: #0f5c35; }
+  .sync-now-btn {
+    color: #ffffff;
+    background: #167544;
+    border-color: #167544;
+  }
+  .sync-now-btn:hover { background: #0f5c35; }
+  .sync-status-ok { color: #167544; }
+  /* Share code value: light #50e8a0 disappears on a light card; use
+     the same deeper green so the code is legible at a distance. */
+  .sync-code-value { color: #167544; }
+  /* Sync-celebrate-share modal CTA — same family. */
+  .sync-celebrate-share {
+    background: #167544;
+    color: #ffffff;
+  }
+  .sync-celebrate-share:hover { background: #0f5c35; }
+  /* Contact-form submit shares the same light-green-on-dark pattern. */
+  .contact-submit { color: #ffffff; background: #167544; }
+  .contact-submit:hover { background: #0f5c35; }
+  .contact-status-ok { color: #167544; }
+
   /* Archive page (calendar). */
   .archive-page {
     background-color: var(--bg);
@@ -6533,9 +6565,13 @@ canvas.slice-image {
   .more-sheet-card-icon { color: color-mix(in oklab, var(--text) 80%, transparent); }
   .more-sheet-card-sub { color: color-mix(in oklab, var(--text) 55%, transparent); }
   .more-sheet-handle { background: color-mix(in oklab, var(--text) 22%, transparent); }
-  /* .more-card-sync-cloud keeps its hardcoded #1a1a2a backdrop in light
-     mode: the green/amber/red status icon needs a dark circle behind it
-     for contrast — the indicator reads as "lit" against any card colour. */
+  /* Sync-status cloud: drop the dark backdrop on a light card and shift
+     each state colour to a deeper hue so the cloud reads at a glance
+     (the original light tones were tuned for a dark backdrop). */
+  .more-card-sync-cloud { background: transparent; color: #167544; }
+  .more-card-sync-cloud[data-state="syncing"] { color: #b87214; }
+  .more-card-sync-cloud[data-state="pending"] { color: #b87214; }
+  .more-card-sync-cloud[data-state="error"] { color: #b02f3a; }
   .more-sheet-card--music.is-off .music-off-slash {
     stroke: color-mix(in oklab, var(--text) 55%, transparent);
   }
