@@ -1139,7 +1139,6 @@ h1 {
   height: 220px;
   max-width: 100%;
   max-height: 100%;
-  filter: drop-shadow(0 12px 36px rgba(240,192,64,0.18));
 }
 .month-hero-title {
   display: none; /* shown in landscape only */
@@ -1277,6 +1276,13 @@ h1 {
 }
 
 /* The brand glyph used per day cell */
+/* Day-cell glyph + week/month/year medal SVGs.
+   The medal builders in main.js render onyx-bodied coins with inline
+   gradient fills + an SVG drop-shadow filter — those don't touch the
+   classes below. The class-based rules below are for the
+   .completion-glyph used by the puzzle-complete modal, which still
+   uses the older glyph structure (ring-bg + star-ghost + per-mode
+   petal/arm groups) so its animations can target each piece. */
 .glyph {
   display: block;
   margin: 0 auto;
@@ -1311,10 +1317,6 @@ h1 {
   stroke: #FFD700;
   stroke-width: 3;
 }
-.glyph[data-inprogress="1"] .ring-bg {
-  stroke: rgba(240,192,64,0.5);
-  stroke-dasharray: 2 3;
-}
 
 /* Week strip under the grid — one column per week, always single-row */
 .week-strip {
@@ -1345,17 +1347,14 @@ h1 {
   margin-top: 2px;
 }
 
-/* Tier-medal shared styling (week / month / year svg) */
+/* Tier-medal shared styling (week / month / year svg).
+   Pip / tick / ring colours are baked into the SVG attributes by the
+   medal builders, so no CSS styling needed. The medal carries its own
+   shadow via an SVG <feDropShadow> filter, so don't apply a CSS filter
+   here — that would double-shadow. */
 .tier-svg {
   display: block;
-  filter: drop-shadow(0 8px 24px rgba(240,192,64,0.16));
 }
-.pip-empty   { fill: rgba(232,230,224,0.18); }
-.pip-filled  { fill: #FFD700; }
-.tick-empty  { stroke: rgba(232,230,224,0.22); stroke-width: 4; stroke-linecap: round; }
-.tick-filled { stroke: #FFD700; stroke-width: 4.5; stroke-linecap: round; }
-.gold-ring   { stroke: url(#gold-grad); fill: none; stroke-width: 4; }
-.frame-ring  { stroke: rgba(232,230,224,0.18); fill: none; stroke-width: 3; }
 
 /* Page dots (12 months in year) */
 .cal-dots {
@@ -6392,10 +6391,8 @@ canvas.slice-image {
   .cal-nav-title .year-label { color: color-mix(in oklab, var(--text) 60%, transparent); }
   .cal-nav-title .chevron { color: color-mix(in oklab, var(--text) 35%, transparent); }
 
-  /* Month hero (medal + counters above the grid). */
-  .month-hero-medal svg.tier-svg {
-    filter: drop-shadow(0 12px 36px rgba(240, 192, 64, 0.32));
-  }
+  /* Month hero (counters above the grid). The medal carries its own
+     SVG drop-shadow now, so don't add a CSS filter on top. */
   .month-hero-title-month { color: var(--text); }
   .month-hero-title-year { color: color-mix(in oklab, var(--text) 55%, transparent); }
   .month-hero-counter { color: var(--text); }
@@ -6436,20 +6433,8 @@ canvas.slice-image {
   }
   .day.resume-highlight .num { color: rgba(160, 60, 100, 0.95); }
 
-  /* Glyph (per-day brand mark). Light bg needs darker outlines for
-     unfilled state; filled/gold elements stay because they're already
-     saturated enough to read on either bg. */
-  .glyph .ring-bg {
-    fill: rgba(0, 0, 0, 0.025);
-    stroke: rgba(0, 0, 0, 0.12);
-  }
-  .glyph .star-ghost { stroke: color-mix(in oklab, var(--text) 35%, transparent); }
-
-  /* Tier-medal (week / month / year svg pips). The "empty" pip/tick
-     colour was tuned for a dark canvas; flip the alpha base to text. */
-  .pip-empty { fill: color-mix(in oklab, var(--text) 22%, transparent); }
-  .tick-empty { stroke: color-mix(in oklab, var(--text) 28%, transparent); }
-  .frame-ring { stroke: color-mix(in oklab, var(--text) 22%, transparent); }
+  /* Glyph + tier medal SVGs are self-contained gold-on-onyx coins —
+     they read well on either canvas without per-theme overrides. */
 
   /* Week strip + page dots. */
   .week-strip { border-top-color: color-mix(in oklab, var(--text) 10%, transparent); }

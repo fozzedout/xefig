@@ -1743,6 +1743,21 @@ const ARCHIVE_SVG_DEFS_HTML = `
         <stop offset="0.5" stop-color="#f0c040"/>
         <stop offset="1"   stop-color="#a87a1a"/>
       </linearGradient>
+      <radialGradient id="medal-onyx-empty" cx="35%" cy="28%" r="78%">
+        <stop offset="0%"   stop-color="#52585f"/>
+        <stop offset="35%"  stop-color="#2a2e34"/>
+        <stop offset="80%"  stop-color="#0e1014"/>
+        <stop offset="100%" stop-color="#000000"/>
+      </radialGradient>
+      <radialGradient id="medal-onyx-full" cx="35%" cy="28%" r="78%">
+        <stop offset="0%"   stop-color="#6a7078"/>
+        <stop offset="35%"  stop-color="#34383e"/>
+        <stop offset="80%"  stop-color="#14181c"/>
+        <stop offset="100%" stop-color="#000000"/>
+      </radialGradient>
+      <filter id="medal-shadow" x="-25%" y="-25%" width="150%" height="150%">
+        <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000" flood-opacity="0.35"/>
+      </filter>
     </defs>
   </svg>
 `
@@ -1752,55 +1767,74 @@ function pointOnArchiveCircle(angleDeg, r) {
   return [Math.cos(a) * r, Math.sin(a) * r]
 }
 
-function makeArchiveGlyph({ done = [], inprogress = false } = {}) {
-  const ns = 'http://www.w3.org/2000/svg'
-  const allDone = done.length === ARCHIVE_GLYPH_MODES.length
-  const svg = document.createElementNS(ns, 'svg')
-  svg.setAttribute('viewBox', '-100 -100 200 200')
-  svg.classList.add('glyph')
-  if (allDone) svg.dataset.complete = '1'
-  if (inprogress && !allDone) svg.dataset.inprogress = '1'
+// ─── Medal SVG (day / week / month) ───────────────────────────────────
+// All three sizes share the same construction: an onyx body with a gold
+// trim ring inset slightly so the onyx edge wraps it, an inner bezel
+// hairline, the central petal/arm glyph, and a top-of-disc highlight
+// crescent that sells the "minted" look. Day medals show per-mode state
+// in the central glyph; week/month medals show progress via outer pips/
+// ticks that flip from a faint silver engraving to gold once lit.
+const MEDAL_SHADOW_FILTER = 'url(#medal-shadow)'
+const MEDAL_RIM = '#000000'
+const MEDAL_TICK_FILLED = '#fcd97a'
+const MEDAL_TICK_EMPTY = 'rgba(180, 185, 195, 0.18)'
+const MEDAL_ARM_ON = '#fcd97a'
+const MEDAL_ARM_OFF = 'rgba(150, 155, 165, 0.32)'
+const MEDAL_PETAL_OFF = '#9aa0a8'
+const MEDAL_PETAL_OFF_OPACITY = '0.28'
+const MEDAL_HIGHLIGHT = 'rgba(255, 255, 255, 0.22)'
 
-  const ring = document.createElementNS(ns, 'circle')
-  ring.setAttribute('r', '88')
-  ring.classList.add('ring-bg')
-  svg.appendChild(ring)
-
-  const root = document.createElementNS(ns, 'g')
-  root.setAttribute('transform', 'rotate(-20)')
-
-  const ghost = document.createElementNS(ns, 'use')
-  ghost.setAttribute('href', '#xefig-star-outline')
-  ghost.classList.add('star-ghost')
-  root.appendChild(ghost)
-
-  const doneSet = new Set(done)
-  ARCHIVE_GLYPH_MODES.forEach((m) => {
-    const g = document.createElementNS(ns, 'g')
-    g.setAttribute('data-mode', m.key)
-    if (doneSet.has(m.key)) g.dataset.done = '1'
-
-    const petal = document.createElementNS(ns, 'use')
-    petal.setAttribute('href', '#xefig-petal')
-    petal.setAttribute('transform', `rotate(${m.baseRot})`)
-    petal.setAttribute('fill', m.color)
-    petal.classList.add('petal')
-    g.appendChild(petal)
-
-    const arm = document.createElementNS(ns, 'use')
-    arm.setAttribute('href', '#xefig-arm')
-    arm.setAttribute('transform', `rotate(${m.baseRot})`)
-    arm.classList.add('arm')
-    g.appendChild(arm)
-
-    root.appendChild(g)
-  })
-
-  svg.appendChild(root)
-  return svg
+const MEDAL_GEOM = {
+  day:   { bodyR: 78, goldR: 72, goldWidth: 5.5, glyphScale: 0.62, highlightPath: 'M -56 -36 A 68 68 0 0 1 56 -36', highlightWidth: 1.1 },
+  week:  { bodyR: 82, goldR: 76, goldWidth: 3,   pipR: 64, pipSize: 5.5, bezelR: 52, glyphScale: 0.4, highlightPath: 'M -60 -38 A 72 72 0 0 1 60 -38', highlightWidth: 1.3 },
+  month: { bodyR: 92, goldR: 85, goldWidth: 4,   tickInner: 70, tickOuter: 80, tickWidthFilled: 4, tickWidthEmpty: 3, bezelR: 60, glyphScale: 0.46, highlightPath: 'M -68 -45 A 82 82 0 0 1 68 -45', highlightWidth: 1.5 },
 }
 
-function appendArchiveCentralGlyph(svg, scale) {
+function medalBodyDisc(geom, isComplete) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const disc = document.createElementNS(ns, 'circle')
+  disc.setAttribute('r', String(geom.bodyR))
+  disc.setAttribute('fill', isComplete ? 'url(#medal-onyx-full)' : 'url(#medal-onyx-empty)')
+  disc.setAttribute('stroke', MEDAL_RIM)
+  disc.setAttribute('stroke-width', '1.5')
+  return disc
+}
+
+function medalGoldRing(geom) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const ring = document.createElementNS(ns, 'circle')
+  ring.setAttribute('r', String(geom.goldR))
+  ring.setAttribute('fill', 'none')
+  ring.setAttribute('stroke', 'url(#gold-grad)')
+  ring.setAttribute('stroke-width', String(geom.goldWidth))
+  return ring
+}
+
+function medalBezel(geom) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const bezel = document.createElementNS(ns, 'circle')
+  bezel.setAttribute('r', String(geom.bezelR))
+  bezel.setAttribute('fill', 'none')
+  bezel.setAttribute('stroke', MEDAL_RIM)
+  bezel.setAttribute('stroke-opacity', '0.45')
+  bezel.setAttribute('stroke-width', '1')
+  return bezel
+}
+
+function medalHighlight(geom) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const path = document.createElementNS(ns, 'path')
+  path.setAttribute('d', geom.highlightPath)
+  path.setAttribute('stroke', MEDAL_HIGHLIGHT)
+  path.setAttribute('stroke-width', String(geom.highlightWidth))
+  path.setAttribute('fill', 'none')
+  path.setAttribute('stroke-linecap', 'round')
+  return path
+}
+
+// Decorative central glyph for the week / month medals — all 5 petals
+// always lit (this is the brand mark, not a state indicator).
+function appendArchiveCentralGlyph(svg, scale, isComplete) {
   const ns = 'http://www.w3.org/2000/svg'
   const g = document.createElementNS(ns, 'g')
   g.setAttribute('transform', `scale(${scale})`)
@@ -1817,70 +1851,150 @@ function appendArchiveCentralGlyph(svg, scale) {
   })
   g.appendChild(petalRoot)
 
-  const starRoot = document.createElementNS(ns, 'g')
-  starRoot.setAttribute('transform', 'rotate(-20)')
+  const armRoot = document.createElementNS(ns, 'g')
+  armRoot.setAttribute('transform', 'rotate(-20)')
   ARCHIVE_GLYPH_MODES.forEach((m) => {
     const arm = document.createElementNS(ns, 'use')
     arm.setAttribute('href', '#xefig-arm')
     arm.setAttribute('transform', `rotate(${m.baseRot})`)
-    arm.setAttribute('fill', '#FFD700')
-    starRoot.appendChild(arm)
+    arm.setAttribute('fill', isComplete ? MEDAL_ARM_ON : 'rgba(252, 217, 122, 0.55)')
+    armRoot.appendChild(arm)
   })
-  g.appendChild(starRoot)
+  g.appendChild(armRoot)
 
   svg.appendChild(g)
 }
 
+// Per-mode glyph for the daily medal — lit petal = mode finished, gold
+// arm. Unlit petals fade to a faint silver.
+function makeArchiveGlyph({ done = [] } = {}) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const geom = MEDAL_GEOM.day
+  const allDone = done.length === ARCHIVE_GLYPH_MODES.length
+
+  const svg = document.createElementNS(ns, 'svg')
+  svg.classList.add('glyph')
+  svg.setAttribute('viewBox', '-100 -100 200 200')
+  if (allDone) svg.dataset.complete = '1'
+
+  const body = document.createElementNS(ns, 'g')
+  body.setAttribute('filter', MEDAL_SHADOW_FILTER)
+  body.appendChild(medalBodyDisc(geom, allDone))
+  body.appendChild(medalGoldRing(geom))
+
+  const glyph = document.createElementNS(ns, 'g')
+  glyph.setAttribute('transform', `scale(${geom.glyphScale})`)
+
+  const doneSet = new Set(done)
+  const petalRoot = document.createElementNS(ns, 'g')
+  petalRoot.setAttribute('transform', 'rotate(-20)')
+  ARCHIVE_GLYPH_MODES.forEach((m) => {
+    const petal = document.createElementNS(ns, 'use')
+    petal.setAttribute('href', '#xefig-petal')
+    petal.setAttribute('transform', `rotate(${m.baseRot})`)
+    if (doneSet.has(m.key)) {
+      petal.setAttribute('fill', m.color)
+      petal.setAttribute('opacity', '0.95')
+    } else {
+      petal.setAttribute('fill', MEDAL_PETAL_OFF)
+      petal.setAttribute('opacity', MEDAL_PETAL_OFF_OPACITY)
+    }
+    petalRoot.appendChild(petal)
+  })
+  glyph.appendChild(petalRoot)
+
+  const armRoot = document.createElementNS(ns, 'g')
+  armRoot.setAttribute('transform', 'rotate(-20)')
+  ARCHIVE_GLYPH_MODES.forEach((m) => {
+    const arm = document.createElementNS(ns, 'use')
+    arm.setAttribute('href', '#xefig-arm')
+    arm.setAttribute('transform', `rotate(${m.baseRot})`)
+    arm.setAttribute('fill', doneSet.has(m.key) ? MEDAL_ARM_ON : MEDAL_ARM_OFF)
+    armRoot.appendChild(arm)
+  })
+  glyph.appendChild(armRoot)
+  body.appendChild(glyph)
+
+  svg.appendChild(body)
+  svg.appendChild(medalHighlight(geom))
+  return svg
+}
+
 function buildWeekMedal({ completed = [], totalDays = 7 }) {
   const ns = 'http://www.w3.org/2000/svg'
+  const geom = MEDAL_GEOM.week
   const svg = document.createElementNS(ns, 'svg')
   svg.classList.add('tier-svg')
   svg.setAttribute('viewBox', '-100 -100 200 200')
+
   const completedSet = new Set(completed)
   const isComplete = totalDays > 0 && completedSet.size === totalDays
-  const frame = document.createElementNS(ns, 'circle')
-  frame.setAttribute('r', '82')
-  frame.setAttribute('class', isComplete ? 'gold-ring' : 'frame-ring')
-  svg.appendChild(frame)
-  appendArchiveCentralGlyph(svg, 0.55)
+
+  const body = document.createElementNS(ns, 'g')
+  body.setAttribute('filter', MEDAL_SHADOW_FILTER)
+  body.appendChild(medalBodyDisc(geom, isComplete))
+  body.appendChild(medalGoldRing(geom))
+
   for (let i = 0; i < totalDays; i++) {
     const angle = (360 / totalDays) * i - 90
-    const [x, y] = pointOnArchiveCircle(angle + 90, 70)
+    const [x, y] = pointOnArchiveCircle(angle + 90, geom.pipR)
     const pip = document.createElementNS(ns, 'circle')
     pip.setAttribute('cx', x.toFixed(2))
     pip.setAttribute('cy', y.toFixed(2))
-    pip.setAttribute('r', '8')
-    pip.setAttribute('class', completedSet.has(i) ? 'pip-filled' : 'pip-empty')
-    svg.appendChild(pip)
+    pip.setAttribute('r', String(geom.pipSize))
+    pip.setAttribute('fill', completedSet.has(i) ? MEDAL_TICK_FILLED : MEDAL_TICK_EMPTY)
+    if (!completedSet.has(i)) {
+      pip.setAttribute('stroke', MEDAL_RIM)
+      pip.setAttribute('stroke-opacity', '0.4')
+      pip.setAttribute('stroke-width', '0.8')
+    }
+    body.appendChild(pip)
   }
+
+  body.appendChild(medalBezel(geom))
+  appendArchiveCentralGlyph(body, geom.glyphScale, isComplete)
+
+  svg.appendChild(body)
+  svg.appendChild(medalHighlight(geom))
   return svg
 }
 
 function buildMonthMedal({ completed = [], totalDays = 30 }) {
   const ns = 'http://www.w3.org/2000/svg'
+  const geom = MEDAL_GEOM.month
   const svg = document.createElementNS(ns, 'svg')
   svg.classList.add('tier-svg')
   svg.setAttribute('viewBox', '-100 -100 200 200')
+
   const completedSet = new Set(completed)
   const isComplete = totalDays > 0 && completedSet.size === totalDays
-  const frame = document.createElementNS(ns, 'circle')
-  frame.setAttribute('r', '95')
-  frame.setAttribute('class', isComplete ? 'gold-ring' : 'frame-ring')
-  svg.appendChild(frame)
-  appendArchiveCentralGlyph(svg, 0.55)
+
+  const body = document.createElementNS(ns, 'g')
+  body.setAttribute('filter', MEDAL_SHADOW_FILTER)
+  body.appendChild(medalBodyDisc(geom, isComplete))
+  body.appendChild(medalGoldRing(geom))
+
   for (let i = 0; i < totalDays; i++) {
     const angle = (360 / totalDays) * i
     const a = (angle - 90) * Math.PI / 180
-    const x1 = Math.cos(a) * 75, y1 = Math.sin(a) * 75
-    const x2 = Math.cos(a) * 93, y2 = Math.sin(a) * 93
+    const x1 = Math.cos(a) * geom.tickInner, y1 = Math.sin(a) * geom.tickInner
+    const x2 = Math.cos(a) * geom.tickOuter, y2 = Math.sin(a) * geom.tickOuter
     const tick = document.createElementNS(ns, 'line')
     tick.setAttribute('x1', x1.toFixed(2))
     tick.setAttribute('y1', y1.toFixed(2))
     tick.setAttribute('x2', x2.toFixed(2))
     tick.setAttribute('y2', y2.toFixed(2))
-    tick.setAttribute('class', completedSet.has(i) ? 'tick-filled' : 'tick-empty')
-    svg.appendChild(tick)
+    tick.setAttribute('stroke', completedSet.has(i) ? MEDAL_TICK_FILLED : MEDAL_TICK_EMPTY)
+    tick.setAttribute('stroke-width', String(completedSet.has(i) ? geom.tickWidthFilled : geom.tickWidthEmpty))
+    tick.setAttribute('stroke-linecap', 'round')
+    body.appendChild(tick)
   }
+
+  body.appendChild(medalBezel(geom))
+  appendArchiveCentralGlyph(body, geom.glyphScale, isComplete)
+
+  svg.appendChild(body)
+  svg.appendChild(medalHighlight(geom))
   return svg
 }
 
