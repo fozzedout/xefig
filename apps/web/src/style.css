@@ -3244,6 +3244,13 @@ canvas.slice-image {
   color: #f06050;
 }
 
+.gt-menu-item--mute-toggle .mute-icon-muted,
+.gt-menu-item--mute-toggle .mute-label-muted { display: none; }
+.gt-menu-item--mute-toggle[aria-pressed='true'] .mute-icon-sound,
+.gt-menu-item--mute-toggle[aria-pressed='true'] .mute-label-sound { display: none; }
+.gt-menu-item--mute-toggle[aria-pressed='true'] .mute-icon-muted { display: inline-block; }
+.gt-menu-item--mute-toggle[aria-pressed='true'] .mute-label-muted { display: inline; }
+
 .gt-stats {
   display: flex;
   align-items: center;
@@ -4670,20 +4677,46 @@ canvas.slice-image {
   overscroll-behavior: contain;
 }
 
-/* Menu-style immersive modes (polygram, slider, swap): back button owns
-   top-left, so float the menu at top-right to avoid stacking. Jigsaw has
-   its own override (higher specificity via .jigsaw-root > ...). */
+/* Menu-style immersive modes (polygram, slider, swap, diamond): back button
+   owns top-left, so float the menu at top-right to avoid stacking. Jigsaw
+   has its own override (higher specificity via .jigsaw-root > ...). */
 .game-shell--polygram .floating-game-controls,
 .game-shell--sliding .floating-game-controls,
-.game-shell--swap .floating-game-controls {
+.game-shell--swap .floating-game-controls,
+.game-shell--diamond .floating-game-controls {
   top: calc(0.5rem + var(--sai-top));
   right: calc(0.5rem + var(--sai-right));
   left: auto;
 }
 
+/* Diamond menu mirrors the back button: same translucent idle state and
+   tighter 40px circle so the two read as a matched pair flanking the canvas. */
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating {
+  width: 40px;
+  height: 40px;
+  background: rgba(10, 10, 15, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  opacity: 0.35;
+  transition: opacity 180ms ease, background 180ms ease;
+}
+
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating svg {
+  width: 18px;
+  height: 18px;
+}
+
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:hover,
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:focus-visible,
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating[aria-expanded='true'] {
+  opacity: 1;
+  background: rgba(10, 10, 15, 0.8);
+}
+
 .game-shell--polygram .floating-game-controls .gt-menu--floating,
 .game-shell--sliding .floating-game-controls .gt-menu--floating,
-.game-shell--swap .floating-game-controls .gt-menu--floating {
+.game-shell--swap .floating-game-controls .gt-menu--floating,
+.game-shell--diamond .floating-game-controls .gt-menu--floating {
   left: auto;
   right: 0;
 }
@@ -6089,12 +6122,6 @@ canvas.slice-image {
   left: calc(0.5rem + var(--sai-left));
 }
 
-.diamond-floating-btn--restart {
-  top: calc(0.5rem + var(--sai-top));
-  right: calc(0.5rem + var(--sai-right));
-  color: #f06050;
-}
-
 /* Landscape: palette hugs the right edge of the screen, vertically centred
    so the canvas is visible above and below it. Back button sits at 16/16
    top-left, restart at 16/16 bottom-left so both float clear of the palette
@@ -6127,29 +6154,36 @@ canvas.slice-image {
     top: 16px;
     left: 16px;
   }
-  .diamond-floating-btn--restart {
+  /* Palette occupies the right side, so float the menu bottom-left instead
+     (mirrors where the restart button used to live in portrait/landscape). */
+  .game-shell--diamond .floating-game-controls {
     top: auto;
     bottom: 16px;
     left: 16px;
     right: auto;
   }
+  .game-shell--diamond .floating-game-controls .gt-menu--floating {
+    top: auto;
+    bottom: calc(100% + 0.55rem);
+    left: 0;
+    right: auto;
+  }
 }
 
-/* iPhone PWA (standalone): place the portrait buttons at the safe-area
-   line so they're below the notch and reliably tappable. Landscape uses
-   the fixed 16px offsets already defined above. */
+/* iPhone PWA (standalone): place the portrait back button + menu at the
+   safe-area line so they're flush below the notch and reliably tappable.
+   Landscape uses the fixed 16px offsets already defined above. */
 @media (display-mode: standalone) {
   .diamond-floating-btn--back,
-  .diamond-floating-btn--restart {
+  .game-shell--diamond .floating-game-controls {
     top: var(--sai-top);
   }
   @media (orientation: landscape) {
     .diamond-floating-btn--back {
       top: 16px;
     }
-    .diamond-floating-btn--restart {
+    .game-shell--diamond .floating-game-controls {
       top: auto;
-      bottom: 16px;
     }
   }
 }

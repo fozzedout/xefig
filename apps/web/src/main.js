@@ -69,6 +69,7 @@ const BOARD_COLOR_KEY = 'xefig:board-color:v1'
 const MUSIC_ENABLED_KEY = 'xefig:music-enabled:v1'
 const MUSIC_VOLUME_KEY = 'xefig:music-volume:v1'
 const MUSIC_DEFAULT_VOLUME = 0.35
+const DIAMOND_SFX_MUTED_KEY = 'xefig:diamond-sfx-muted:v1'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
 const PUZZLE_FETCH_TIMEOUT_MS = 8000
@@ -125,6 +126,14 @@ function setMusicVolume(v) {
 
 function getMusicEnabled() {
   return getMusicVolume() > 0
+}
+
+function getDiamondSfxMuted() {
+  try { return localStorage.getItem(DIAMOND_SFX_MUTED_KEY) === '1' } catch { return false }
+}
+
+function setDiamondSfxMuted(muted) {
+  try { localStorage.setItem(DIAMOND_SFX_MUTED_KEY, muted ? '1' : '0') } catch {}
 }
 
 function applyLandscapeLayout() {
@@ -3686,17 +3695,43 @@ function renderGame({ resumeRun = null } = {}) {
   const useImmersivePolygramChrome = gameMode === GAME_MODE_POLYGRAM
   const useImmersiveSlidingChrome = gameMode === GAME_MODE_SLIDING
   const useImmersiveSwapChrome = gameMode === GAME_MODE_SWAP
-  const useImmersiveMenuChrome = useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome
-  const useImmersiveChrome = useImmersiveMenuChrome || useImmersiveDiamondChrome
+  const useImmersiveMenuChrome = useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome
+  const useImmersiveChrome = useImmersiveMenuChrome
   const viewButtonMarkup = gameMode !== GAME_MODE_DIAMOND
     ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
         Reference image
       </button>`
     : ''
+  const muteSfxInitiallyMuted = useImmersiveDiamondChrome ? getDiamondSfxMuted() : false
+  const muteSfxButtonMarkup = useImmersiveDiamondChrome
+    ? `<button id="mute-sfx-btn" class="gt-menu-item gt-menu-item--mute-toggle" type="button" aria-pressed="${muteSfxInitiallyMuted ? 'true' : 'false'}">
+        <svg class="mute-icon-sound" viewBox="0 0 512 512" aria-hidden="true">
+          <g transform="translate(42.666667, 85.333333)" fill="currentColor">
+            <path fill-rule="evenodd" d="M191.75,0 L80.9,87.23 L0,87.23 L0,257.9 L81.02,257.9 L191.75,343.35 L191.75,0 Z M42.67,129.9 L95.69,129.9 L149.08,87.87 L149.08,256.52 L95.56,215.23 L42.67,215.23 L42.67,129.9 Z"/>
+            <g fill="none" stroke="currentColor" stroke-width="42.67" stroke-linecap="butt">
+              <path d="M260.25,83.1 C306.25,133.5 306.25,210.38 260.25,260.77"/>
+              <path d="M344.66,15.58 C425.06,104.48 425.06,239.41 344.66,328.3"/>
+            </g>
+          </g>
+        </svg>
+        <svg class="mute-icon-muted" viewBox="0 0 512 512" aria-hidden="true">
+          <g transform="translate(42.666667, 85.333333)" fill="currentColor">
+            <path fill-rule="evenodd" d="M191.75,0 L80.9,87.23 L0,87.23 L0,257.9 L81.02,257.9 L191.75,343.35 L191.75,0 Z M42.67,129.9 L95.69,129.9 L149.08,87.87 L149.08,256.52 L95.56,215.23 L42.67,215.23 L42.67,129.9 Z"/>
+            <g fill="none" stroke="currentColor" stroke-width="42.67" stroke-linecap="butt">
+              <line x1="255.88" y1="97.27" x2="405.21" y2="246.61"/>
+              <line x1="405.21" y1="97.27" x2="255.88" y2="246.61"/>
+            </g>
+          </g>
+        </svg>
+        <span class="mute-label-sound">Sound effects: On</span>
+        <span class="mute-label-muted">Sound effects: Off</span>
+      </button>`
+    : ''
+  const restartButtonLabel = gameMode === GAME_MODE_DIAMOND ? 'Restart painting' : 'Restart'
   const restartButtonMarkup = `<button id="restart-btn" class="gt-menu-item gt-menu-item--danger" type="button">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
-      Restart
+      ${restartButtonLabel}
     </button>`
 
   gameEl.innerHTML = `
@@ -3726,6 +3761,7 @@ function renderGame({ resumeRun = null } = {}) {
               </button>
               ` : ''}
               ${viewButtonMarkup}
+              ${muteSfxButtonMarkup}
               ${restartButtonMarkup}
             </div>
           </div>
@@ -3767,20 +3803,11 @@ function renderGame({ resumeRun = null } = {}) {
                 </button>
                 ` : ''}
                 ${viewButtonMarkup}
+                ${muteSfxButtonMarkup}
                 ${restartButtonMarkup}
               </div>
             </div>
           </div>
-          <span id="timer" class="gt-timer floating-timer">00:00</span>
-          <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
-        ` : ''}
-        ${useImmersiveDiamondChrome ? `
-          <button id="back-btn" class="diamond-floating-btn diamond-floating-btn--back" type="button" aria-label="Back to puzzles" title="Back">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-          <button id="restart-btn" class="diamond-floating-btn diamond-floating-btn--restart" type="button" aria-label="Restart puzzle" title="Restart">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L14 10h7V3l-3.35 3.35Z"/></svg>
-          </button>
           <span id="timer" class="gt-timer floating-timer">00:00</span>
           <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
         ` : ''}
@@ -4059,6 +4086,16 @@ function renderGame({ resumeRun = null } = {}) {
     })
   }
 
+  const muteSfxBtn = gameEl.querySelector('#mute-sfx-btn')
+  if (muteSfxBtn) {
+    muteSfxBtn.addEventListener('click', () => {
+      const muted = !(muteSfxBtn.getAttribute('aria-pressed') === 'true')
+      muteSfxBtn.setAttribute('aria-pressed', muted ? 'true' : 'false')
+      setDiamondSfxMuted(muted)
+      puzzle?.setMuted?.(muted)
+    })
+  }
+
   ;(async () => {
     try {
       destroyPuzzle()
@@ -4114,6 +4151,7 @@ function renderGame({ resumeRun = null } = {}) {
         imageUrl: state.imageUrl,
         difficulty: state.difficulty,
         boardColorIndex: getGlobalBoardColorIndex(),
+        muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
         onProgress: ({ completed, state: progressState }) => {
           if (currentRun) {
             currentRun.completed = Boolean(completed)
