@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0a0a0f" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)" />
+    <!-- theme-color is set dynamically by the theme bootstrap script below
+         once the manual pref + system pref are resolved; the meta tag here
+         is a fallback for browsers that don't run our script. -->
+    <meta name="theme-color" content="#0a0a0f" id="meta-theme-color" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Xefig" />
@@ -20,6 +22,27 @@
     <meta name="description" content="Xefig — a daily puzzle game with four modes: jigsaw, slider, tile swap, and polygram." />
     <meta name="ai-content-declaration" content="Puzzle images on this site are generated using artificial intelligence (Google Gemini)." />
     <meta name="generator" content="AI-generated imagery via Google Gemini" />
+    <script>
+      // Theme bootstrap — runs synchronously BEFORE the stylesheet loads
+      // so the page renders in the correct theme on first paint (no
+      // light→dark or dark→light flash). Reads the user's saved
+      // preference; resolves "auto" via prefers-color-scheme. Sets
+      // data-theme on <html> which all theming CSS keys off.
+      (function(){
+        try{
+          var pref = localStorage.getItem('xefig:theme:v1') || 'auto';
+          var resolved = pref;
+          if (pref === 'auto') {
+            resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', resolved);
+          var meta = document.getElementById('meta-theme-color');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0f' : '#f4f7fb');
+        }catch(e){
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
     <script>
       // In Safari browser mode, 100vh includes the area behind the toolbar.
@@ -64,19 +87,20 @@
       </div>
     </div>
     <style>
+      /* Boot shell uses data-theme set by the bootstrap script so it
+         agrees with the resolved (manual or auto) preference, not just
+         the system one. */
       .boot-shell {
-        background: #0a0a0f;
-        color: rgba(232, 230, 224, 0.5);
         display: grid;
         place-items: center;
         font-size: 0.9rem;
         height: 100%;
+        background: #0a0a0f;
+        color: rgba(232, 230, 224, 0.5);
       }
-      @media (prefers-color-scheme: light) {
-        .boot-shell {
-          background: #f4f7fb;
-          color: rgba(16, 33, 49, 0.5);
-        }
+      :root[data-theme="light"] .boot-shell {
+        background: #f4f7fb;
+        color: rgba(16, 33, 49, 0.5);
       }
     </style>
     <script>

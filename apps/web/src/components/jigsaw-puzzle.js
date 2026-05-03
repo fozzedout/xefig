@@ -572,11 +572,12 @@ export class JigsawPuzzle {
   }
 
   isDarkMode() {
-    return (
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    )
+    // The resolved theme is mirrored to data-theme on <html> by main.js
+    // (auto mode follows OS; manual modes override). Read from there so
+    // a manual theme override applies to in-game palettes too.
+    if (typeof document === 'undefined') return false
+    const t = document.documentElement.getAttribute('data-theme')
+    return t === 'dark'
   }
 
   getBoardOutlineStroke() {

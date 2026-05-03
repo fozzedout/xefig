@@ -66,6 +66,7 @@ const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
 // is completable under a second, so anything below is a bug artifact.
 const MIN_PLAUSIBLE_ELAPSED_MS = 1000
 const BOARD_COLOR_KEY = 'xefig:board-color:v1'
+const THEME_PREF_KEY = 'xefig:theme:v1'
 const MUSIC_ENABLED_KEY = 'xefig:music-enabled:v1'
 const MUSIC_VOLUME_KEY = 'xefig:music-volume:v1'
 const MUSIC_DEFAULT_VOLUME = 0.35
@@ -90,8 +91,54 @@ const BOARD_COLORS_DARK = [
   { name: 'image', color: null },
 ]
 
+// ─── Theme preference ─────────────────────────────────────────────────
+// Three-way: 'auto' (default — follow OS), 'light', or 'dark'. The
+// initial resolution + DOM attribute are applied by the inline script
+// in index.html before CSS loads (to avoid FOUC). These helpers handle
+// in-app changes + reacting to system pref shifts when in auto mode.
+const VALID_THEME_PREFS = new Set(['auto', 'light', 'dark'])
+
+function getThemePref() {
+  try {
+    const raw = localStorage.getItem(THEME_PREF_KEY)
+    return VALID_THEME_PREFS.has(raw) ? raw : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+
+function setThemePref(pref) {
+  if (!VALID_THEME_PREFS.has(pref)) return
+  try { localStorage.setItem(THEME_PREF_KEY, pref) } catch {}
+}
+
+function resolveTheme(pref = getThemePref()) {
+  if (pref === 'light' || pref === 'dark') return pref
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function applyTheme(pref = getThemePref()) {
+  const resolved = resolveTheme(pref)
+  document.documentElement.setAttribute('data-theme', resolved)
+  const meta = document.getElementById('meta-theme-color')
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0f' : '#f4f7fb')
+  return resolved
+}
+
+// React to OS theme shifts when the user is in auto mode (a no-op in
+// manual modes). Wire this once at boot.
+function watchSystemTheme() {
+  const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+  if (!mq) return
+  const onChange = () => {
+    if (getThemePref() === 'auto') applyTheme('auto')
+  }
+  if (mq.addEventListener) mq.addEventListener('change', onChange)
+  else if (mq.addListener) mq.addListener(onChange)
+}
+
 function isDarkMode() {
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  return resolveTheme() === 'dark'
 }
 
 function getBoardColors() {
@@ -4646,6 +4693,12 @@ function handleDayRollover() {
 function initAppShell() {
   applyLandscapeLayout()
   bindInstallPromptListeners()
+  // Apply the resolved theme + start watching for OS pref changes (no-op
+  // in manual modes). The inline bootstrap script in index.html already
+  // set data-theme synchronously; this re-applies in case localStorage
+  // was unavailable during the early script.
+  applyTheme()
+  watchSystemTheme()
   app.innerHTML = ARCHIVE_SVG_DEFS_HTML + NAV_HTML
 
   const topNav = document.querySelector('#topNav')
@@ -4783,6 +4836,13 @@ function renderSettingsPage() {
               <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
             </summary>
             <div class="settings-section-body">
+              <div class="settings-subtitle">Theme</div>
+              <div class="settings-theme-segmented" role="group" aria-label="Theme">
+                ${['light', 'auto', 'dark'].map((opt) => `
+                  <button type="button" class="settings-theme-option${getThemePref() === opt ? ' is-selected' : ''}" data-theme-pref="${opt}" aria-pressed="${getThemePref() === opt}">${opt[0].toUpperCase() + opt.slice(1)}</button>
+                `).join('')}
+              </div>
+
               <div class="settings-subtitle">Board background</div>
               <div id="settings-board-colors" class="settings-color-grid">
                 ${colors
@@ -4886,6 +4946,35 @@ function renderSettingsPage() {
       if (det) det.scrollIntoView({ block: 'start', behavior: 'smooth' })
     })
   })
+
+  const themeSeg = container.querySelector('.settings-theme-segmented')
+  if (themeSeg) {
+    themeSeg.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-theme-pref]')
+      if (!btn) return
+      const pref = btn.dataset.themePref
+      setThemePref(pref)
+      applyTheme(pref)
+      themeSeg.querySelectorAll('[data-theme-pref]').forEach((b) => {
+        const on = b.dataset.themePref === pref
+        b.classList.toggle('is-selected', on)
+        b.setAttribute('aria-pressed', String(on))
+      })
+      // Repaint the board-color swatches: the "image" placeholder picks
+      // a different palette in light vs. dark mode, so a theme flip can
+      // change which swatch is currently active.
+      const newColors = getBoardColors()
+      const newActive = getGlobalBoardColorIndex()
+      const swatches = grid.querySelectorAll('.settings-color-swatch')
+      swatches.forEach((s, i) => {
+        if (i < newColors.length) {
+          if (newColors[i].color) s.setAttribute('style', `background:${newColors[i].color}`)
+          else s.removeAttribute('style')
+        }
+        s.classList.toggle('is-active', i === newActive)
+      })
+    })
+  }
 
   const grid = container.querySelector('#settings-board-colors')
   grid.addEventListener('click', (e) => {
