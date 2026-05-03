@@ -119,9 +119,11 @@ test.describe('light/dark mode chrome adaptation', () => {
     // gt-icon-btn text colour is hardcoded #e8e6e0 (avg ≈ 230) — stays light
     // even in light mode because the button sits over the dark game shell.
     expect(rgbBrightness(colors.iconBtn)).toBeGreaterThan(200)
-    // slice-launcher (home page) stays dark
+    // .slice-launcher's bg flips to var(--bg) in light mode so the iOS
+    // safe-area-top region matches the theme — the slice imagery on top
+    // is what stays dark, not the underlying surface.
     if (colors.sliceLauncher) {
-      expect(rgbBrightness(colors.sliceLauncher)).toBeLessThan(40)
+      expect(rgbBrightness(colors.sliceLauncher)).toBeGreaterThan(200)
     }
     await ctx.close()
   })

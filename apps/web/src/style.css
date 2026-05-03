@@ -6237,6 +6237,12 @@ canvas.slice-image {
   html { background: var(--bg); }
   body { background: var(--bg); color: var(--text); }
 
+  /* Home (slice-launcher): the slice imagery itself stays dark — these are
+     game previews — but the surrounding fill (visible in the iOS PWA
+     status-bar area above the slice container) flips to the page bg so
+     the safe-area top doesn't show as a black band over a light theme. */
+  .slice-launcher { background: var(--bg); }
+
   /* Top nav: dark gradient hood → light gradient hood. Over the dark
      slice-launcher this leaves a subtle light fade at the very top, which
      mirrors how the existing dark gradient sits over the daylight imagery
@@ -6354,6 +6360,72 @@ canvas.slice-image {
   .cal-nav-title .year-label { color: color-mix(in oklab, var(--text) 60%, transparent); }
   .cal-nav-title .chevron { color: color-mix(in oklab, var(--text) 35%, transparent); }
 
+  /* Month hero (medal + counters above the grid). */
+  .month-hero-medal svg.tier-svg {
+    filter: drop-shadow(0 12px 36px rgba(240, 192, 64, 0.32));
+  }
+  .month-hero-title-month { color: var(--text); }
+  .month-hero-title-year { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .month-hero-counter { color: var(--text); }
+  .month-hero-counter-unit { color: color-mix(in oklab, var(--text) 55%, transparent); }
+  .month-hero-sub { color: color-mix(in oklab, var(--text) 60%, transparent); }
+
+  /* Day-of-week header row (SUN MON … SAT). */
+  .dow { color: color-mix(in oklab, var(--text) 55%, transparent); }
+
+  /* Calendar grid cells. The dark #14141e cell on a light page reads as
+     a black square; replace with surface tone, then carry the same
+     tonal shift through hover, the day number, today's green halo, and
+     the resume-highlight pink halo. The colored glyph svgs sit on top
+     and remain self-illuminating, so completed days still pop. */
+  .day {
+    background: var(--surface);
+    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+  }
+  .day:hover {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--text) 18%, transparent);
+  }
+  .day .num { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  .day.today {
+    border-color: rgba(36, 168, 110, 0.65);
+    background: rgba(36, 168, 110, 0.08);
+    box-shadow: 0 0 12px rgba(36, 168, 110, 0.18);
+  }
+  .day.today .num { color: rgba(28, 132, 88, 0.9); }
+  .day.today:hover {
+    background: rgba(36, 168, 110, 0.14);
+    border-color: rgba(36, 168, 110, 0.85);
+  }
+  .day.resume-highlight {
+    border-color: rgba(196, 84, 132, 0.6);
+    background: rgba(196, 84, 132, 0.08);
+    box-shadow: 0 0 12px rgba(196, 84, 132, 0.2);
+  }
+  .day.resume-highlight .num { color: rgba(160, 60, 100, 0.95); }
+
+  /* Glyph (per-day brand mark). Light bg needs darker outlines for
+     unfilled state; filled/gold elements stay because they're already
+     saturated enough to read on either bg. */
+  .glyph .ring-bg {
+    fill: rgba(0, 0, 0, 0.025);
+    stroke: rgba(0, 0, 0, 0.12);
+  }
+  .glyph .star-ghost { stroke: color-mix(in oklab, var(--text) 35%, transparent); }
+
+  /* Tier-medal (week / month / year svg pips). The "empty" pip/tick
+     colour was tuned for a dark canvas; flip the alpha base to text. */
+  .pip-empty { fill: color-mix(in oklab, var(--text) 22%, transparent); }
+  .tick-empty { stroke: color-mix(in oklab, var(--text) 28%, transparent); }
+  .frame-ring { stroke: color-mix(in oklab, var(--text) 22%, transparent); }
+
+  /* Week strip + page dots. */
+  .week-strip { border-top-color: color-mix(in oklab, var(--text) 10%, transparent); }
+  .week-strip .week-cell .w-label { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  .cal-dots .dot { background: color-mix(in oklab, var(--text) 22%, transparent); }
+  .cal-dots .dot:hover { background: color-mix(in oklab, var(--text) 38%, transparent); }
+  .cal-dots .dot.has-progress { background: color-mix(in oklab, var(--text) 48%, transparent); }
+
   /* Day-detail modal. */
   .day-detail-sheet {
     background: var(--surface);
@@ -6461,7 +6533,9 @@ canvas.slice-image {
   .more-sheet-card-icon { color: color-mix(in oklab, var(--text) 80%, transparent); }
   .more-sheet-card-sub { color: color-mix(in oklab, var(--text) 55%, transparent); }
   .more-sheet-handle { background: color-mix(in oklab, var(--text) 22%, transparent); }
-  .more-card-sync-cloud { background: var(--surface-2); }
+  /* .more-card-sync-cloud keeps its hardcoded #1a1a2a backdrop in light
+     mode: the green/amber/red status icon needs a dark circle behind it
+     for contrast — the indicator reads as "lit" against any card colour. */
   .more-sheet-card--music.is-off .music-off-slash {
     stroke: color-mix(in oklab, var(--text) 55%, transparent);
   }
