@@ -412,28 +412,13 @@ const CATEGORY_PROMPT_INTENTS: Record<
   },
 }
 
-// Narrative templates weave the descriptor slots into prose rather than a
-// labelled keyword list. Google's Nano Banana guide is explicit that narrative
-// description outperforms "concept: X; location: Y" style lists. Style /
-// medium / aesthetic constraints are NOT in the descriptors — they live in
-// the per-category technical tail (qualityTarget + outputTemplate) so each
-// category can encode its own rules (photographic OK for jigsaw/slider/swap,
-// not for polygram/diamond).
-const PROMPT_NARRATIVE_TEMPLATES = [
-  'The scene features {stateArticle} {state} {concept} set in {locationPhrase}, bathed in {lighting}, with {palette}. The overall atmosphere feels {mood}.',
-  'Depict {stateArticle} {state} {concept} in {locationPhrase}, under {lighting} and with {mood} energy throughout, anchored by {palette}.',
-  'Show {stateArticle} {state} {concept} in {locationPhrase}. Light it with {lighting} and give the image {mood} atmosphere throughout, with {palette}.',
-] as const
-
-// Diamond concepts ("stag in a coastal meadow with boats in the bay",
-// "lighthouse on a cliff") already embed their setting, so the diamond
-// narrative omits the {location} slot to avoid redundant or contradictory
-// phrasing like "…in a coastal meadow set in a hillside".
-const PROMPT_NARRATIVE_TEMPLATES_DIAMOND = [
-  'Depict {stateArticle} {state} {concept}, lit by {lighting} and carrying {mood} energy throughout, with {palette}.',
-  'Show {stateArticle} {state} {concept} under {lighting}, with {mood} atmosphere overall and {palette}.',
-  'The scene features {stateArticle} {state} {concept}, bathed in {lighting}. The overall atmosphere feels {mood}, with {palette}.',
-] as const
+// The descriptive half of the prompt is a labelled keyword block, not a
+// narrative template — the LLM rewriter (gemma-rewriter) is told to compose
+// a creative paragraph from these elements, and the labels (Subject /
+// Setting / Lighting / etc.) carry role information that a flat keyword
+// list can't. Style / medium / aesthetic constraints are NOT in the
+// descriptors at all — they live in the per-category technical tail
+// (qualityTarget + outputTemplate) and reach the image model verbatim.
 
 const PROMPT_OUTPUT_TEMPLATES = [
   'Output: one landscape 4:3 image that fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
@@ -642,20 +627,27 @@ export function buildImagePromptParts(
 ): { descriptive: string; technical: string } {
   const intent = CATEGORY_PROMPT_INTENTS[category]
 
-  const subjectLine = `${intent.composition} Use ${vowelArticle(set.camera)} ${set.camera}.`
+  // Diamond concepts ("stag in a coastal meadow with boats in the bay",
+  // "lighthouse on a cliff") already embed their setting, so omitting a
+  // separate Setting line avoids redundant phrasing in the rewriter's
+  // output.
+  const includeSetting = category !== 'diamond'
 
-  const narrativeTemplate = category === 'diamond'
-    ? pickRandom(PROMPT_NARRATIVE_TEMPLATES_DIAMOND)
-    : pickRandom(PROMPT_NARRATIVE_TEMPLATES)
+  const keywordLines = [
+    `Subject: ${set.state} ${set.concept}`,
+    includeSetting ? `Setting: ${set.location}` : null,
+    `Lighting: ${set.lighting}`,
+    `Mood: ${stripMoodSuffix(set.mood)}`,
+    `Palette: ${set.palette}`,
+    `Camera: ${set.camera}`,
+  ].filter((line): line is string => line !== null)
 
-  const narrativeLine = narrativeTemplate
-    .replace('{stateArticle}', vowelArticle(set.state))
-    .replace('{state}', set.state)
-    .replace('{concept}', set.concept)
-    .replace('{locationPhrase}', locationPhrase(set.location))
-    .replace('{lighting}', set.lighting)
-    .replace('{mood}', stripMoodSuffix(set.mood))
-    .replace('{palette}', set.palette)
+  // Composition prose tells the LLM HOW to compose; keyword block tells
+  // it WHAT to compose with. The rewriter (prompt-rewriter.ts) is told
+  // to "transform the descriptive elements into a single, cohesive,
+  // imaginative paragraph" — labelled keywords let it pick up role
+  // information the flat keywords list it also receives can't convey.
+  const descriptive = `${intent.composition}\n\n${keywordLines.join('\n')}`
 
   const qualityLine = intent.qualityTarget
 
@@ -666,25 +658,13 @@ export function buildImagePromptParts(
       : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
   return {
-    descriptive: [subjectLine, narrativeLine].join(' '),
+    descriptive,
     technical: [qualityLine, outputLine].join(' '),
   }
 }
 
-function vowelArticle(word: string): string {
-  return /^[aeiou]/i.test(word) ? 'an' : 'a'
-}
-
 function stripMoodSuffix(mood: string): string {
   return mood.replace(/\s+(mood|tone|feel)$/i, '')
-}
-
-// Plurals like "cliffs" or "rooftops" take "the", not "a/an". "sky" reads
-// more naturally with "the" as well.
-function locationPhrase(location: string): string {
-  if (location === 'sky') return 'the sky'
-  if (/s$/.test(location) && !/ss$/.test(location)) return `the ${location}`
-  return `${vowelArticle(location)} ${location}`
 }
 
 // ---------------------------------------------------------------------------
