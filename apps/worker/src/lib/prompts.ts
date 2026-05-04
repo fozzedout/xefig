@@ -39,6 +39,20 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'hummingbird', 'kingfisher', 'stag', 'bison', 'polar bear', 'lynx',
     'octopus', 'seahorse', 'butterfly swarm', 'starling murmuration',
     'bee colony', 'dragonfly', 'chameleon', 'pangolin', 'narwhal',
+    // big cats and savanna mammals
+    'lion', 'cheetah', 'leopard', 'giraffe', 'zebra', 'rhinoceros',
+    'hippopotamus', 'meerkat',
+    // primates and rainforest mammals
+    'gorilla', 'orangutan', 'sloth',
+    'moose', 'otter',
+    // marsupials
+    'kangaroo', 'koala',
+    // marine life
+    'shark', 'walrus', 'seal', 'pufferfish', 'crab',
+    // birds
+    'swan', 'pelican', 'puffin', 'penguin', 'toucan', 'macaw', 'raven',
+    // reptiles and amphibians
+    'crocodile', 'tortoise', 'tree frog',
     // human activity & culture
     'market', 'parade', 'ballroom', 'carnival', 'regatta', 'lantern festival',
     'night bazaar', 'spice market', 'flower market', 'fish market',
@@ -220,6 +234,16 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'deer at a forest edge with wildflowers', 'whale breaching near fishing boats',
     'koi pond with lotus flowers and stepping stones',
     'flamingos wading in a tropical lagoon', 'polar bear on ice with an aurora sky',
+    'lion pride at rest under acacia trees on the savanna',
+    'giraffes browsing under acacias at golden hour',
+    'zebras at a watering hole with reflected clouds',
+    'gorilla in a misty jungle clearing with ferns',
+    'orangutan among rainforest canopy vines and orchids',
+    'sea otters floating in a kelp forest at sunset',
+    'penguins on an icy shore with snowy mountains behind',
+    'puffin colony on a windswept sea cliff above the surf',
+    'tortoise in a desert garden with prickly pears and wildflowers',
+    'tree frog on a glossy leaf among tropical orchids',
     // still-life and decorative scenes
     'vase of sunflowers on a tiled table by a window',
     'bowl of fruit on a patterned cloth', 'teapot and cups on a folk-art runner',
