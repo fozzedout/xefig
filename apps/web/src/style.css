@@ -1777,11 +1777,16 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  .day-detail-overlay { padding: 12px; }
+  .day-detail-overlay {
+    padding-top: max(12px, var(--sai-top));
+    padding-right: max(12px, var(--sai-right));
+    padding-bottom: max(12px, var(--sai-bottom));
+    padding-left: max(12px, var(--sai-left));
+  }
   .day-detail-sheet {
     padding: 16px 14px 18px;
-    height: calc(100vh - 24px);
-    max-height: calc(100vh - 24px);
+    height: calc(100vh - max(12px, var(--sai-top)) - max(12px, var(--sai-bottom)));
+    max-height: calc(100vh - max(12px, var(--sai-top)) - max(12px, var(--sai-bottom)));
   }
   .day-detail-thumbs {
     grid-template-columns: 1fr;
