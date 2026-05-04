@@ -5538,6 +5538,41 @@ canvas.slice-image {
   opacity: 0.85;
 }
 
+.completion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+  margin-top: 0.4rem;
+}
+
+.completion-show-source {
+  appearance: none;
+  background: rgba(56, 189, 248, 0.18);
+  color: #e0f6ff;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  padding: 0.55rem 1.4rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.completion-show-source:hover,
+.completion-show-source:focus-visible {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: rgba(56, 189, 248, 0.7);
+}
+
+.completion-show-source svg {
+  flex: 0 0 auto;
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .completion-card {
     max-width: 480px;
@@ -6268,6 +6303,38 @@ canvas.slice-image {
 .diamond-floating-btn--back {
   top: calc(0.5rem + var(--sai-top));
   left: calc(0.5rem + var(--sai-left));
+}
+
+/* Source-image toggle: lives inside .floating-game-controls (top-right
+   for diamond) as a sibling of the menu wrap, sits a notch below the
+   menu dots so the dropdown can pop down without colliding. Higher
+   resting opacity than the back button since it appears only on
+   completion and we want it noticed. */
+.diamond-floating-btn--source {
+  position: relative;
+  top: auto;
+  left: auto;
+  margin-top: 0.4rem;
+  opacity: 0.85;
+  background: rgba(12, 12, 18, 0.82);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.diamond-floating-btn--source:hover,
+.diamond-floating-btn--source:focus-visible,
+.diamond-floating-btn--source:active {
+  opacity: 1;
+  background: rgba(20, 20, 28, 0.88);
+}
+
+.diamond-floating-btn--source[aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.32);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #fff;
+  opacity: 1;
 }
 
 /* Landscape: palette hugs the right edge of the screen, vertically centred

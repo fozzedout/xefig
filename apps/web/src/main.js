@@ -2733,6 +2733,7 @@ function showCompletionOverlay({
   playerGuid: myGuid,
   completedRun,
   showRankPill,
+  onShowSource,
 }) {
   const overlay = document.createElement('div')
   overlay.className = 'completion-overlay'
@@ -2806,7 +2807,15 @@ function showCompletionOverlay({
         </div>
       </div>
       ${rankStampHtml}
-      <button type="button" class="completion-dismiss">Continue</button>
+      <div class="completion-actions">
+        ${typeof onShowSource === 'function'
+          ? `<button type="button" class="completion-show-source">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+              Show source image
+            </button>`
+          : ''}
+        <button type="button" class="completion-dismiss">Continue</button>
+      </div>
     </div>
   `
   document.body.appendChild(overlay)
@@ -2815,6 +2824,17 @@ function showCompletionOverlay({
     if (e.target === overlay) dismiss()
   })
   overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
+
+  if (typeof onShowSource === 'function') {
+    const showSourceBtn = overlay.querySelector('.completion-show-source')
+    showSourceBtn?.addEventListener('click', () => {
+      try {
+        onShowSource()
+      } finally {
+        dismiss()
+      }
+    })
+  }
 
   return overlay
 }
@@ -3868,6 +3888,16 @@ function renderGame({ resumeRun = null } = {}) {
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
       ${gameMode === GAME_MODE_DIAMOND ? 'Show source image' : 'Reference image'}
     </button>`
+  // Diamond also exposes a persistent floating source-image toggle on
+  // the page itself (in addition to the menu entry above) so the option
+  // is discoverable both on first completion and when reopening a
+  // previously-completed painting. Hidden during play, revealed on
+  // completion / resume-completed.
+  const showSourceFloatingBtnMarkup = useImmersiveDiamondChrome
+    ? `<button id="show-source-floating-btn" class="diamond-floating-btn diamond-floating-btn--source" type="button" aria-label="Show source image" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+      </button>`
+    : ''
   const muteSfxInitiallyMuted = useImmersiveDiamondChrome ? getDiamondSfxMuted() : false
   const muteSfxButtonMarkup = useImmersiveDiamondChrome
     ? `<button id="mute-sfx-btn" class="gt-menu-item gt-menu-item--mute-toggle" type="button" aria-pressed="${muteSfxInitiallyMuted ? 'true' : 'false'}">
@@ -3972,6 +4002,7 @@ function renderGame({ resumeRun = null } = {}) {
                 ${restartButtonMarkup}
               </div>
             </div>
+            ${showSourceFloatingBtnMarkup}
           </div>
           <span id="timer" class="gt-timer floating-timer">00:00</span>
           <p id="status" class="sr-only" aria-live="polite">Loading puzzle...</p>
@@ -3985,6 +4016,7 @@ function renderGame({ resumeRun = null } = {}) {
   const mount = gameEl.querySelector('#puzzle-mount')
   const backBtn = gameEl.querySelector('#back-btn')
   const viewBtn = gameEl.querySelector('#view-btn')
+  const showSourceFloatingBtn = gameEl.querySelector('#show-source-floating-btn')
   const pieceCountEl = gameEl.querySelector('#piece-count')
   const timerEl = gameEl.querySelector('#timer')
   const saveIndicator = gameEl.querySelector('#save-indicator')
@@ -4060,14 +4092,29 @@ function renderGame({ resumeRun = null } = {}) {
     returnFromGame()
   })
 
+  // Keep the menu's view-btn and the floating source-btn (diamond
+  // only) in sync — both toggle the same reference image, so they
+  // mirror each other's aria-pressed state regardless of which one
+  // the user clicked.
+  const syncSourceButtons = (active) => {
+    const pressed = active ? 'true' : 'false'
+    if (viewBtn) viewBtn.setAttribute('aria-pressed', pressed)
+    if (showSourceFloatingBtn) showSourceFloatingBtn.setAttribute('aria-pressed', pressed)
+  }
+
   if (viewBtn) {
     viewBtn.addEventListener('click', () => {
-      if (!puzzle) {
-        return
-      }
-
+      if (!puzzle) return
       const active = puzzle.toggleReferenceVisible()
-      viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+      syncSourceButtons(active)
+    })
+  }
+
+  if (showSourceFloatingBtn) {
+    showSourceFloatingBtn.addEventListener('click', () => {
+      if (!puzzle) return
+      const active = puzzle.toggleReferenceVisible()
+      syncSourceButtons(active)
     })
   }
 
@@ -4343,12 +4390,16 @@ function renderGame({ resumeRun = null } = {}) {
           }
           leaderboardDone = true
 
-          // Diamond's view button is hidden during play; reveal once the
-          // painting is finished so the user can compare against the
-          // source image (small subjects collapse to a few pixels under
-          // 16-colour quantization and aren't always self-evident).
-          if (gameMode === GAME_MODE_DIAMOND && viewBtn) {
-            viewBtn.hidden = false
+          // Diamond's source-image controls are hidden during play;
+          // reveal them once the painting is finished so the user can
+          // compare against the source (small subjects collapse to a
+          // few pixels under 16-colour quantization and aren't always
+          // self-evident from the painted output alone). Both the
+          // menu entry and the persistent floating button reveal
+          // together.
+          if (gameMode === GAME_MODE_DIAMOND) {
+            if (viewBtn) viewBtn.hidden = false
+            if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
           }
 
           stopTimerDisplay()
@@ -4377,6 +4428,19 @@ function renderGame({ resumeRun = null } = {}) {
           // soon as the network resolves.
           const presentOverlay = () => {
             const syncActive = isSyncEnabled() && navigator.onLine
+            // Diamond gets a "Show source image" action on the overlay
+            // so first-time finishers discover the toggle without
+            // hunting for it in the menu. Clicking reveals the source
+            // overlay on the canvas behind, dismisses the celebration,
+            // and leaves the persistent floating button (already
+            // revealed above) for ongoing access.
+            const onShowSource = gameMode === GAME_MODE_DIAMOND
+              ? () => {
+                  if (!puzzle) return
+                  const active = puzzle.toggleReferenceVisible()
+                  syncSourceButtons(active)
+                }
+              : undefined
             const overlay = showCompletionOverlay({
               gameMode,
               duration: durationLabel,
@@ -4385,6 +4449,7 @@ function renderGame({ resumeRun = null } = {}) {
               playerGuid,
               completedRun,
               showRankPill: syncActive,
+              onShowSource,
             })
 
             if (!syncActive) return
@@ -4571,11 +4636,12 @@ function renderGame({ resumeRun = null } = {}) {
       if (resumeRun?.puzzleState) {
         puzzle.applyProgressState(resumeRun.puzzleState)
 
-        // Resuming a fully-completed diamond run also needs the view
-        // button revealed — onComplete only fires on the painting's
-        // final stroke, not on resume.
-        if (gameMode === GAME_MODE_DIAMOND && viewBtn && puzzle.completed) {
-          viewBtn.hidden = false
+        // Resuming a fully-completed diamond run also needs the source-
+        // image controls revealed — onComplete only fires on the
+        // painting's final stroke, not on resume.
+        if (gameMode === GAME_MODE_DIAMOND && puzzle.completed) {
+          if (viewBtn) viewBtn.hidden = false
+          if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
         }
 
         if (gameMode === GAME_MODE_JIGSAW) {
