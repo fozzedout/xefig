@@ -430,8 +430,14 @@ const CATEGORY_PROMPT_INTENTS: Record<
     title: 'Diamond Painting',
     composition:
       'A vivid scene with strong colour variation across the entire canvas — painterly gradients, dappled light, layered planes of depth, or faceted multi-panel rendering. Either a single hero subject against a textured backdrop, or a busy composition packed with characters, animals, buildings, plants, water, and sky. Small details — leaves, petals, ripples, brickwork, fur, feathers, embroidery, distant figures, riggings, windows, patterned roofs — are welcome throughout. Every region (including skies, walls, water, and large objects) should contain multiple distinguishable colours rather than a single flat fill, and the composition should avoid broad single-colour silhouettes.',
+    // Technical tail appended verbatim after the LLM rewrite — kept
+    // deliberately terse after iterative testing. "Very low colour"
+    // is a hint to the image model that the medium has a tiny palette
+    // (16 colours), which biases generation toward medium-scale panels
+    // that quantize cleanly. "Distinct subject" carries the figure-
+    // ground contrast rule from earlier iterations.
     qualityTarget:
-      'The final image will be quantized to 16 colours and painted cell-by-cell, so every shape should be defined by colour rather than outlines, and every region should hold enough internal colour variation that quantization yields many small adjacent panels — not a few large flat fields.',
+      'style: complex and busy, distinct subject. very low colour, every shape should be defined by colour rather than outlines',
   },
 }
 
