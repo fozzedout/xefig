@@ -2218,13 +2218,6 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   gap: 0;
 }
 
-/* Diamond stacks the previews vertically so the quantized canvas
-   takes the full card width — the side-by-side render at ~150px
-   wide was too small to spot messy / unreadable quantization. */
-.category-card[data-mode="diamond"] .image-previews {
-  flex-direction: column;
-}
-
 .existing-thumb {
   position: relative;
   flex: 1;
@@ -2753,6 +2746,16 @@ button { font-family: var(--font-ui); cursor: pointer; }
 }
 
 .lightbox-overlay img.is-pixelated {
+  /* Canvas-derived PNGs are tiny (~115×87 native), so without an
+     explicit size the lightbox displays them at native pixels. Force
+     the element box to fill the viewport and let object-fit:contain
+     scale the image up while preserving aspect ratio — pixelated
+     rendering keeps cell edges crisp on upscale. */
+  width: 92vw;
+  height: 92vh;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
