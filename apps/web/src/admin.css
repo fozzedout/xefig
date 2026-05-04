@@ -2235,6 +2235,16 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   transition: opacity 0.2s;
 }
 
+.quantized-preview-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: var(--surface-2);
+}
+
 .thumb-overlay {
   position: absolute;
   bottom: 0;
@@ -2733,6 +2743,11 @@ button { font-family: var(--font-ui); cursor: pointer; }
   max-height: 92vh;
   border-radius: var(--radius);
   box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+
+.lightbox-overlay img.is-pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* ── Status Overview Modal ─────────────────────────── */

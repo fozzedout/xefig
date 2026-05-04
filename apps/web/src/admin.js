@@ -1,6 +1,7 @@
 import './admin.css'
 import { sampleCellRegions, createDistinctPalette, sortPaletteDarkToLight, assignCellColors } from './components/diamond-painting-puzzle.js'
 import { loadImage, releaseLoadedImage } from './components/image-loader.js'
+import { renderDiamondSliceThumbnail } from './components/diamond-grid-thumbnail.js'
 
 const API_BASE = ''
 const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
@@ -278,6 +279,11 @@ function clearPrompts() {
   }
 }
 
+// Generation token guards against races when setThumb is called rapidly
+// (e.g. switching dates). Each call increments; the async quantize
+// render only commits if the token still matches when it resolves.
+let diamondQuantizeToken = 0
+
 function setThumb(category, asset) {
   const wrap = thumbEls[category]
   if (!wrap) {
@@ -293,19 +299,42 @@ function setThumb(category, asset) {
     wrap.hidden = false
   }
 
-  // Thumbnail preview
+  // Thumbnail / quantized preview
   const thumbWrap = thumbnailEls[category]
   if (!thumbWrap) {
     return
   }
 
-  const thumbImg = thumbWrap.querySelector('img')
-  if (!asset?.thumbnailUrl) {
-    thumbWrap.hidden = true
-    thumbImg.src = ''
+  if (category === 'diamond') {
+    // Diamond shows the same 16-colour quantization the in-game
+    // painter produces, so the admin can spot a "messy" / unreadable
+    // quantization without leaving the page.
+    const canvas = thumbWrap.querySelector('canvas')
+    if (!asset?.imageUrl || !canvas) {
+      thumbWrap.hidden = true
+      if (canvas) {
+        const ctx = canvas.getContext('2d')
+        ctx?.clearRect(0, 0, canvas.width, canvas.height)
+      }
+    } else {
+      thumbWrap.hidden = false
+      const token = ++diamondQuantizeToken
+      renderDiamondSliceThumbnail(canvas, { imageUrl: asset.imageUrl, isCompleted: true })
+        .catch((err) => {
+          if (token === diamondQuantizeToken) {
+            console.error('Diamond quantize render failed', err)
+          }
+        })
+    }
   } else {
-    thumbImg.src = asset.thumbnailUrl
-    thumbWrap.hidden = false
+    const thumbImg = thumbWrap.querySelector('img')
+    if (!asset?.thumbnailUrl) {
+      thumbWrap.hidden = true
+      if (thumbImg) thumbImg.src = ''
+    } else {
+      if (thumbImg) thumbImg.src = asset.thumbnailUrl
+      thumbWrap.hidden = false
+    }
   }
 
   // Show/hide "Generate Thumbnail" button
@@ -1418,12 +1447,16 @@ document.querySelectorAll('.gen-thumb-btn').forEach((btn) => {
         return
       }
 
-      // Update thumbnail preview
+      // Update thumbnail preview (diamond's preview is the
+      // quantized canvas — already up to date — so we only swap the
+      // <img> src for the other categories).
       const thumbnailWrap = thumbnailEls[category]
-      if (thumbnailWrap) {
+      if (thumbnailWrap && category !== 'diamond') {
         const thumbImg = thumbnailWrap.querySelector('img')
-        thumbImg.src = payload.thumbnailUrl + '?t=' + Date.now()
-        thumbnailWrap.hidden = false
+        if (thumbImg) {
+          thumbImg.src = payload.thumbnailUrl + '?t=' + Date.now()
+          thumbnailWrap.hidden = false
+        }
       }
       btn.hidden = true
 
@@ -2106,10 +2139,12 @@ form.addEventListener('submit', async (event) => {
 
           if (thumbResult.response.ok) {
             const thumbnailWrap = thumbnailEls[category]
-            if (thumbnailWrap) {
+            if (thumbnailWrap && category !== 'diamond') {
               const thumbImg = thumbnailWrap.querySelector('img')
-              thumbImg.src = thumbResult.payload.thumbnailUrl + '?t=' + Date.now()
-              thumbnailWrap.hidden = false
+              if (thumbImg) {
+                thumbImg.src = thumbResult.payload.thumbnailUrl + '?t=' + Date.now()
+                thumbnailWrap.hidden = false
+              }
             }
             const genBtn = document.querySelector(`.gen-thumb-btn[data-mode="${category}"]`)
             if (genBtn) genBtn.hidden = true
@@ -2256,9 +2291,27 @@ document.querySelectorAll('.existing-thumb').forEach((thumb) => {
   thumb.style.cursor = 'zoom-in'
   thumb.addEventListener('click', () => {
     const img = thumb.querySelector('img')
-    if (!img?.src) return
-    lightboxImg.src = img.src
-    lightboxOverlay.hidden = false
+    if (img?.src) {
+      lightboxImg.classList.remove('is-pixelated')
+      lightboxImg.src = img.src
+      lightboxOverlay.hidden = false
+      return
+    }
+    // Canvas-based preview (diamond quantized) — convert to a data
+    // URL so the existing image-based lightbox can show it at full
+    // size for inspecting whether the quantization is "messy". The
+    // is-pixelated class keeps cell edges crisp instead of blurring
+    // them on upscale.
+    const canvas = thumb.querySelector('canvas')
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      try {
+        lightboxImg.classList.add('is-pixelated')
+        lightboxImg.src = canvas.toDataURL('image/png')
+        lightboxOverlay.hidden = false
+      } catch (err) {
+        console.error('Lightbox canvas failed', err)
+      }
+    }
   })
 })
 
