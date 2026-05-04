@@ -513,15 +513,13 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   margin-bottom: 0.45rem;
 }
 
-/* Queue page */
-.admin-page--queue {
-  overflow: hidden;
-}
+/* Queue (now embedded inside the Batches/trigger page) */
 .queue-page-layout {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1;
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
 }
 .queue-page-header {
   display: flex;
@@ -560,8 +558,7 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 420px;
   gap: 0;
-  flex: 1;
-  min-height: 0;
+  min-height: 360px;
 }
 @media (max-width: 1100px) {
   .queue-page-body {

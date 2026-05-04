@@ -62,10 +62,14 @@ const ribbonCountEl = document.getElementById('ribbon-count')
 // ─── Admin page switching (Editor / Batch / Messages) ──
 const pageNavButtons = document.querySelectorAll('.page-nav-btn')
 const adminPages = document.querySelectorAll('.admin-page')
-const VALID_PAGES = new Set(['editor', 'trigger', 'queue', 'messages', 'test'])
+const VALID_PAGES = new Set(['editor', 'trigger', 'messages', 'test'])
 
 function switchAdminPage(name) {
-  const target = VALID_PAGES.has(name) ? name : 'editor'
+  // Legacy alias: 'queue' was a separate tab before Trigger and Queue
+  // were merged into a single "Batches" tab. Keep the alias so any
+  // stale #queue hash in a browser still lands somewhere sensible.
+  const requested = name === 'queue' ? 'trigger' : name
+  const target = VALID_PAGES.has(requested) ? requested : 'editor'
   pageNavButtons.forEach((btn) => {
     const selected = btn.dataset.page === target
     btn.setAttribute('aria-selected', selected ? 'true' : 'false')

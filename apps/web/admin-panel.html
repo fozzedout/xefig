@@ -104,13 +104,7 @@
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path d="M4 2v10l8-5-8-5Z" fill="currentColor"/>
         </svg>
-        <span>Trigger</span>
-      </button>
-      <button type="button" class="page-nav-btn" data-page="queue" role="tab" aria-selected="false">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M2 3h10M2 7h10M2 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-        </svg>
-        <span>Queue</span>
+        <span>Batches</span>
         <span class="page-nav-badge" id="batch-queue-count">0</span>
       </button>
       <button type="button" class="page-nav-btn" data-page="messages" role="tab" aria-selected="false">
@@ -422,8 +416,8 @@
       <section class="admin-page admin-page--trigger" id="page-trigger" data-page="trigger" role="tabpanel" hidden>
         <div class="trigger-page-layout">
           <header class="page-header">
-            <h1 class="page-header-title">Trigger a batch</h1>
-            <p class="page-header-sub">Kick off generation for the next unscheduled date. Nothing here cares about the date currently open in Review — the worker picks the next empty day in the schedule. Use this if the daily cron missed or you want to get ahead.</p>
+            <h1 class="page-header-title">Batches</h1>
+            <p class="page-header-sub">Submit, poll, and watch in-flight batches in one place. The trigger card runs what the daily cron runs; the queue and activity log below mirror server events in real time.</p>
           </header>
 
           <div class="trigger-card trigger-card--primary">
@@ -484,15 +478,11 @@
             </div>
           </details>
         </div>
-      </section>
-
-      <!-- ═══ QUEUE PAGE ═══ -->
-      <section class="admin-page admin-page--queue" id="page-queue" data-page="queue" role="tabpanel" hidden>
         <div class="queue-page-layout">
           <header class="page-header queue-page-header">
             <div>
               <h1 class="page-header-title">Queue &amp; live activity</h1>
-              <p class="page-header-sub">What's in flight right now. Watch a job move from <em>submitted</em> → <em>fetched</em> → drop off as each batch finishes. The activity log mirrors server events in real time.</p>
+              <p class="page-header-sub">What's in flight right now. Watch a job move from <em>submitted</em> → <em>fetched</em> → drop off as each batch finishes.</p>
             </div>
             <div class="queue-page-meta">
               <span id="batch-summary" class="queue-page-summary">No jobs in flight</span>
@@ -513,7 +503,7 @@
               </header>
               <div id="batch-status" class="batch-status">
                 <div id="batch-job-grid" class="batch-job-grid"></div>
-                <div id="batch-empty" class="batch-empty" hidden>No batch jobs in flight. Go to the <strong>Trigger</strong> tab to start one.</div>
+                <div id="batch-empty" class="batch-empty" hidden>No batch jobs in flight. Submit one above to start.</div>
               </div>
             </section>
             <section class="batch-activity-col">
