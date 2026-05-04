@@ -386,15 +386,16 @@ const CATEGORY_PROMPT_INTENTS: Record<
     title: 'Polygram',
     composition:
       'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
-    // Technical tail: polygram bans photography and requires shape
-    // boundaries (carried by the output template's "stylised illustration
-    // — not photographic" + "directional lines, shadows, tonal gradient"
-    // wording, plus this clause) so the cut-up pieces have orientation
-    // cues. The previous shape-boundary language used to live in a
-    // dedicated POLYGRAM_STYLE_POOL; that's been retired in favour of
-    // encoding it in the verbatim tail.
+    // Technical tail: polygram is a rotation puzzle, so EVERY fragment
+    // — including nominally-uniform regions like skies, walls, water —
+    // needs visible directional cues so the player can tell which way
+    // up a piece goes. Earlier wording focused on shape boundaries
+    // between forms ("every form bounded by a confident edge"), which
+    // the model satisfied by drawing strong outlines on objects but
+    // leaving the sky as a soft painterly gradient. Now naming the
+    // trouble regions explicitly and requiring line work inside them.
     qualityTarget:
-      'Render with strong shape boundaries throughout — every form bounded by a confident edge, regions clearly separated by colour rather than relying on outlines. Every region of the image should be filled with rich texture, fine surface detail, and tonal variation; ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+      'Heavy line work and visible directional cues throughout the ENTIRE image, with no exception for nominally-uniform regions: skies must be broken into visible cloud panels with clear edges or stained-glass-style leading; walls must show mortar lines, cracks, or vines; water must show ripple lines or reflective panels; foliage must show leaf and stem lines. Every fragment of the image must carry rotational orientation cues, since this is a rotation puzzle. Strong shape boundaries between forms, and every region filled with rich texture, fine surface detail, and tonal variation. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
   diamond: {
     title: 'Diamond Painting',
