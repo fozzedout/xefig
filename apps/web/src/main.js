@@ -3707,7 +3707,15 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
           <div id="completed-leaderboard" class="sheet-leaderboard"></div>
         </div>
       </aside>
-      <button id="replay-btn" class="completed-screen-replay" type="button">Play Again</button>
+      <div class="completed-screen-actions">
+        ${gameMode === GAME_MODE_DIAMOND
+          ? `<button id="completed-show-source-btn" class="completed-screen-show-source" type="button" aria-pressed="false" aria-label="Show source image">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+              <span>Show source</span>
+            </button>`
+          : ''}
+        <button id="replay-btn" class="completed-screen-replay" type="button">Play Again</button>
+      </div>
     </main>
   `
 
@@ -3777,6 +3785,18 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
       preview.init().then(() => {
         if (previewPuzzle !== preview) return
         forceCompletePuzzlePreview(gameMode, preview)
+        // Wire the source-image toggle for diamond — the preview is the
+        // painted output, the toggle overlays the source for comparison.
+        if (gameMode === GAME_MODE_DIAMOND) {
+          const sourceBtn = gameEl.querySelector('#completed-show-source-btn')
+          if (sourceBtn) {
+            sourceBtn.addEventListener('click', () => {
+              if (!previewPuzzle || typeof previewPuzzle.toggleReferenceVisible !== 'function') return
+              const active = previewPuzzle.toggleReferenceVisible()
+              sourceBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+            })
+          }
+        }
       }).catch(() => {
         // Non-fatal — preview just won't render; topbar/pill/sheet still work.
       })

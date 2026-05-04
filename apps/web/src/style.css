@@ -6094,10 +6094,58 @@ canvas.slice-image {
   pointer-events: none;
 }
 
+/* Diamond's source-image toggle on the completed screen — bottom-left
+   mirroring the bottom-right Play Again button. Hides when the
+   leaderboard sheet expands, same as the replay button. */
+.completed-screen-show-source {
+  position: absolute;
+  left: 1rem;
+  bottom: calc(var(--sheet-peek, 3.2rem) + 1rem);
+  z-index: 3;
+  appearance: none;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #e0f6ff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: opacity 0.2s ease, background 0.15s, border-color 0.15s;
+}
+
+.completed-screen-show-source:hover,
+.completed-screen-show-source:focus-visible {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: rgba(56, 189, 248, 0.7);
+}
+
+.completed-screen-show-source[aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.45);
+  border-color: rgba(56, 189, 248, 0.85);
+  color: #fff;
+}
+
+.completed-screen:has(.completed-screen-sheet[aria-expanded="true"]) .completed-screen-show-source {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .completed-screen-replay {
     bottom: 1rem;
     right: calc(var(--sheet-peek, 2.6rem) + 0.6rem);
+  }
+  .completed-screen-show-source {
+    bottom: 1rem;
+    left: 1rem;
   }
 }
 
