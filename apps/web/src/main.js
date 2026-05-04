@@ -3858,12 +3858,16 @@ function renderGame({ resumeRun = null } = {}) {
   const useImmersiveSwapChrome = gameMode === GAME_MODE_SWAP
   const useImmersiveMenuChrome = useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome
   const useImmersiveChrome = useImmersiveMenuChrome
-  const viewButtonMarkup = gameMode !== GAME_MODE_DIAMOND
-    ? `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
-        Reference image
-      </button>`
-    : ''
+  // Diamond hides the view button until completion: the puzzle's intent
+  // is to discover what the painting becomes, so peeking mid-paint would
+  // spoil it. After completion, the painted output can be ambiguous
+  // (small subjects collapse to a few pixels at 16 colours), so the
+  // toggle becomes useful for verifying the source.
+  const viewButtonHiddenAttr = gameMode === GAME_MODE_DIAMOND ? ' hidden' : ''
+  const viewButtonMarkup = `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false"${viewButtonHiddenAttr}>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
+      ${gameMode === GAME_MODE_DIAMOND ? 'Show source image' : 'Reference image'}
+    </button>`
   const muteSfxInitiallyMuted = useImmersiveDiamondChrome ? getDiamondSfxMuted() : false
   const muteSfxButtonMarkup = useImmersiveDiamondChrome
     ? `<button id="mute-sfx-btn" class="gt-menu-item gt-menu-item--mute-toggle" type="button" aria-pressed="${muteSfxInitiallyMuted ? 'true' : 'false'}">
@@ -4339,6 +4343,14 @@ function renderGame({ resumeRun = null } = {}) {
           }
           leaderboardDone = true
 
+          // Diamond's view button is hidden during play; reveal once the
+          // painting is finished so the user can compare against the
+          // source image (small subjects collapse to a few pixels under
+          // 16-colour quantization and aren't always self-evident).
+          if (gameMode === GAME_MODE_DIAMOND && viewBtn) {
+            viewBtn.hidden = false
+          }
+
           stopTimerDisplay()
           pauseActiveTimer()
           currentRun.elapsedActiveMs = getActiveElapsedMs()
@@ -4558,6 +4570,13 @@ function renderGame({ resumeRun = null } = {}) {
 
       if (resumeRun?.puzzleState) {
         puzzle.applyProgressState(resumeRun.puzzleState)
+
+        // Resuming a fully-completed diamond run also needs the view
+        // button revealed — onComplete only fires on the painting's
+        // final stroke, not on resume.
+        if (gameMode === GAME_MODE_DIAMOND && viewBtn && puzzle.completed) {
+          viewBtn.hidden = false
+        }
 
         if (gameMode === GAME_MODE_JIGSAW) {
           if (edgesBtn && puzzle.edgesOnly) {
