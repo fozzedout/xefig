@@ -3,7 +3,7 @@ import { ensurePuzzleTables, getPromptHistoryD1, appendPromptHistory } from './p
 
 const PROMPT_HISTORY_LIMIT = 260
 
-const ROLES = ['concept', 'location', 'state', 'lighting', 'mood', 'style', 'palette', 'camera'] as const
+const ROLES = ['concept', 'location', 'state', 'lighting', 'mood', 'palette', 'camera'] as const
 type DescriptorRole = (typeof ROLES)[number]
 
 // ---------------------------------------------------------------------------
@@ -134,24 +134,6 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'lonely and isolated', 'magical and enchanted', 'gritty and raw',
     'elegant and refined', 'chaotic and lively', 'sacred and transcendent',
     'brooding and atmospheric', 'festive and exuberant',
-  ],
-
-  style: [
-    'stylized illustration', 'high detail concept art', 'matte painting finish',
-    'storybook painting style', 'watercolor wash texture', 'heavy linework accents',
-    'gouache brush strokes', 'oil paint texture', 'clean vector style',
-    'isometric scene design', 'futuristic retro fusion', 'ancient technology motif',
-    'solar-punk infrastructure', 'fantasy realism blend', 'art deco geometry',
-    'brutalist forms', 'organic curved structures', 'geometric layered abstract style',
-    'maximalist color explosion', 'photorealistic rendering', 'soft focus impressionism',
-    'ukiyo-e woodblock style', 'art nouveau curves', 'pointillist texture',
-    'palette knife impasto', 'charcoal sketch finish', 'ink wash painting',
-    'fresco texture', 'mosaic tile style', 'stained glass rendering',
-    'linocut print style', 'copper engraving style', 'digital collage',
-    'hand-tinted photograph style', 'vintage travel poster style',
-    'cross-hatched pen and ink', 'cyanotype print style', 'crayon and pastel blend',
-    'encaustic wax painting', 'risograph two-tone print', 'sgraffito scratch texture',
-    'batik wax-resist pattern', 'Byzantine icon style',
   ],
 
   palette: [
@@ -318,24 +300,6 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'stately and elegant', 'whimsical and charming',
   ],
 
-  // Styles that produce paintable regions with rich internal colour
-  // variation — entries explicitly limiting colour count, panel count
-  // or shape count (silhouettes, "flat", "limited", "few", "simple")
-  // were dropped after they correlated with sub-30-min completion
-  // times in calibration data.
-  style: [
-    'stained glass rendering with clear leaded panels',
-    'folk art illustration with clean shapes',
-    'storybook illustration with clean outlines',
-    'cel-shaded animation style',
-    'textile pattern style with embroidered shapes',
-    'tile mosaic style with tessellated panels',
-    'batik wax-print style with layered colour',
-    'collage style with overlapping cut shapes',
-    'mural painting style with broad confident strokes',
-    'painted sign style with hand-lettered charm',
-  ],
-
   palette: [
     'jewel tones laid down in large flat panels with clean boundaries',
     'stained-glass palette: a dozen saturated flat panels separated by bold dark leading',
@@ -381,7 +345,6 @@ const MIN_ROLE_POOL_SIZE: Record<DescriptorRole, number> = {
   state: 30,
   lighting: 20,
   mood: 10,
-  style: 15,
   palette: 10,
   camera: 10,
 }
@@ -423,8 +386,15 @@ const CATEGORY_PROMPT_INTENTS: Record<
     title: 'Polygram',
     composition:
       'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
+    // Technical tail: polygram bans photography and requires shape
+    // boundaries (carried by the output template's "stylised illustration
+    // — not photographic" + "directional lines, shadows, tonal gradient"
+    // wording, plus this clause) so the cut-up pieces have orientation
+    // cues. The previous shape-boundary language used to live in a
+    // dedicated POLYGRAM_STYLE_POOL; that's been retired in favour of
+    // encoding it in the verbatim tail.
     qualityTarget:
-      'Every region of the image should be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+      'Render with strong shape boundaries throughout — every form bounded by a confident edge, regions clearly separated by colour rather than relying on outlines. Every region of the image should be filled with rich texture, fine surface detail, and tonal variation; ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
   diamond: {
     title: 'Diamond Painting',
@@ -443,11 +413,15 @@ const CATEGORY_PROMPT_INTENTS: Record<
 
 // Narrative templates weave the descriptor slots into prose rather than a
 // labelled keyword list. Google's Nano Banana guide is explicit that narrative
-// description outperforms "concept: X; location: Y" style lists.
+// description outperforms "concept: X; location: Y" style lists. Style /
+// medium / aesthetic constraints are NOT in the descriptors — they live in
+// the per-category technical tail (qualityTarget + outputTemplate) so each
+// category can encode its own rules (photographic OK for jigsaw/slider/swap,
+// not for polygram/diamond).
 const PROMPT_NARRATIVE_TEMPLATES = [
-  'The scene features {stateArticle} {state} {concept} set in {locationPhrase}, bathed in {lighting}. The overall atmosphere feels {mood}. Render it in {style}, using {palette}.',
-  'Depict {stateArticle} {state} {concept} in {locationPhrase}, under {lighting} and with {mood} energy throughout. Paint it in {style}, anchored by {palette}.',
-  'Show {stateArticle} {state} {concept} in {locationPhrase}. Light it with {lighting} and give the image {mood} atmosphere throughout. Render in {style}, using {palette}.',
+  'The scene features {stateArticle} {state} {concept} set in {locationPhrase}, bathed in {lighting}, with {palette}. The overall atmosphere feels {mood}.',
+  'Depict {stateArticle} {state} {concept} in {locationPhrase}, under {lighting} and with {mood} energy throughout, anchored by {palette}.',
+  'Show {stateArticle} {state} {concept} in {locationPhrase}. Light it with {lighting} and give the image {mood} atmosphere throughout, with {palette}.',
 ] as const
 
 // Diamond concepts ("stag in a coastal meadow with boats in the bay",
@@ -455,9 +429,9 @@ const PROMPT_NARRATIVE_TEMPLATES = [
 // narrative omits the {location} slot to avoid redundant or contradictory
 // phrasing like "…in a coastal meadow set in a hillside".
 const PROMPT_NARRATIVE_TEMPLATES_DIAMOND = [
-  'Depict {stateArticle} {state} {concept}, lit by {lighting} and carrying {mood} energy throughout. Render it in {style}, using {palette}.',
-  'Show {stateArticle} {state} {concept} under {lighting}, with {mood} atmosphere overall. Paint it in {style}, anchored by {palette}.',
-  'The scene features {stateArticle} {state} {concept}, bathed in {lighting}. The overall atmosphere feels {mood}. Render in {style}, using {palette}.',
+  'Depict {stateArticle} {state} {concept}, lit by {lighting} and carrying {mood} energy throughout, with {palette}.',
+  'Show {stateArticle} {state} {concept} under {lighting}, with {mood} atmosphere overall and {palette}.',
+  'The scene features {stateArticle} {state} {concept}, bathed in {lighting}. The overall atmosphere feels {mood}, with {palette}.',
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES = [
@@ -680,7 +654,6 @@ export function buildImagePromptParts(
     .replace('{locationPhrase}', locationPhrase(set.location))
     .replace('{lighting}', set.lighting)
     .replace('{mood}', stripMoodSuffix(set.mood))
-    .replace('{style}', set.style)
     .replace('{palette}', set.palette)
 
   const qualityLine = intent.qualityTarget
@@ -717,62 +690,11 @@ function locationPhrase(location: string): string {
 // Role-slot descriptor picker
 // ---------------------------------------------------------------------------
 
-// Descriptors that produce flat/graphic imagery — these are great for
-// polygram and diamond but should appear less often for jigsaw, slider, swap.
-const GRAPHIC_STYLE_DESCRIPTORS = new Set([
-  'mosaic', 'stained glass', 'mandala', 'origami', 'abstract ink', 'fluid marbling',
-  'kinetic sculpture', 'light installation',
-  'mosaic tile style', 'stained glass rendering', 'clean vector style',
-  'isometric scene design', 'geometric layered abstract style', 'linocut print style',
-  'copper engraving style',
-])
-
-// Polygram needs strong shape boundaries so the cut-up pieces have
-// orientation cues. Mirroring the diamond pattern, each entry bakes the
-// boundary language into the descriptor itself, so the {style} slot
-// alone enforces clear-region rendering — no need for a hardcoded style
-// hint in the output template. Excludes photographic / soft-textured
-// styles (watercolor wash, charcoal, photoreal, etc.) that don't give
-// pieces an orientation cue. Variety comes from the rotation depth of
-// this pool — keep it broad so any individual style (stained glass,
-// mosaic, linocut, …) only resurfaces every week-plus, since the
-// previous "polygram looks samey" complaints were about repetition
-// frequency, not any particular style being wrong.
-const POLYGRAM_STYLE_POOL = [
-  'stained glass rendering with bold leaded panels',
-  'mosaic tile style with grouted tessellation',
-  'linocut print style with bold flat regions',
-  'screen print style with crisp limited layers',
-  'cel-shaded illustration with confident outlines',
-  'clean vector art with crisp shape edges',
-  'mid-century travel poster with strong silhouettes',
-  'storybook illustration with clean outlines',
-  'art deco poster style with geometric panels',
-  'paper cut-out style with bold silhouettes',
-  'ukiyo-e woodblock with clear contour lines',
-  'art nouveau illustration with sinuous outlines',
-  'copper engraving with hatched plates and crisp edges',
-  'cross-hatched pen and ink with bold contour lines',
-  'risograph two-tone print with overlapping flat layers',
-  'batik wax-resist pattern with clear coloured zones',
-  'folk-art illustration with bold flat shapes',
-  'Byzantine icon style with gold panels and outlines',
-  'geometric layered abstract with clean edges',
-  'collage style with overlapping cut paper shapes',
-  'gouache flat colour with confident brush strokes',
-  'painted sign style with crisp outlines and flat fills',
-  'isometric scene design with stepped depth panels',
-  'comic book illustration with bold inked outlines',
-  'pop-art illustration with bold outlines and dot patterns',
-  'Persian miniature painting with flat colour planes',
-  'illuminated manuscript style with bordered colour panels',
-  'Polish theatre poster style with bold expressive shapes',
-] as const
-
-const PHOTOGRAPHIC_CATEGORIES: ReadonlySet<PuzzleCategory> = new Set(['jigsaw', 'slider', 'swap'])
-
 // Pick one descriptor per role, preferring least-recently-used entries and
-// avoiding anything already used elsewhere in this pack.
+// avoiding anything already used elsewhere in this pack. Style / medium /
+// aesthetic constraints are NOT a descriptor role — they live in each
+// category's qualityTarget + outputTemplate (the verbatim technical tail),
+// so this function just rotates scene fodder across the pool.
 function pickDescriptorSet(
   recent: PromptHistoryItem[],
   excluded: Set<string>,
@@ -782,16 +704,9 @@ function pickDescriptorSet(
   const pool = category === 'diamond' ? DIAMOND_DESCRIPTOR_POOL : DESCRIPTOR_POOL
   const set = {} as DescriptorSet
 
-  // For photographic categories, penalise the broad graphic/flat-art
-  // descriptor set so they appear less often (but aren't excluded).
-  // Polygram doesn't need a penalty — its style role pulls from a
-  // curated POLYGRAM_STYLE_POOL instead (see below).
-  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category) ? GRAPHIC_STYLE_DESCRIPTORS : null
-
   let working = new Set(excluded)
   for (const role of ROLES) {
-    const rolePool = role === 'style' && category === 'polygram' ? POLYGRAM_STYLE_POOL : pool[role]
-    set[role] = pickOneDescriptor(rolePool, counts, working, penalised)
+    set[role] = pickOneDescriptor(pool[role], counts, working)
     working = new Set([...working, set[role]])
   }
 
@@ -812,7 +727,6 @@ function pickOneDescriptor(
   pool: readonly string[],
   counts: Map<string, number>,
   excluded: Set<string>,
-  penalised?: Set<string> | null,
 ): string {
   // Filter out anything already used in this pack. If that empties the pool,
   // fall back to the full pool so we never hard-fail.
@@ -820,12 +734,10 @@ function pickOneDescriptor(
   const workingPool = available.length > 0 ? available : [...pool]
 
   // Score by usage frequency, shuffle within ties via a random tiebreaker.
-  // Penalised descriptors get an extra usage count so they sort lower.
-  const penaltyWeight = 3
   const scored = workingPool
     .map((descriptor) => ({
       descriptor,
-      seen: (counts.get(descriptor) ?? 0) + (penalised?.has(descriptor) ? penaltyWeight : 0),
+      seen: counts.get(descriptor) ?? 0,
       tieBreak: Math.random(),
     }))
     .sort((a, b) => (a.seen !== b.seen ? a.seen - b.seen : a.tieBreak - b.tieBreak))
