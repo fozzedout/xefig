@@ -364,28 +364,28 @@ const CATEGORY_PROMPT_INTENTS: Record<
   jigsaw: {
     title: 'Jigsaw',
     composition:
-      'Depict a breathtaking, visually stunning scene worthy of a framed print or wallpaper — dramatic scale, striking depth, and arresting beauty. Favour sweeping vistas, monumental architecture, epic natural wonders, or powerful wildlife portraits. The image should feel like a cinematic hero shot that demands attention.',
+      'Craft a detailed, dynamic scene that tells a story using these elements:',
     qualityTarget:
       'Every region must be packed with rich texture, fine surface detail, and tonal depth. Ensure many distinct recognisable sub-regions with clear visual separation. Maintain natural colour variety — secondary and environmental colours should remain visible beneath the dominant palette. The overall impression should be of a premium, gallery-quality image.',
   },
   slider: {
     title: 'Slider',
     composition:
-      'Depict a visually striking, high-impact scene with bold composition and dramatic presence — the kind of image that stops you scrolling. Favour powerful landscapes, grand architecture, vivid wildlife encounters, or dramatic atmospheric moments. Prioritise depth, scale, and visual punch.',
+      'Craft a detailed, dynamic scene that tells a story using these elements:',
     qualityTarget:
       'Every region must contain rich texture, fine detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation between them. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
   swap: {
     title: 'Swap',
     composition:
-      'Depict a visually gorgeous, immersive scene with strong colour impact and beautiful composition — something that would look stunning as a large print. Favour lush environments, dramatic skies, vibrant cityscapes, majestic wildlife, or awe-inspiring natural formations. The image should feel rich, expansive, and deeply satisfying to look at.',
+      'Craft a detailed, dynamic scene that tells a story using these elements:',
     qualityTarget:
       'Every region must be filled with rich texture, fine surface detail, and tonal variation. Ensure many distinct recognisable sub-regions with clear visual separation. Maintain natural colour variety — secondary and environmental colours should remain visible beneath the dominant palette.',
   },
   polygram: {
     title: 'Polygram',
     composition:
-      'Compose a visually rich, layered scene with strong perspective and depth — distinct foreground, middle ground, and background, each populated with subjects and detail of its own. Pack the composition so the upper part of the frame is as varied as the foreground; no part of the image should default to a uniform colour field.',
+      'Craft a layered scene with strong perspective and depth — populate the foreground, middle ground, and background each with their own detail — using these elements:',
     // Technical tail: polygram is a rotation puzzle, so EVERY fragment
     // — including nominally-uniform regions like skies, walls, water —
     // needs visible directional cues so the player can tell which way
@@ -400,7 +400,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'A vivid scene with strong colour variation across the entire canvas — painterly gradients, dappled light, layered planes of depth, or faceted multi-panel rendering. Either a single hero subject against a textured backdrop, or a busy composition packed with characters, animals, buildings, plants, water, and sky. Small details — leaves, petals, ripples, brickwork, fur, feathers, embroidery, distant figures, riggings, windows, patterned roofs — are welcome throughout. Every region (including skies, walls, water, and large objects) should contain multiple distinguishable colours rather than a single flat fill, and the composition should avoid broad single-colour silhouettes.',
+      'Craft a richly detailed scene packed with small named subjects throughout the frame, using these elements:',
     // Technical tail appended verbatim after the LLM rewrite — kept
     // deliberately terse after iterative testing. "Very low colour"
     // is a hint to the image model that the medium has a tiny palette
