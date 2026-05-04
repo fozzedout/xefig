@@ -5546,27 +5546,28 @@ canvas.slice-image {
   margin-top: 0.4rem;
 }
 
+/* Matches .completion-dismiss styling so the two overlay actions read
+   as a peer pair — same accent fill, padding, radius, weight. Icon
+   uses inline-flex alignment so it sits in the same baseline. */
 .completion-show-source {
   appearance: none;
-  background: rgba(56, 189, 248, 0.18);
-  color: #e0f6ff;
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  padding: 0.55rem 1.4rem;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  padding: 0.6rem 2rem;
   border-radius: 0.5rem;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  transition: background 0.15s, border-color 0.15s;
+  transition: opacity 0.15s;
 }
 
-.completion-show-source:hover,
-.completion-show-source:focus-visible {
-  background: rgba(56, 189, 248, 0.28);
-  border-color: rgba(56, 189, 248, 0.7);
+.completion-show-source:hover {
+  opacity: 0.85;
 }
 
 .completion-show-source svg {
@@ -6094,22 +6095,22 @@ canvas.slice-image {
   pointer-events: none;
 }
 
-/* Diamond's source-image toggle on the completed screen — bottom-left
-   mirroring the bottom-right Play Again button. Hides when the
-   leaderboard sheet expands, same as the replay button. */
+/* Matches .completed-screen-replay styling so the two screen actions
+   read as a peer pair — same dark glass pill, same padding, same
+   weight. Hides identically when the leaderboard sheet expands. */
 .completed-screen-show-source {
   position: absolute;
   left: 1rem;
   bottom: calc(var(--sheet-peek, 3.2rem) + 1rem);
   z-index: 3;
   appearance: none;
-  border: 1px solid rgba(56, 189, 248, 0.45);
+  border: none;
   padding: 0.5rem 1.1rem;
   border-radius: 999px;
-  background: rgba(56, 189, 248, 0.18);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  color: #e0f6ff;
+  color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -6118,19 +6119,16 @@ canvas.slice-image {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  transition: opacity 0.2s ease, background 0.15s, border-color 0.15s;
+  transition: opacity 0.2s ease, background 0.15s;
 }
 
 .completed-screen-show-source:hover,
 .completed-screen-show-source:focus-visible {
-  background: rgba(56, 189, 248, 0.28);
-  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .completed-screen-show-source[aria-pressed="true"] {
-  background: rgba(56, 189, 248, 0.45);
-  border-color: rgba(56, 189, 248, 0.85);
-  color: #fff;
+  background: rgba(20, 20, 28, 0.85);
 }
 
 .completed-screen:has(.completed-screen-sheet[aria-expanded="true"]) .completed-screen-show-source {
@@ -6355,13 +6353,15 @@ canvas.slice-image {
 
 /* Source-image toggle: lives inside .floating-game-controls (top-right
    for diamond) as a sibling of the menu wrap, sits a notch below the
-   menu dots so the dropdown can pop down without colliding. Higher
-   resting opacity than the back button since it appears only on
-   completion and we want it noticed. */
+   menu dots so the dropdown can pop down without colliding. Inherits
+   the same dark glass styling as the menu dots button (.gt-icon-btn--
+   floating) for visual consistency. */
 .diamond-floating-btn--source {
   position: relative;
   top: auto;
   left: auto;
+  width: 42px;
+  height: 42px;
   margin-top: 0.4rem;
   opacity: 0.85;
   background: rgba(12, 12, 18, 0.82);
@@ -6379,10 +6379,9 @@ canvas.slice-image {
 }
 
 .diamond-floating-btn--source[aria-pressed="true"] {
-  background: rgba(56, 189, 248, 0.32);
-  border-color: rgba(56, 189, 248, 0.55);
-  color: #fff;
   opacity: 1;
+  background: rgba(28, 28, 38, 0.92);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 /* Landscape: palette hugs the right edge of the screen, vertically centred
