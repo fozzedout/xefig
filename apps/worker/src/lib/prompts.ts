@@ -510,7 +510,7 @@ export async function generateSingleCategoryPrompt(
     })
     const expanded = (rewritten || '').trim()
     if (expanded) {
-      prompt = `${expanded} ${details.technical}`
+      prompt = `${expanded}\n\n${details.technical}`
     }
   }
 
@@ -546,7 +546,7 @@ async function applyRewriterToPack(pack: PromptPack, rewriter: PromptRewriter): 
         })
         const expanded = (rewritten || '').trim()
         if (expanded) {
-          entry.prompt = `${expanded} ${extra.technical}`
+          entry.prompt = `${expanded}\n\n${extra.technical}`
         }
       } catch (err) {
         console.warn(
@@ -601,7 +601,7 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
 function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet) {
   const parts = buildImagePromptParts(category, set)
   return {
-    prompt: `${parts.descriptive} ${parts.technical}`,
+    prompt: `${parts.descriptive}\n\n${parts.technical}`,
     descriptive: parts.descriptive,
     technical: parts.technical,
     theme: `${capitalizeWords(set.state)} ${capitalizeWords(set.concept)} ${capitalizeWords(set.location)} — ${capitalizeWords(set.mood)}`,
