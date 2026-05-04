@@ -452,9 +452,9 @@ const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
 ] as const
 
 const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 image with directional lines, shadows, and tonal gradient reading clearly across the whole composition. Define shapes with strong contours so each region is clearly bounded. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
-  'Deliver a single landscape 4:3 image with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. Use confident outlines and clear shape boundaries throughout. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
-  'Single 4:3 landscape image with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. Keep shape edges crisp and well-separated so each region is distinct. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
+  'Output: one landscape 4:3 illustration (not a photograph) with directional lines, shadows, and tonal gradient reading clearly across the whole composition. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
+  'Deliver a single landscape 4:3 stylised illustration — not photographic — with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
+  'Single 4:3 landscape illustration (rendered in the style above, not as a photograph) with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -702,14 +702,47 @@ const GRAPHIC_STYLE_DESCRIPTORS = new Set([
   'copper engraving style',
 ])
 
-// Polygram needs strong shape boundaries (so the cut-up pieces have
-// orientation cues), which is what was driving stained-glass and mosaic
-// to dominate. Penalise those specific descriptors so the polygram pool
-// reaches more often for ink, vector, linocut, engraving, etc. — all of
-// which still give the strong-contour look the puzzle needs.
-const POLYGRAM_OVERUSED_DESCRIPTORS = new Set([
-  'stained glass', 'stained glass rendering', 'mosaic', 'mosaic tile style',
-])
+// Polygram needs strong shape boundaries so the cut-up pieces have
+// orientation cues. Mirroring the diamond pattern, each entry bakes the
+// boundary language into the descriptor itself, so the {style} slot
+// alone enforces clear-region rendering — no need for a hardcoded style
+// hint in the output template. Excludes photographic / soft-textured
+// styles (watercolor wash, charcoal, photoreal, etc.) that don't give
+// pieces an orientation cue. Variety comes from the rotation depth of
+// this pool — keep it broad so any individual style (stained glass,
+// mosaic, linocut, …) only resurfaces every week-plus, since the
+// previous "polygram looks samey" complaints were about repetition
+// frequency, not any particular style being wrong.
+const POLYGRAM_STYLE_POOL = [
+  'stained glass rendering with bold leaded panels',
+  'mosaic tile style with grouted tessellation',
+  'linocut print style with bold flat regions',
+  'screen print style with crisp limited layers',
+  'cel-shaded illustration with confident outlines',
+  'clean vector art with crisp shape edges',
+  'mid-century travel poster with strong silhouettes',
+  'storybook illustration with clean outlines',
+  'art deco poster style with geometric panels',
+  'paper cut-out style with bold silhouettes',
+  'ukiyo-e woodblock with clear contour lines',
+  'art nouveau illustration with sinuous outlines',
+  'copper engraving with hatched plates and crisp edges',
+  'cross-hatched pen and ink with bold contour lines',
+  'risograph two-tone print with overlapping flat layers',
+  'batik wax-resist pattern with clear coloured zones',
+  'folk-art illustration with bold flat shapes',
+  'Byzantine icon style with gold panels and outlines',
+  'geometric layered abstract with clean edges',
+  'collage style with overlapping cut paper shapes',
+  'gouache flat colour with confident brush strokes',
+  'painted sign style with crisp outlines and flat fills',
+  'isometric scene design with stepped depth panels',
+  'comic book illustration with bold inked outlines',
+  'pop-art illustration with bold outlines and dot patterns',
+  'Persian miniature painting with flat colour planes',
+  'illuminated manuscript style with bordered colour panels',
+  'Polish theatre poster style with bold expressive shapes',
+] as const
 
 const PHOTOGRAPHIC_CATEGORIES: ReadonlySet<PuzzleCategory> = new Set(['jigsaw', 'slider', 'swap'])
 
@@ -725,17 +758,15 @@ function pickDescriptorSet(
   const set = {} as DescriptorSet
 
   // For photographic categories, penalise the broad graphic/flat-art
-  // descriptor set. For polygram, penalise just stained-glass / mosaic
-  // so the pool still reaches the other shape-bounded styles
-  // (linocut, engraving, vector, ink) that work for cut-up pieces but
-  // don't all converge on the same look.
-  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category)
-    ? GRAPHIC_STYLE_DESCRIPTORS
-    : (category === 'polygram' ? POLYGRAM_OVERUSED_DESCRIPTORS : null)
+  // descriptor set so they appear less often (but aren't excluded).
+  // Polygram doesn't need a penalty — its style role pulls from a
+  // curated POLYGRAM_STYLE_POOL instead (see below).
+  const penalised = PHOTOGRAPHIC_CATEGORIES.has(category) ? GRAPHIC_STYLE_DESCRIPTORS : null
 
   let working = new Set(excluded)
   for (const role of ROLES) {
-    set[role] = pickOneDescriptor(pool[role], counts, working, penalised)
+    const rolePool = role === 'style' && category === 'polygram' ? POLYGRAM_STYLE_POOL : pool[role]
+    set[role] = pickOneDescriptor(rolePool, counts, working, penalised)
     working = new Set([...working, set[role]])
   }
 
