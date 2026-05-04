@@ -385,7 +385,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
   polygram: {
     title: 'Polygram',
     composition:
-      'Depict a single continuous scene with strong visual variety throughout — any subject direction is welcome: landscape, wildlife, architecture, objects, daily life, or abstract.',
+      'Compose a visually rich, layered scene with strong perspective and depth — distinct foreground, middle ground, and background, each populated with subjects and detail of its own. Pack the composition so the upper part of the frame is as varied as the foreground; no part of the image should default to a uniform colour field.',
     // Technical tail: polygram is a rotation puzzle, so EVERY fragment
     // — including nominally-uniform regions like skies, walls, water —
     // needs visible directional cues so the player can tell which way
