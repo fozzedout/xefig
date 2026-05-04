@@ -982,17 +982,20 @@ function computeRegionStats(grid, cols, rows) {
   return { regionCount, largestRegionFraction: largestSize / total }
 }
 
-// Tentative thresholds — these are my starting guesses. Calibrate by
-// running on completed puzzles you'd grade as "good" vs "too simple"
-// and adjust the bounds based on what falls where.
+// Calibrated 2026-05-04 against 10 completed puzzles. Two clean
+// clusters in the data, separated by a ~15-minute completion-time gap:
+//   simple cluster (14-27 min): edges < 28% AND (regions < 900 OR largest > 25%)
+//   good cluster   (42-56 min): edges >= 35% AND regions >= 1100 AND largest <= 15%
+// Strongest single predictor of completion time was edges (r ≈ 0.95);
+// regions r ≈ 0.91; largest r ≈ -0.57.
 function classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction) {
-  if (adjDiff < 0.20 || regionCount < 250 || largestRegionFraction > 0.40) {
-    return { state: 'simple', label: 'likely too simple' }
+  if (adjDiff < 0.28 && (regionCount < 900 || largestRegionFraction > 0.25)) {
+    return { state: 'simple', label: 'likely too simple (~15-25 min)' }
   }
-  if (adjDiff > 0.40 && regionCount > 700 && largestRegionFraction < 0.20) {
-    return { state: 'good', label: 'likely good' }
+  if (adjDiff >= 0.35 && regionCount >= 1100 && largestRegionFraction <= 0.15) {
+    return { state: 'good', label: 'likely good (~45+ min)' }
   }
-  return { state: 'borderline', label: 'borderline' }
+  return { state: 'borderline', label: 'borderline (~25-45 min)' }
 }
 
 document.getElementById('diamond-complexity-btn')?.addEventListener('click', () => {
