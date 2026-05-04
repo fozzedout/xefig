@@ -6203,6 +6203,7 @@ canvas.slice-image {
   font-weight: 700;
   flex-shrink: 0;
   transition: border-color 120ms ease, transform 120ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .diamond-swatch.selected {
@@ -6212,6 +6213,15 @@ canvas.slice-image {
 
 .diamond-swatch:hover:not(.selected) {
   border-color: var(--muted);
+}
+
+.diamond-swatch:focus {
+  outline: none;
+}
+
+.diamond-swatch:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
 }
 
 /* ── Diamond immersive chrome ────────────────────────── */

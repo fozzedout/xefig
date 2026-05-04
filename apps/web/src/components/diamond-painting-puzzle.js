@@ -306,10 +306,12 @@ export class DiamondPaintingPuzzle {
   }
 
   selectColor(index) {
+    const changed = this.selectedColor !== index
     this.selectedColor = index
     for (let i = 0; i < this.swatches.length; i++) {
       this.swatches[i].classList.toggle('selected', i === index)
     }
+    if (changed && !this.muted) playClick()
   }
 
   // ─── Events ───
@@ -827,6 +829,30 @@ function playBuzzer() {
     gain.connect(ac.destination)
     osc.start(ac.currentTime + start)
     osc.stop(ac.currentTime + start + duration)
+  }
+}
+
+function playClick() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return
+    const ac = new AudioContextClass()
+    if (ac.state === 'suspended') ac.resume().catch(() => {})
+    const now = ac.currentTime
+    const osc = ac.createOscillator()
+    const gain = ac.createGain()
+    osc.type = 'triangle'
+    osc.frequency.setValueAtTime(720, now)
+    osc.frequency.exponentialRampToValueAtTime(980, now + 0.04)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11)
+    osc.connect(gain)
+    gain.connect(ac.destination)
+    osc.start(now)
+    osc.stop(now + 0.12)
+  } catch {
+    // Best effort sound effect.
   }
 }
 
