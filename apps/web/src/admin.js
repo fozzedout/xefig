@@ -1,7 +1,17 @@
 import './admin.css'
+import { sampleCellRegions, createDistinctPalette, sortPaletteDarkToLight, assignCellColors } from './components/diamond-painting-puzzle.js'
+import { loadImage, releaseLoadedImage } from './components/image-loader.js'
 
 const API_BASE = ''
 const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
+
+// Diamond complexity check — mirrors DiamondPaintingPuzzle's quantization
+// (TARGET_CELLS=10000, NUM_COLORS=16, CELL_SAMPLE_GRID=3) so the score
+// reflects exactly what the user paints, not the raw image.
+const DIAMOND_TARGET_CELLS = 10000
+const DIAMOND_NUM_COLORS = 16
+const DIAMOND_MIN_DIM = 20
+const DIAMOND_SAMPLE_GRID = 3
 
 const authGate = document.getElementById('auth-gate')
 const gateLoginForm = document.getElementById('gate-login-form')
@@ -823,6 +833,171 @@ async function copyText(text, label) {
     setStatus(`Clipboard copy failed for ${label}.`, 'error')
   }
 }
+
+// ─── Diamond complexity check ───
+
+async function checkDiamondComplexity() {
+  const btn = document.getElementById('diamond-complexity-btn')
+  const result = document.getElementById('diamond-complexity-result')
+  if (!btn || !result) return
+
+  btn.disabled = true
+  result.hidden = false
+  result.textContent = 'analysing…'
+  result.dataset.state = 'pending'
+
+  let image = null
+  let localUrl = null
+  try {
+    const source = getDiamondImageSource()
+    if (!source) {
+      result.textContent = 'no diamond image loaded'
+      result.dataset.state = 'error'
+      return
+    }
+    if (source.isLocal) localUrl = source.url
+
+    image = await loadImage(source.url)
+    const aspect = (image.naturalWidth || image.width) / (image.naturalHeight || image.height)
+    const cols = Math.max(DIAMOND_MIN_DIM, Math.round(Math.sqrt(DIAMOND_TARGET_CELLS * aspect)))
+    const rows = Math.max(DIAMOND_MIN_DIM, Math.round(DIAMOND_TARGET_CELLS / cols))
+
+    const cellSamples = sampleCellRegions(image, cols, rows, DIAMOND_SAMPLE_GRID)
+    const pixels = cellSamples.map((cell) => cell.representative)
+    const palette = createDistinctPalette(pixels, DIAMOND_NUM_COLORS)
+    sortPaletteDarkToLight(palette)
+    const grid = assignCellColors(cellSamples, palette)
+
+    const adjDiff = computeAdjacencyDiffRate(grid, cols, rows)
+    const { regionCount, largestRegionFraction } = computeRegionStats(grid, cols, rows)
+    const verdict = classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction)
+
+    result.dataset.state = verdict.state
+    result.innerHTML = ''
+
+    const edgesEl = document.createElement('span')
+    edgesEl.className = 'complexity-metric'
+    edgesEl.title = 'Fraction of neighbour cell pairs with different colours'
+    edgesEl.innerHTML = `edges <strong>${(adjDiff * 100).toFixed(0)}%</strong>`
+    result.appendChild(edgesEl)
+
+    const regionsEl = document.createElement('span')
+    regionsEl.className = 'complexity-metric'
+    regionsEl.title = `Distinct connected regions across ${cols}×${rows} grid (${cols * rows} cells)`
+    regionsEl.innerHTML = `regions <strong>${regionCount}</strong>`
+    result.appendChild(regionsEl)
+
+    const largestEl = document.createElement('span')
+    largestEl.className = 'complexity-metric'
+    largestEl.title = 'Fraction of cells in the largest single contiguous region'
+    largestEl.innerHTML = `largest <strong>${(largestRegionFraction * 100).toFixed(0)}%</strong>`
+    result.appendChild(largestEl)
+
+    const verdictEl = document.createElement('span')
+    verdictEl.className = 'complexity-verdict'
+    verdictEl.dataset.state = verdict.state
+    verdictEl.title = 'Tentative — calibrate against your completed puzzles'
+    verdictEl.textContent = verdict.label
+    result.appendChild(verdictEl)
+  } catch (error) {
+    result.dataset.state = 'error'
+    result.textContent = `error: ${error?.message ?? 'failed'}`
+  } finally {
+    if (image) releaseLoadedImage(image)
+    if (localUrl) URL.revokeObjectURL(localUrl)
+    btn.disabled = false
+  }
+}
+
+function getDiamondImageSource() {
+  const file = fileInputs.diamond?.files?.[0]
+  if (file) return { url: URL.createObjectURL(file), isLocal: true }
+  const wrap = thumbEls.diamond
+  const img = wrap?.querySelector('img')
+  if (wrap && !wrap.hidden && img?.src) return { url: img.src, isLocal: false }
+  return null
+}
+
+function computeAdjacencyDiffRate(grid, cols, rows) {
+  let diffs = 0
+  let pairs = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c
+      if (c + 1 < cols) {
+        pairs++
+        if (grid[i] !== grid[i + 1]) diffs++
+      }
+      if (r + 1 < rows) {
+        pairs++
+        if (grid[i] !== grid[i + cols]) diffs++
+      }
+    }
+  }
+  return pairs === 0 ? 0 : diffs / pairs
+}
+
+function computeRegionStats(grid, cols, rows) {
+  const total = grid.length
+  const visited = new Uint8Array(total)
+  const stack = []
+  let regionCount = 0
+  let largestSize = 0
+
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const color = grid[start]
+    let size = 0
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      size++
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      if (c > 0) {
+        const n = idx - 1
+        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
+      }
+      if (c + 1 < cols) {
+        const n = idx + 1
+        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
+      }
+      if (r > 0) {
+        const n = idx - cols
+        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
+      }
+      if (r + 1 < rows) {
+        const n = idx + cols
+        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
+      }
+    }
+
+    regionCount++
+    if (size > largestSize) largestSize = size
+  }
+
+  return { regionCount, largestRegionFraction: largestSize / total }
+}
+
+// Tentative thresholds — these are my starting guesses. Calibrate by
+// running on completed puzzles you'd grade as "good" vs "too simple"
+// and adjust the bounds based on what falls where.
+function classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction) {
+  if (adjDiff < 0.20 || regionCount < 250 || largestRegionFraction > 0.40) {
+    return { state: 'simple', label: 'likely too simple' }
+  }
+  if (adjDiff > 0.40 && regionCount > 700 && largestRegionFraction < 0.20) {
+    return { state: 'good', label: 'likely good' }
+  }
+  return { state: 'borderline', label: 'borderline' }
+}
+
+document.getElementById('diamond-complexity-btn')?.addEventListener('click', () => {
+  checkDiamondComplexity().catch((err) => console.error('Complexity check failed', err))
+})
 
 // ─── Image Processing ───
 
