@@ -2218,6 +2218,13 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   gap: 0;
 }
 
+/* Diamond stacks the previews vertically so the quantized canvas
+   takes the full card width — the side-by-side render at ~150px
+   wide was too small to spot messy / unreadable quantization. */
+.category-card[data-mode="diamond"] .image-previews {
+  flex-direction: column;
+}
+
 .existing-thumb {
   position: relative;
   flex: 1;
