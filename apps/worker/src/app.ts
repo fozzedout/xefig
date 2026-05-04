@@ -1111,16 +1111,55 @@ export function createApp() {
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
       return c.json({ error: 'Invalid playerGuid.' }, 400)
     }
-    // Floor at 1s — no puzzle mode is completable in under a second; a
-    // value below that is a timer-race artifact (was leaking through as
-    // 00:00 on the menu pill while the leaderboard showed the real time).
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 1000 || elapsedMs > 24 * 60 * 60 * 1000) {
+    // Per-mode minimum-time floors based on physical feasibility.
+    // diamond: ~7500-10000 cells × 16 colours — even at 5 cells/sec
+    // sustained you can't finish in under ~5 min. polygram is a
+    // rotation puzzle that needs at least a minute of thinking time
+    // per piece batch. jigsaw/sliding/swap can be very fast for
+    // expert players, so floors there are just impossible-time gates.
+    // Calibrate against real completion data over time; tightening
+    // is fine, but don't loosen these without evidence.
+    const ELAPSED_MS_FLOOR_BY_MODE: Record<string, number> = {
+      jigsaw: 20_000,
+      sliding: 10_000,
+      swap: 10_000,
+      polygram: 60_000,
+      diamond: 300_000,
+    }
+    const elapsedMsFloor = ELAPSED_MS_FLOOR_BY_MODE[gameMode] ?? 1000
+    if (!Number.isFinite(elapsedMs) || elapsedMs < elapsedMsFloor || elapsedMs > 24 * 60 * 60 * 1000) {
       return c.json({ error: 'Invalid elapsedMs.' }, 400)
     }
 
     try {
       await ensureLeaderboardTable(c.env.DB)
       await ensureSubmissionsTable(c.env.DB)
+      await ensurePuzzleTables(c.env.DB)
+
+      // Reject submissions for dates that don't have a puzzle, or
+      // where the requested gameMode wasn't generated. Stops the
+      // 'submit a fake time for 2099-12-31' style of fakery, and
+      // catches misrouted clients that submit for a mode that wasn't
+      // produced for that date. game_mode 'sliding' maps to puzzle
+      // category 'slider' — see types.ts.
+      const puzzleRow = await c.env.DB.prepare(
+        `SELECT categories FROM puzzles WHERE date = ? LIMIT 1`,
+      )
+        .bind(puzzleDate)
+        .first<{ categories: string }>()
+      if (!puzzleRow) {
+        return c.json({ error: 'No puzzle for that date.' }, 400)
+      }
+      const categoryKey = gameMode === 'sliding' ? 'slider' : gameMode
+      let puzzleCategoriesObj: Record<string, { imageUrl?: string } | null> | null = null
+      try {
+        puzzleCategoriesObj = JSON.parse(puzzleRow.categories) as Record<string, { imageUrl?: string } | null>
+      } catch {
+        puzzleCategoriesObj = null
+      }
+      if (!puzzleCategoriesObj || !puzzleCategoriesObj[categoryKey]?.imageUrl) {
+        return c.json({ error: `No ${gameMode} puzzle for that date.` }, 400)
+      }
 
       // Capture the player's stored best BEFORE the upsert so the
       // response can tell the UI whether this attempt set a new PB,
