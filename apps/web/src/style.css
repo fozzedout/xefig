@@ -1681,8 +1681,32 @@ h1 {
     pointer-events: none;
   }
   .archive-top-bar > * { pointer-events: auto; }
-  .cal-region { padding: 0; }
-  .cal-nav { padding: 0; justify-content: center; }
+  /* Portrait layout: top row has the resume button only (anchored
+     right). The month/year title moves down into the hero block so it
+     sits side-by-side with the medal + progress counter. Frees the
+     vertical slice the resume button used to occupy so the cal-deck
+     has room for the bottom-row week medals. */
+  .cal-region {
+    padding: 0 0.75rem;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      ".      resume"
+      "deck   deck"
+      "dots   dots";
+    column-gap: 0.5rem;
+    align-items: center;
+  }
+  .cal-nav { display: none; }
+  .archive-resume-btn {
+    grid-area: resume;
+    align-self: center;
+    margin: 0;
+    padding: 8px 14px;
+    flex-shrink: 0;
+  }
+  .cal-deck { grid-area: deck; }
+  .cal-dots { grid-area: dots; }
   .cal-nav-arrow { display: none; }
   .cal-nav-title .medal-mini { display: none; }
   .cal-nav-title .chevron { display: none; }
@@ -1695,19 +1719,55 @@ h1 {
   .cal-nav-title .month-name { font-size: 22px; font-weight: 800; }
   .cal-nav-title .year-label { font-size: 11px; opacity: 0.5; }
   .cal-dots { padding: 0 0.75rem; margin-top: 10px; }
-  .grid { gap: 4px; padding: 0 4px; }
-  .dow { gap: 4px; padding: 0 4px; font-size: 9.5px; letter-spacing: 0.06em; margin-bottom: 4px; }
-  .day { padding: 3px; border-radius: 8px; }
+  .grid { gap: 3px; padding: 0 4px; }
+  .dow { gap: 3px; padding: 0 4px; font-size: 9.5px; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .day { padding: 1px; border-radius: 8px; }
   .day .num { top: 2px; left: 4px; font-size: 9px; }
-  .day .glyph { width: 80%; }
+  .day .glyph { width: 96%; margin-bottom: 1px; }
   .week-strip { gap: 4px; padding: 10px 0.5rem 0; margin-top: 10px; }
   .week-strip .week-cell svg { max-width: 56px; }
-  .month-hero { order: -1; padding: 4px 0 6px; flex: 0 0 auto; gap: 4px; }
-  .month-hero-title { display: none; }
-  .month-hero-medal { flex: 0 0 auto; }
-  .month-hero svg.tier-svg { width: 100px; height: 100px; }
-  .month-hero-counter { font-size: 18px; }
-  .month-hero-sub { font-size: 10px; }
+  /* Hero in portrait: read as one group — title/counter/sub stacked on
+     the left, medal directly adjacent on the right. flex-flow column
+     wrap with a fixed height pushes the medal (item 4 by `order`) into
+     a second column right next to the text stack. */
+  .month-hero {
+    order: -1;
+    display: flex;
+    flex-flow: column wrap;
+    align-content: center;
+    justify-content: center;
+    column-gap: 14px;
+    row-gap: 2px;
+    height: 120px;
+    padding: 6px 0;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+  .month-hero-title {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    order: 1;
+  }
+  .month-hero-title-month { font-size: 22px; }
+  .month-hero-title-year { font-size: 11px; margin-top: 2px; }
+  .month-hero-counter {
+    order: 2;
+    font-size: 18px;
+    text-align: left;
+    margin-top: 4px;
+  }
+  .month-hero-sub {
+    order: 3;
+    font-size: 11px;
+    text-align: left;
+  }
+  .month-hero-medal {
+    order: 4;
+    flex: 0 0 auto;
+    align-self: center;
+  }
+  .month-hero svg.tier-svg { width: 120px; height: 120px; }
 }
 
 @media (orientation: portrait) and (max-height: 700px) {
@@ -6444,36 +6504,47 @@ canvas.slice-image {
   /* Day-of-week header row (SUN MON … SAT). */
   :root[data-theme="light"] .dow { color: color-mix(in oklab, var(--text) 55%, transparent); }
 
-  /* Calendar grid cells. The dark #14141e cell on a light page reads as
-     a black square; replace with surface tone, then carry the same
-     tonal shift through hover, the day number, today's green halo, and
-     the resume-highlight pink halo. The colored glyph svgs sit on top
-     and remain self-illuminating, so completed days still pop. */
+  /* Calendar grid cells. Use a mid-gray base so the onyx-and-gold day
+     medals retain contrast against the cell (white was washing the
+     medal silhouette into a busy black blob). today/resume-highlight
+     accents stack on top with stronger tints than dark mode, since the
+     base is no longer near-black. */
   :root[data-theme="light"] .day {
-    background: var(--surface);
-    border-color: color-mix(in oklab, var(--text) 10%, transparent);
+    background: #555555;
+    border-color: rgba(255, 255, 255, 0.10);
   }
   :root[data-theme="light"] .day:hover {
-    background: var(--surface-2);
-    border-color: color-mix(in oklab, var(--text) 18%, transparent);
+    background: #666666;
+    border-color: rgba(255, 255, 255, 0.18);
   }
-  :root[data-theme="light"] .day .num { color: color-mix(in oklab, var(--text) 50%, transparent); }
+  :root[data-theme="light"] .day .num { color: #ffffff; }
   :root[data-theme="light"] .day.today {
-    border-color: rgba(36, 168, 110, 0.65);
-    background: rgba(36, 168, 110, 0.08);
-    box-shadow: 0 0 12px rgba(36, 168, 110, 0.18);
+    border-color: rgba(120, 200, 120, 0.95);
+    background: #559955;
+    box-shadow: 0 0 12px rgba(85, 153, 85, 0.35);
   }
-  :root[data-theme="light"] .day.today .num { color: rgba(28, 132, 88, 0.9); }
+  :root[data-theme="light"] .day.today .num { color: #ffffff; }
   :root[data-theme="light"] .day.today:hover {
-    background: rgba(36, 168, 110, 0.14);
-    border-color: rgba(36, 168, 110, 0.85);
+    background: #66aa66;
+    border-color: rgba(140, 220, 140, 1);
   }
   :root[data-theme="light"] .day.resume-highlight {
-    border-color: rgba(196, 84, 132, 0.6);
-    background: rgba(196, 84, 132, 0.08);
-    box-shadow: 0 0 12px rgba(196, 84, 132, 0.2);
+    border-color: rgba(200, 120, 120, 0.95);
+    background: #995555;
+    box-shadow: 0 0 12px rgba(153, 85, 85, 0.35);
   }
-  :root[data-theme="light"] .day.resume-highlight .num { color: rgba(160, 60, 100, 0.95); }
+  :root[data-theme="light"] .day.resume-highlight .num { color: #ffffff; }
+  /* Empty grid cells (prev/next month days, fully-empty trailing rows).
+     Default styling has .outside fade #555 to 28% opacity and .spacer go
+     transparent — both end up looking like translucent gray over the
+     page bg. Set them explicitly here so they read as a clean light
+     gray panel. */
+  :root[data-theme="light"] .day.outside,
+  :root[data-theme="light"] .day.spacer {
+    opacity: 1;
+    background: #cfd2d6;
+    border-color: rgba(0, 0, 0, 0.05);
+  }
 
   /* Glyph + tier medal SVGs are self-contained gold-on-onyx coins —
      they read well on either canvas without per-theme overrides. */
