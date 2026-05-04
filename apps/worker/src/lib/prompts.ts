@@ -318,20 +318,15 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'stately and elegant', 'whimsical and charming',
   ],
 
-  // Styles that produce clean, paintable regions — no "intricate /
-  // dense / filigree / many tesserae" anywhere.
+  // Styles that produce paintable regions with rich internal colour
+  // variation — entries explicitly limiting colour count, panel count
+  // or shape count (silhouettes, "flat", "limited", "few", "simple")
+  // were dropped after they correlated with sub-30-min completion
+  // times in calibration data.
   style: [
-    'poster art style with bold flat regions',
     'stained glass rendering with clear leaded panels',
     'folk art illustration with clean shapes',
-    'gouache flat colour with confident brush strokes',
-    'screen print style with limited layers',
-    'paper cut-out style with bold silhouettes',
-    'woodblock print style with a few colour blocks',
-    'naive art style with simple forms',
     'storybook illustration with clean outlines',
-    'mid-century modern illustration with flat shapes',
-    'travel poster style with strong silhouettes',
     'cel-shaded animation style',
     'textile pattern style with embroidered shapes',
     'tile mosaic style with tessellated panels',
@@ -434,9 +429,9 @@ const CATEGORY_PROMPT_INTENTS: Record<
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'A vivid scene rendered as flat, unmixed colour panels with crisp hard edges between every region — the visual language of a mid-century travel poster, a screen-printed folk-art illustration, or a bold cel-shaded storybook painting. The scene may be a single hero subject against a supporting backdrop, or a busy composition packed with characters, buildings, plants, and objects. Small details — riggings, leaves, windows, flags, figures, petals, patterned roofs — are welcome, each rendered as a confident flat shape in its own solid colour.',
+      'A vivid scene with strong colour variation across the entire canvas — painterly gradients, dappled light, layered planes of depth, or faceted multi-panel rendering. Either a single hero subject against a textured backdrop, or a busy composition packed with characters, animals, buildings, plants, water, and sky. Small details — leaves, petals, ripples, brickwork, fur, feathers, embroidery, distant figures, riggings, windows, patterned roofs — are welcome throughout. Every region (including skies, walls, water, and large objects) should contain multiple distinguishable colours rather than a single flat fill, and the composition should avoid broad single-colour silhouettes.',
     qualityTarget:
-      'The final image will be quantized to 16 colours and painted cell-by-cell, so every shape — large or small — should enshrine the shapes by colour and not outlines.',
+      'The final image will be quantized to 16 colours and painted cell-by-cell, so every shape should be defined by colour rather than outlines, and every region should hold enough internal colour variation that quantization yields many small adjacent panels — not a few large flat fields.',
   },
 }
 
