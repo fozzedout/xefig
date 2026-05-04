@@ -45,42 +45,6 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
     ),
   ])
 
-  // Migration path — covers two older schemas:
-  //  1. CHECK (id = 1) singleton — rebuild to current schema.
-  //  2. UNIQUE target_date (short-lived queue attempt) — rebuild to
-  //     drop the constraint since it blocks single-category stacking.
-  try {
-    const row = await db
-      .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='batch_jobs'`)
-      .first<{ sql: string }>()
-    const needsRebuild =
-      row?.sql &&
-      (row.sql.includes('CHECK (id = 1)') ||
-        /target_date\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(row.sql) ||
-        !/batch_name\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(row.sql))
-    if (needsRebuild) {
-      await db.batch([
-        db.prepare(`ALTER TABLE batch_jobs RENAME TO batch_jobs_legacy`),
-        db.prepare(
-          `CREATE TABLE batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
-        ),
-        db.prepare(
-          `INSERT INTO batch_jobs (id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) SELECT id, batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs_legacy`,
-        ),
-        db.prepare(`DROP TABLE batch_jobs_legacy`),
-      ])
-    }
-  } catch {
-    // Migration best-effort; if it fails we'll retry on next cold start.
-  }
-
-  // Add validation_failures column if missing (pre-migration fallback).
-  try {
-    await db.prepare(`ALTER TABLE batch_jobs ADD COLUMN validation_failures TEXT`).run()
-  } catch {
-    // Column already exists — ignore
-  }
-
   tablesReady = true
 }
 

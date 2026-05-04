@@ -10,59 +10,7 @@ export async function ensureLeaderboardTable(db: D1Database): Promise<void> {
     return
   }
 
-  const table = await db
-    .prepare(
-      `SELECT name, sql
-       FROM sqlite_master
-       WHERE type = 'table' AND name = 'puzzle_leaderboard'
-       LIMIT 1`,
-    )
-    .first<{ name: string; sql: string | null }>()
-
-  if (!table) {
-    await createLeaderboardTable(db)
-  } else {
-    const columns = await db.prepare(`PRAGMA table_info(puzzle_leaderboard)`).all<{ name: string }>()
-    const columnNames = (columns.results || []).map((column) => column.name)
-    const hasGameMode = columnNames.includes('game_mode')
-    const hasDifficulty = columnNames.includes('difficulty')
-    const hasModeScopedUnique =
-      /UNIQUE\s*\(\s*puzzle_date\s*,\s*game_mode\s*,\s*player_guid\s*\)/i.test(table.sql || '')
-    const hasSwapGameMode = /game_mode\s+IN\s*\([^)]*'swap'/i.test(table.sql || '')
-    const hasPolygramGameMode = /game_mode\s+IN\s*\([^)]*'polygram'/i.test(table.sql || '')
-    const hasDiamondGameMode = /game_mode\s+IN\s*\([^)]*'diamond'/i.test(table.sql || '')
-
-    if (
-      !hasGameMode ||
-      hasDifficulty ||
-      !hasModeScopedUnique ||
-      !hasSwapGameMode ||
-      !hasPolygramGameMode ||
-      !hasDiamondGameMode
-    ) {
-      await db.prepare(`DROP TABLE IF EXISTS puzzle_leaderboard_next`).run()
-      await createLeaderboardTable(db, 'puzzle_leaderboard_next')
-      const selectGameModeExpr = hasGameMode ? `COALESCE(game_mode, 'jigsaw')` : `'jigsaw'`
-      // Collapse rows that previously split by difficulty into one best row
-      // per (puzzle_date, game_mode, player_guid) — keep the fastest time.
-      await db
-        .prepare(
-          `INSERT INTO puzzle_leaderboard_next (
-             puzzle_date, game_mode, player_guid, elapsed_ms, submitted_at
-           )
-           SELECT
-             puzzle_date, ${selectGameModeExpr}, player_guid,
-             MIN(elapsed_ms), MIN(submitted_at)
-           FROM puzzle_leaderboard
-           GROUP BY puzzle_date, ${selectGameModeExpr}, player_guid`,
-        )
-        .run()
-      await db.prepare(`DROP TABLE puzzle_leaderboard`).run()
-      await db.prepare(`ALTER TABLE puzzle_leaderboard_next RENAME TO puzzle_leaderboard`).run()
-    }
-  }
-
-  await db.prepare(`DROP INDEX IF EXISTS idx_puzzle_leaderboard_daily`).run()
+  await createLeaderboardTable(db)
   await db
     .prepare(
       `CREATE INDEX IF NOT EXISTS idx_puzzle_leaderboard_daily
