@@ -4265,9 +4265,13 @@ function renderGame({ resumeRun = null } = {}) {
   }
 
   function toggleReference() {
-    if (!puzzle || !viewBtn) return
+    if (!puzzle) return
+    // Diamond hides the source image until the painting is finished —
+    // the double-tap shortcut must respect that gate too, otherwise it
+    // becomes a back-door reveal during play.
+    if (gameMode === GAME_MODE_DIAMOND && !puzzle.completed) return
     const active = puzzle.toggleReferenceVisible()
-    viewBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+    syncSourceButtons(active)
   }
 
   let lastTapTime = 0
