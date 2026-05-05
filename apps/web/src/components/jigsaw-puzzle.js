@@ -484,11 +484,12 @@ export class JigsawPuzzle {
       return ` L ${x + width} ${y}`
     }
 
-    const offset = -edgeType * this.knobSize
+    const out = -edgeType * this.knobSize
+    const back = -0.04 * out
     return [
-      ` L ${x + width * 0.28} ${y}`,
-      ` C ${x + width * 0.35} ${y}, ${x + width * 0.34} ${y + offset * 0.58}, ${x + width * 0.5} ${y + offset * 0.58}`,
-      ` C ${x + width * 0.66} ${y + offset * 0.58}, ${x + width * 0.65} ${y}, ${x + width * 0.72} ${y}`,
+      ` L ${x + width * 0.36} ${y}`,
+      ` C ${x + width * 0.40} ${y + back}, ${x + width * 0.10} ${y + out * 0.95}, ${x + width * 0.50} ${y + out * 0.95}`,
+      ` C ${x + width * 0.90} ${y + out * 0.95}, ${x + width * 0.60} ${y + back}, ${x + width * 0.64} ${y}`,
       ` L ${x + width} ${y}`,
     ].join('')
   }
@@ -498,11 +499,12 @@ export class JigsawPuzzle {
       return ` L ${x} ${y + height}`
     }
 
-    const offset = edgeType * this.knobSize
+    const out = edgeType * this.knobSize
+    const back = -0.04 * out
     return [
-      ` L ${x} ${y + height * 0.28}`,
-      ` C ${x} ${y + height * 0.35}, ${x + offset * 0.58} ${y + height * 0.34}, ${x + offset * 0.58} ${y + height * 0.5}`,
-      ` C ${x + offset * 0.58} ${y + height * 0.66}, ${x} ${y + height * 0.65}, ${x} ${y + height * 0.72}`,
+      ` L ${x} ${y + height * 0.36}`,
+      ` C ${x + back} ${y + height * 0.40}, ${x + out * 0.95} ${y + height * 0.10}, ${x + out * 0.95} ${y + height * 0.50}`,
+      ` C ${x + out * 0.95} ${y + height * 0.90}, ${x + back} ${y + height * 0.60}, ${x} ${y + height * 0.64}`,
       ` L ${x} ${y + height}`,
     ].join('')
   }
@@ -512,11 +514,12 @@ export class JigsawPuzzle {
       return ` L ${x - width} ${y}`
     }
 
-    const offset = edgeType * this.knobSize
+    const out = edgeType * this.knobSize
+    const back = -0.04 * out
     return [
-      ` L ${x - width * 0.28} ${y}`,
-      ` C ${x - width * 0.35} ${y}, ${x - width * 0.34} ${y + offset * 0.58}, ${x - width * 0.5} ${y + offset * 0.58}`,
-      ` C ${x - width * 0.66} ${y + offset * 0.58}, ${x - width * 0.65} ${y}, ${x - width * 0.72} ${y}`,
+      ` L ${x - width * 0.36} ${y}`,
+      ` C ${x - width * 0.40} ${y + back}, ${x - width * 0.10} ${y + out * 0.95}, ${x - width * 0.50} ${y + out * 0.95}`,
+      ` C ${x - width * 0.90} ${y + out * 0.95}, ${x - width * 0.60} ${y + back}, ${x - width * 0.64} ${y}`,
       ` L ${x - width} ${y}`,
     ].join('')
   }
@@ -526,11 +529,12 @@ export class JigsawPuzzle {
       return ` L ${x} ${y - height}`
     }
 
-    const offset = -edgeType * this.knobSize
+    const out = -edgeType * this.knobSize
+    const back = -0.04 * out
     return [
-      ` L ${x} ${y - height * 0.28}`,
-      ` C ${x} ${y - height * 0.35}, ${x + offset * 0.58} ${y - height * 0.34}, ${x + offset * 0.58} ${y - height * 0.5}`,
-      ` C ${x + offset * 0.58} ${y - height * 0.66}, ${x} ${y - height * 0.65}, ${x} ${y - height * 0.72}`,
+      ` L ${x} ${y - height * 0.36}`,
+      ` C ${x + back} ${y - height * 0.40}, ${x + out * 0.95} ${y - height * 0.10}, ${x + out * 0.95} ${y - height * 0.50}`,
+      ` C ${x + out * 0.95} ${y - height * 0.90}, ${x + back} ${y - height * 0.60}, ${x} ${y - height * 0.64}`,
       ` L ${x} ${y - height}`,
     ].join('')
   }
