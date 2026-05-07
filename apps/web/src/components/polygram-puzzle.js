@@ -14,7 +14,7 @@ const MAX_BOARD_SIZE = 1400
 const WHEEL_ROTATION_DEG = 15
 
 export class PolygramPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress }) {
+  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PolygramPuzzle requires a container element.')
     }
@@ -24,6 +24,7 @@ export class PolygramPuzzle {
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
+    this.onLoadProgress = onLoadProgress
 
     this.completed = false
     this.referenceVisible = false
@@ -61,7 +62,7 @@ export class PolygramPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl)
+    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
     this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
 
     const rng = createSeededRng(`${this.imageUrl}|${String(this.difficulty || 'medium')}`)

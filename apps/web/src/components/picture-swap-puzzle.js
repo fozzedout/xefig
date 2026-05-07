@@ -33,7 +33,7 @@ function pickBestGrid(availW, availH, targetTotal) {
 }
 
 export class PictureSwapPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress }) {
+  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PictureSwapPuzzle requires a container element.')
     }
@@ -43,6 +43,7 @@ export class PictureSwapPuzzle {
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
+    this.onLoadProgress = onLoadProgress
 
     this.completed = false
     this.referenceVisible = false
@@ -66,7 +67,7 @@ export class PictureSwapPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl)
+    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
     this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.calculateGrid()
     this.totalTiles = this.cols * this.rows

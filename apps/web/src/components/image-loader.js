@@ -1,10 +1,35 @@
-const DEFAULT_IMAGE_LOAD_TIMEOUT_MS = 8000
+// Network-aware loader for puzzle images.
+//
+// Background: a 27%-loss / 1.2 s-RTT cellular link can take 16+ s to deliver a
+// 400 KB jigsaw image. The previous 8 s timeout aborted long before the bytes
+// arrived, leaving the puzzle UI blank with no visible feedback. This loader:
+//   1. Allows up to DEFAULT_IMAGE_LOAD_TIMEOUT_MS for the whole transfer.
+//   2. Streams the response body so callers can render a progress bar.
+//   3. Falls back to a native <img> request when fetch() fails outright,
+//      since some captive-portal proxies tamper with fetch but not <img>.
+//   4. Honors an external AbortSignal so the UI can cancel a stalled load.
+//
+// Retries are intentionally NOT automatic — auto-retry on a contended uplink
+// just multiplies the bandwidth waste. The UI shows a Retry button instead;
+// the user knows when their connection is alive.
 
-export async function loadImage(url, { timeoutMs = DEFAULT_IMAGE_LOAD_TIMEOUT_MS } = {}) {
+const DEFAULT_IMAGE_LOAD_TIMEOUT_MS = 60000
+
+export async function loadImage(url, {
+  timeoutMs = DEFAULT_IMAGE_LOAD_TIMEOUT_MS,
+  onProgress,
+  signal,
+} = {}) {
   try {
-    return await loadImageFromResponse(url, timeoutMs)
+    return await loadImageFromResponse(url, timeoutMs, onProgress, signal)
   } catch (error) {
-    return loadImageDirect(url, timeoutMs, error)
+    if (signal?.aborted) {
+      throw error
+    }
+    if (typeof onProgress === 'function') {
+      onProgress({ phase: 'fallback' })
+    }
+    return loadImageDirect(url, timeoutMs, error, signal)
   }
 }
 
@@ -15,15 +40,43 @@ export function releaseLoadedImage(image) {
   delete image.__xefigObjectUrl
 }
 
-async function loadImageFromResponse(url, timeoutMs) {
-  const response = await fetchImageResponse(url, timeoutMs)
-  const blob = await response.blob()
+async function loadImageFromResponse(url, timeoutMs, onProgress, externalSignal) {
+  let blob
+  try {
+    blob = await fetchImageBlobWithProgress(url, timeoutMs, onProgress, externalSignal)
+  } catch (error) {
+    const cached = await matchCachedImage(url)
+    if (cached) {
+      if (typeof onProgress === 'function') {
+        onProgress({ phase: 'cached' })
+      }
+      blob = await cached.blob()
+    } else {
+      throw normalizeImageError(url, error)
+    }
+  }
+
+  if (typeof onProgress === 'function') {
+    onProgress({ phase: 'decoding' })
+  }
   return decodeImageBlob(blob, url)
 }
 
-async function fetchImageResponse(url, timeoutMs) {
+async function fetchImageBlobWithProgress(url, timeoutMs, onProgress, externalSignal) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null
-  const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(new DOMException('Timeout', 'AbortError')), timeoutMs)
+    : null
+  const onExternalAbort = controller && externalSignal
+    ? () => controller.abort(externalSignal.reason)
+    : null
+  if (onExternalAbort) {
+    if (externalSignal.aborted) {
+      onExternalAbort()
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+  }
 
   try {
     const response = await fetch(url, {
@@ -31,18 +84,46 @@ async function fetchImageResponse(url, timeoutMs) {
       signal: controller?.signal,
     })
     if (!response.ok) {
-      throw new Error(`Failed to load image: ${url}`)
+      throw new Error(`Failed to load image: ${url} (HTTP ${response.status})`)
     }
-    return response
-  } catch (error) {
-    const cached = await matchCachedImage(url)
-    if (cached) {
-      return cached
+
+    const total = Number(response.headers.get('content-length')) || 0
+    if (typeof onProgress === 'function') {
+      onProgress({ phase: 'downloading', loaded: 0, total })
     }
-    throw normalizeImageError(url, error)
+
+    const reader = response.body && typeof response.body.getReader === 'function'
+      ? response.body.getReader()
+      : null
+
+    if (!reader) {
+      const blob = await response.blob()
+      if (typeof onProgress === 'function') {
+        onProgress({ phase: 'downloading', loaded: blob.size, total: blob.size })
+      }
+      return blob
+    }
+
+    const chunks = []
+    let loaded = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      loaded += value.byteLength
+      if (typeof onProgress === 'function') {
+        onProgress({ phase: 'downloading', loaded, total })
+      }
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/webp'
+    return new Blob(chunks, { type: contentType })
   } finally {
     if (timeoutId !== null) {
       window.clearTimeout(timeoutId)
+    }
+    if (onExternalAbort) {
+      externalSignal.removeEventListener('abort', onExternalAbort)
     }
   }
 }
@@ -82,7 +163,7 @@ function decodeImageBlob(blob, url) {
   })
 }
 
-function loadImageDirect(url, timeoutMs, originalError) {
+function loadImageDirect(url, timeoutMs, originalError, externalSignal) {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.decoding = 'async'
@@ -90,11 +171,28 @@ function loadImageDirect(url, timeoutMs, originalError) {
       cleanup()
       reject(normalizeImageError(url, originalError))
     }, timeoutMs)
+    const onAbort = externalSignal
+      ? () => {
+          cleanup()
+          reject(externalSignal.reason || new DOMException('Aborted', 'AbortError'))
+        }
+      : null
 
     const cleanup = () => {
       image.onload = null
       image.onerror = null
       window.clearTimeout(timeoutId)
+      if (onAbort && externalSignal) {
+        externalSignal.removeEventListener('abort', onAbort)
+      }
+    }
+
+    if (onAbort) {
+      if (externalSignal.aborted) {
+        onAbort()
+        return
+      }
+      externalSignal.addEventListener('abort', onAbort, { once: true })
     }
 
     image.onload = () => {

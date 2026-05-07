@@ -29,7 +29,7 @@ const MAX_BOARD_RATIO = 16 / 10
 const MAX_SIDEBAR_BOARD_RATIO = 2.1
 
 export class JigsawPuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, boardColorIndex } = {}) {
+  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
     if (!container) {
       throw new Error('JigsawPuzzle requires a container element.')
     }
@@ -40,6 +40,7 @@ export class JigsawPuzzle {
     this.snapDistance = snapDistance
     this.onComplete = onComplete
     this.onProgress = onProgress
+    this.onLoadProgress = onLoadProgress
 
     this.instanceId = `jigsaw-${Math.random().toString(36).slice(2, 10)}`
     this.zIndexCounter = 10
@@ -82,7 +83,7 @@ export class JigsawPuzzle {
     this.destroy()
     this.completed = false
 
-    this.image = await loadImage(this.imageUrl)
+    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
     this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.gridSize = this.resolveGridSize(this.difficulty)
     this.rows = this.gridSize

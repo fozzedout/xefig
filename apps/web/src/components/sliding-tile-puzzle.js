@@ -35,7 +35,7 @@ const TAP_MAX_DISTANCE = 10
 const TAP_MAX_DURATION_MS = 350
 
 export class SlidingTilePuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', onComplete, onProgress }) {
+  constructor({ container, imageUrl, difficulty = 'easy', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('SlidingTilePuzzle requires a container element.')
     }
@@ -45,6 +45,7 @@ export class SlidingTilePuzzle {
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
+    this.onLoadProgress = onLoadProgress
 
     this.completed = false
     this.referenceVisible = false
@@ -62,7 +63,7 @@ export class SlidingTilePuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl)
+    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
     this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
     this.calculateGrid()
     this.totalSlots = this.cols * this.rows

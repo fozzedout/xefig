@@ -2087,7 +2087,11 @@ function renderArchivePage() {
         </div>
         <button class="archive-resume-btn" data-role="archive-resume-btn" hidden></button>
         <div class="cal-deck" data-role="cal-deck"></div>
-        <div class="cal-dots" data-role="cal-dots"></div>
+        <div class="cal-dots-bar">
+          <button class="cal-side-arrow cal-side-arrow-prev" data-role="cal-side-prev" data-action="prev" aria-label="Previous month">‹</button>
+          <div class="cal-dots" data-role="cal-dots"></div>
+          <button class="cal-side-arrow cal-side-arrow-next" data-role="cal-side-next" data-action="next" aria-label="Next month">›</button>
+        </div>
       </div>
     </div>
     <div class="day-detail-overlay" data-role="day-detail" hidden>
@@ -2123,8 +2127,10 @@ function renderArchivePage() {
   const navMedalSlot = pageEl.querySelector('[data-role="nav-medal"]')
   const navMonthNameEl = pageEl.querySelector('[data-role="nav-month-name"]')
   const navYearEl = pageEl.querySelector('[data-role="nav-year"]')
-  const prevBtn = pageEl.querySelector('[data-action="prev"]')
-  const nextBtn = pageEl.querySelector('[data-action="next"]')
+  const prevBtn = pageEl.querySelector('.cal-nav [data-action="prev"]')
+  const nextBtn = pageEl.querySelector('.cal-nav [data-action="next"]')
+  const sidePrevBtn = pageEl.querySelector('[data-role="cal-side-prev"]')
+  const sideNextBtn = pageEl.querySelector('[data-role="cal-side-next"]')
   const titleBtn = pageEl.querySelector('[data-action="open-year"]')
 
   const detailOverlay = pageEl.querySelector('[data-role="day-detail"]')
@@ -2297,6 +2303,9 @@ function renderArchivePage() {
     const entry = monthCards[monthIndex]
     if (!entry || !entry.hero) return
     const meta = buildMonthMedalForCalendar(monthIndex)
+    // The resume button gets re-parented into the active hero in landscape;
+    // preserve it across replaceChildren below so it isn't dropped from DOM.
+    const stashedResumeBtn = entry.hero.querySelector('[data-role="archive-resume-btn"]')
 
     // Title row above the medal — month name + year, clickable to open the
     // year picker. Shown in landscape (where the top cal-nav is hidden) and
@@ -2344,6 +2353,7 @@ function renderArchivePage() {
     sub.textContent = subText
 
     entry.hero.replaceChildren(title, wrap, counter, sub)
+    if (stashedResumeBtn) entry.hero.appendChild(stashedResumeBtn)
   }
   for (let m = 0; m < 12; m++) refreshMonthHero(m)
 
@@ -2360,8 +2370,12 @@ function renderArchivePage() {
     navMedalSlot.replaceChildren(buildMonthMedal({ completed: meta.completedIdx, totalDays: meta.total }))
     navMonthNameEl.textContent = MONTH_NAMES[activeMonthIndex]
     navYearEl.textContent = String(todayYear)
-    prevBtn.disabled = activeMonthIndex === 0
-    nextBtn.disabled = activeMonthIndex === 11
+    const atFirst = activeMonthIndex === 0
+    const atLast = activeMonthIndex === 11
+    prevBtn.disabled = atFirst
+    nextBtn.disabled = atLast
+    sidePrevBtn.disabled = atFirst
+    sideNextBtn.disabled = atLast
   }
 
   function captionForMonth(monthIndex) {
@@ -2413,6 +2427,22 @@ function renderArchivePage() {
     })
     updateNav()
     refreshDots()
+    placeArchiveResumeBtn()
+  }
+
+  // In landscape the resume button moves into the active month's hero
+  // panel (alongside title/medal/counter) so it doesn't steal a horizontal
+  // band from the cal-deck and crush the day cells. In portrait it lives
+  // in the cal-region grid (top-right "resume" area).
+  function placeArchiveResumeBtn() {
+    const btn = pageEl.querySelector('[data-role="archive-resume-btn"]')
+    if (!btn) return
+    const isLandscape = !!(window.matchMedia && window.matchMedia('(orientation: landscape)').matches)
+    const region = pageEl.querySelector('.cal-region')
+    const target = isLandscape
+      ? (monthCards[activeMonthIndex]?.hero || region)
+      : region
+    if (target && btn.parentElement !== target) target.appendChild(btn)
   }
 
   let scrollTimer
@@ -2424,20 +2454,25 @@ function renderArchivePage() {
         activeMonthIndex = i
         updateNav()
         refreshDots()
+        placeArchiveResumeBtn()
       }
     }, 60)
   })
 
-  prevBtn.addEventListener('click', () => {
-    if (activeMonthIndex > 0) {
-      deck.scrollTo({ left: centerScrollLeftFor(activeMonthIndex - 1), behavior: 'smooth' })
-    }
-  })
-  nextBtn.addEventListener('click', () => {
-    if (activeMonthIndex < 11) {
-      deck.scrollTo({ left: centerScrollLeftFor(activeMonthIndex + 1), behavior: 'smooth' })
-    }
-  })
+  if (window.matchMedia) {
+    window.matchMedia('(orientation: landscape)')
+      .addEventListener('change', () => placeArchiveResumeBtn())
+  }
+
+  function stepMonth(delta) {
+    const next = activeMonthIndex + delta
+    if (next < 0 || next > 11) return
+    deck.scrollTo({ left: centerScrollLeftFor(next), behavior: 'smooth' })
+  }
+  prevBtn.addEventListener('click', () => stepMonth(-1))
+  nextBtn.addEventListener('click', () => stepMonth(1))
+  sidePrevBtn.addEventListener('click', () => stepMonth(-1))
+  sideNextBtn.addEventListener('click', () => stepMonth(1))
 
   function statusForMode(dateKey, mode) {
     if (hasActiveRun(dateKey, mode)) {
@@ -2682,6 +2717,7 @@ function renderArchivePage() {
     arrow.textContent = '▸'
     btn.append(modeSpan, arrow)
     btn.onclick = () => handleResumeFromBadge(best.puzzleDate, best.gameMode)
+    placeArchiveResumeBtn()
   }
 
   monthCards.forEach((_, i) => refreshMonthMedals(i))
@@ -3874,6 +3910,86 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     })
 }
 
+function createPuzzleLoadingOverlay() {
+  const overlay = document.createElement('div')
+  overlay.className = 'puzzle-loading-overlay'
+  overlay.setAttribute('role', 'status')
+  overlay.setAttribute('aria-live', 'polite')
+  overlay.innerHTML = `
+    <div class="puzzle-loading-spinner" aria-hidden="true"></div>
+    <div class="puzzle-loading-label">Loading puzzle…</div>
+    <div class="puzzle-loading-meter" aria-hidden="true">
+      <div class="puzzle-loading-meter-fill"></div>
+    </div>
+    <div class="puzzle-loading-detail"></div>
+    <div class="puzzle-loading-hint">If this takes too long, your connection looks weak.</div>
+  `
+  return overlay
+}
+
+function updatePuzzleLoadingOverlay(overlay, progress) {
+  if (!overlay || !progress) return
+  const fill = overlay.querySelector('.puzzle-loading-meter-fill')
+  const detail = overlay.querySelector('.puzzle-loading-detail')
+  const label = overlay.querySelector('.puzzle-loading-label')
+  if (progress.phase === 'fallback') {
+    if (label) label.textContent = 'Retrying…'
+    return
+  }
+  if (progress.phase === 'cached') {
+    if (label) label.textContent = 'Loading from cache…'
+    if (fill) fill.style.width = '100%'
+    return
+  }
+  if (progress.phase === 'decoding') {
+    if (label) label.textContent = 'Almost there…'
+    if (fill) fill.style.width = '100%'
+    return
+  }
+  if (progress.phase === 'downloading') {
+    const { loaded = 0, total = 0 } = progress
+    if (label) label.textContent = 'Downloading puzzle…'
+    if (total > 0) {
+      const pct = Math.max(0, Math.min(100, (loaded / total) * 100))
+      if (fill) {
+        fill.classList.remove('is-indeterminate')
+        fill.style.width = `${pct}%`
+      }
+      if (detail) detail.textContent = `${formatBytesShort(loaded)} of ${formatBytesShort(total)}`
+    } else {
+      if (fill) fill.classList.add('is-indeterminate')
+      if (detail) detail.textContent = loaded > 0 ? formatBytesShort(loaded) : ''
+    }
+  }
+}
+
+function formatBytesShort(n) {
+  if (!Number.isFinite(n) || n <= 0) return '0 KB'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function renderPuzzleLoadError(overlay, { onRetry }) {
+  if (!overlay) return
+  overlay.classList.add('is-error')
+  overlay.innerHTML = `
+    <div class="puzzle-error-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 0 1 15.5-6.3M21 12a9 9 0 0 1-15.5 6.3"/>
+        <path d="M21 5v4h-4M3 19v-4h4"/>
+      </svg>
+    </div>
+    <div class="puzzle-error-title">Couldn't load this puzzle</div>
+    <div class="puzzle-error-detail">Your connection looks weak. Try again when you're somewhere with better signal.</div>
+    <button type="button" class="puzzle-error-retry">Retry</button>
+  `
+  const btn = overlay.querySelector('.puzzle-error-retry')
+  if (btn && typeof onRetry === 'function') {
+    btn.addEventListener('click', onRetry, { once: true })
+  }
+}
+
 function renderGame({ resumeRun = null } = {}) {
   const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
   state.gameMode = gameMode
@@ -4332,6 +4448,14 @@ function renderGame({ resumeRun = null } = {}) {
     })
   }
 
+  // Overlay lives on the workspace, not the puzzle mount, because each
+  // puzzle's destroy() wipes its container's innerHTML at the start of
+  // init() — anything inside #puzzle-mount would be torn down before
+  // loadImage() ever ran. The workspace is positioned, so absolute-inset
+  // styling on the overlay covers the mount.
+  const loadingOverlay = createPuzzleLoadingOverlay()
+  if (workspaceEl) workspaceEl.append(loadingOverlay)
+
   ;(async () => {
     try {
       destroyPuzzle()
@@ -4388,6 +4512,7 @@ function renderGame({ resumeRun = null } = {}) {
         difficulty: state.difficulty,
         boardColorIndex: getGlobalBoardColorIndex(),
         muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
+        onLoadProgress: (progress) => updatePuzzleLoadingOverlay(loadingOverlay, progress),
         onProgress: ({ completed, state: progressState }) => {
           if (currentRun) {
             currentRun.completed = Boolean(completed)
@@ -4686,9 +4811,21 @@ function renderGame({ resumeRun = null } = {}) {
         `${puzzleLabel}. ${MODE_LABELS[gameMode]} mode. ${getInteractionHint(gameMode)} Active ${elapsedLabel}.`,
         'ok',
       )
+
+      // Reveal the puzzle once setup has fully succeeded — including any
+      // applyProgressState — so a failure mid-restore still shows the
+      // error card instead of an empty page over a half-built puzzle.
+      if (loadingOverlay && loadingOverlay.parentElement) {
+        loadingOverlay.remove()
+      }
     } catch (error) {
       console.error(error)
       setStatus('Failed to load puzzle image.', 'error')
+      if (loadingOverlay && loadingOverlay.parentElement) {
+        renderPuzzleLoadError(loadingOverlay, {
+          onRetry: () => renderGame({ resumeRun }),
+        })
+      }
     }
   })()
 }

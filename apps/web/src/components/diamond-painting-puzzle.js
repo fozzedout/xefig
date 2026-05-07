@@ -12,7 +12,7 @@ const MAX_CANVAS_DIMENSION = 4096
 const MAX_CANVAS_PIXELS = 4096 * 4096
 
 export class DiamondPaintingPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, muted = false }) {
+  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress, muted = false }) {
     if (!container) {
       throw new Error('DiamondPaintingPuzzle requires a container element.')
     }
@@ -22,6 +22,7 @@ export class DiamondPaintingPuzzle {
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
+    this.onLoadProgress = onLoadProgress
     this.muted = Boolean(muted)
 
     this.completed = false
@@ -62,7 +63,7 @@ export class DiamondPaintingPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl)
+    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
     this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
 
     const aspect = this.image.naturalWidth / this.image.naturalHeight

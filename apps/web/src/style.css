@@ -1320,6 +1320,18 @@ h1 {
   opacity: 0.7;
 }
 
+/* Side nav arrows for the calendar — used in landscape (sides of the
+   cal-deck) and portrait (flanking the cal-dots). Hidden by default
+   since the desktop fallback layout uses .cal-nav arrows above the
+   deck instead. */
+.cal-side-arrow {
+  display: none;
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
 /* The brand glyph used per day cell */
 /* Day-cell glyph + week/month/year medal SVGs.
    The medal builders in main.js render onyx-bodied coins with inline
@@ -1402,12 +1414,23 @@ h1 {
 }
 
 /* Page dots (12 months in year) */
+/* Wraps cal-dots and the prev/next side arrows so they form a centered
+   group in portrait. In landscape the arrows are repositioned absolutely
+   onto cal-region's left/right edges and the bar effectively just centers
+   the dots. */
+.cal-dots-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
 .cal-dots {
   display: flex;
   justify-content: center;
   gap: 6px;
-  margin-top: 14px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .cal-dots .dot {
   width: 8px; height: 8px;
@@ -1691,9 +1714,9 @@ h1 {
     grid-template-columns: 1fr auto;
     grid-template-rows: auto 1fr auto;
     grid-template-areas:
-      ".      resume"
-      "deck   deck"
-      "dots   dots";
+      ".         resume"
+      "deck      deck"
+      "dots-bar  dots-bar";
     column-gap: 0.5rem;
     align-items: center;
   }
@@ -1701,12 +1724,37 @@ h1 {
   .archive-resume-btn {
     grid-area: resume;
     align-self: center;
+    justify-self: end;
     margin: 0;
     padding: 8px 14px;
     flex-shrink: 0;
   }
   .cal-deck { grid-area: deck; }
-  .cal-dots { grid-area: dots; }
+  .cal-dots-bar { grid-area: dots-bar; }
+  /* Portrait nav: arrows + dots in a centered flex bar at the bottom.
+     The bar lets us truly center the [arrow]‒[dots]‒[arrow] group; in
+     a grid, 1fr filler cols absorb remaining space and push arrows
+     toward the cal-region edges. */
+  .cal-side-arrow {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #14141e;
+    border: 1px solid rgba(232,230,224,0.12);
+    color: rgba(232,230,224,0.65);
+    font-size: 22px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .cal-side-arrow:hover {
+    background: #1a1a26;
+    color: #e8e6e0;
+    border-color: rgba(232,230,224,0.24);
+  }
+  .cal-side-arrow:disabled { opacity: 0.25; cursor: default; }
   .cal-nav-arrow { display: none; }
   .cal-nav-title .medal-mini { display: none; }
   .cal-nav-title .chevron { display: none; }
@@ -2193,11 +2241,95 @@ canvas.slice-image {
   .ls-default .archive-top-bar h2,
   .ls-default .archive-top-spacer { display: none; }
   .ls-default .archive-top-bar .page-back-btn { width: 32px; height: 32px; }
-  .ls-default .cal-region { padding: 0 0.5rem; }
+  /* Reserve horizontal padding equal to arrow + small gap so the
+     side-arrows sit OUTSIDE cal-deck instead of overlapping the WK
+     column / hero. Lift max-width to use more of the available width
+     on big screens — the user sees empty real estate otherwise. */
+  .ls-default .cal-region {
+    max-width: 1280px;
+    padding: 0 56px;
+    position: relative;
+  }
   /* Cal-nav is hidden in landscape — the side panel hosts month/year (and
      the year-picker trigger) above the medal, freeing the full vertical
      budget for the calendar grid. */
   .ls-default .cal-nav { display: none; }
+
+  /* Landscape side arrows — float on either edge of the cal-region so
+     users without swipe (PC, trackpad) can still step through months.
+     Vertically biased toward the calendar's center (cal-dots take a
+     small auto row at the bottom, so subtract for visual centering). */
+  .ls-default .cal-side-arrow {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: calc(50% - 14px);
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(20,20,30,0.7);
+    border: 1px solid rgba(232,230,224,0.14);
+    color: rgba(232,230,224,0.75);
+    font-size: 26px;
+    line-height: 1;
+    z-index: 5;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .ls-default .cal-side-arrow:hover {
+    background: rgba(40,40,55,0.92);
+    color: #e8e6e0;
+    border-color: rgba(232,230,224,0.32);
+  }
+  .ls-default .cal-side-arrow:disabled { opacity: 0.22; cursor: default; }
+  /* Override the portrait media's grid-area so the absolute-positioned
+     arrow uses cal-region as its containing block, not a tiny dots-row
+     grid cell. Without this, top:calc(50% - 14px) is computed against
+     a ~16px cell, putting arrows just above the dots row. */
+  .ls-default .cal-side-arrow-prev {
+    grid-row: auto;
+    grid-column: auto;
+    left: calc(6px + var(--sai-left));
+  }
+  .ls-default .cal-side-arrow-next {
+    grid-row: auto;
+    grid-column: auto;
+    right: calc(6px + var(--sai-right));
+  }
+
+  /* Resume button in landscape lives inside the active month-hero so it
+     sits beside the title/medal/counter rather than stealing a horizontal
+     band from the cal-deck (which would crush the day medals).
+     - order: 5 keeps it AFTER medal (which has order: 4 in portrait
+       orders that also apply on mobile landscape) so it sits at the
+       bottom of the hero column rather than the top.
+     - Allow wrapping so "Resume Paint by Numbers" doesn't blow past
+       the hero's narrow width; flex-wrap + min-width: 0 on the label
+       lets the text break onto a second line. */
+  .ls-default .month-hero > .archive-resume-btn {
+    order: 5;
+    margin: 4px 0 0;
+    padding: 6px 10px;
+    font-size: 11px;
+    line-height: 1.25;
+    flex-wrap: wrap;
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    align-self: stretch;
+    justify-content: center;
+    min-width: 0;
+  }
+  .ls-default .month-hero > .archive-resume-btn .archive-resume-mode {
+    white-space: normal;
+    min-width: 0;
+    flex: 1 1 auto;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
 
   /* Landscape month card: side-panel (medal + counter) on the left,
      calendar square on the right. The square self-sizes to its own height
@@ -2224,6 +2356,11 @@ canvas.slice-image {
     align-items: center;
     justify-content: center;
     min-width: 140px;
+    /* Cap hero width so the resume button (which is width:100% of hero)
+       can't push the hero wider than intended. Without this, a long
+       button label like "Resume Paint by Numbers" inflates the whole
+       column from ~148 to ~200px, eating space the cal-square needs. */
+    max-width: 160px;
   }
   .ls-default .month-hero-title {
     display: flex;
@@ -2254,6 +2391,12 @@ canvas.slice-image {
     height: 100%;
     width: auto;
     max-width: 100%;
+    /* Cap height so a wider cal-region (max-width 1280) doesn't make
+       cal-square taller than the viewport on shorter screens (e.g.,
+       1366×768 laptops, or 844×390 phone landscape). 100vh on iOS —
+       see project memory; do NOT use 100dvh here. ~60px reserves for
+       top padding + dots row + bottom padding. */
+    max-height: calc(100vh - 60px);
     flex: 0 1 auto;
     min-height: 0;
     position: relative;
@@ -2576,6 +2719,50 @@ canvas.slice-image {
   .ls-default .slice-more .slice-icon {
     left: 50%;
     transform: translateX(-50%);
+  }
+}
+
+/* Mobile landscape (≤768 + landscape): tighten the hero column and
+   reduce cal-region padding so cal-square has room to grow. The default
+   landscape hero (min-width 140, gap 28) eats ~176px of horizontal
+   budget which on a 568×320 phone leaves day cells around 21px — too
+   small to read day numbers. */
+@media (orientation: landscape) and (max-width: 768px) {
+  .ls-default .cal-region {
+    padding: 0 44px;
+    max-width: none;
+  }
+  .ls-default .cal-deck > .month-card {
+    gap: 14px;
+  }
+  .ls-default .cal-deck > .month-card > .month-hero {
+    min-width: 96px;
+    max-width: 110px;
+    padding: 4px 2px;
+    gap: 4px;
+  }
+  .ls-default .month-hero-medal svg.tier-svg {
+    width: 80px;
+    height: 80px;
+  }
+  .ls-default .month-hero-title-month { font-size: 16px; }
+  .ls-default .month-hero-title-year { font-size: 9px; }
+  .ls-default .month-hero-counter { font-size: 16px; }
+  .ls-default .month-hero-sub { font-size: 9px; }
+  .ls-default .month-hero > .archive-resume-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  /* Less reservation on mobile landscape — top bar is small here. */
+  .ls-default .cal-square {
+    max-height: calc(100vh - 60px);
+  }
+  /* Pull the side arrows up so they sit centered on the calendar
+     rather than near the dots row. */
+  .ls-default .cal-side-arrow {
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
   }
 }
 
@@ -3863,6 +4050,170 @@ canvas.slice-image {
 
 .workspace--immersive {
   position: relative;
+}
+
+/* Puzzle loading + error overlay
+ *
+ * Sits on .workspace (not #puzzle-mount) so it survives the puzzle
+ * class's destroy() — which wipes the mount's innerHTML at the start of
+ * init() before loadImage runs. The overlay is the only feedback the
+ * user has on a slow connection: empty puzzle + nothing else looks broken.
+ */
+.puzzle-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.5rem;
+  background: var(--bg, #0e1218);
+  color: var(--fg, #e7e9ee);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.puzzle-loading-spinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: currentColor;
+  animation: puzzle-loading-spin 0.9s linear infinite;
+  margin-bottom: 0.2rem;
+  opacity: 0.85;
+}
+
+@keyframes puzzle-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.puzzle-loading-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.puzzle-loading-meter {
+  width: min(260px, 70%);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.puzzle-loading-meter-fill {
+  height: 100%;
+  width: 0;
+  background: currentColor;
+  border-radius: inherit;
+  transition: width 200ms ease;
+  opacity: 0.85;
+}
+
+.puzzle-loading-meter-fill.is-indeterminate {
+  width: 35% !important;
+  animation: puzzle-loading-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes puzzle-loading-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(285%); }
+}
+
+.puzzle-loading-detail {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+}
+
+.puzzle-loading-hint {
+  font-size: 0.72rem;
+  opacity: 0.45;
+  max-width: 22em;
+  margin-top: 0.4rem;
+}
+
+.puzzle-loading-overlay.is-error .puzzle-loading-spinner,
+.puzzle-loading-overlay.is-error .puzzle-loading-meter,
+.puzzle-loading-overlay.is-error .puzzle-loading-detail,
+.puzzle-loading-overlay.is-error .puzzle-loading-hint,
+.puzzle-loading-overlay.is-error .puzzle-loading-label {
+  display: none;
+}
+
+.puzzle-error-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent, #f0c040);
+  opacity: 0.8;
+}
+
+.puzzle-error-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.puzzle-error-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
+.puzzle-error-detail {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  max-width: 26em;
+}
+
+.puzzle-error-retry {
+  margin-top: 0.6rem;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.puzzle-error-retry:hover,
+.puzzle-error-retry:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] .puzzle-loading-overlay {
+  background: var(--bg, #f6f4ee);
+  color: var(--fg, #1a1d24);
+}
+
+[data-theme="light"] .puzzle-loading-spinner {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: currentColor;
+}
+
+[data-theme="light"] .puzzle-loading-meter {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .puzzle-error-retry {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .puzzle-error-retry:hover,
+[data-theme="light"] .puzzle-error-retry:focus-visible {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.25);
 }
 
 .floating-game-controls {
