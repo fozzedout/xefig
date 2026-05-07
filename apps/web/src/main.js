@@ -566,6 +566,22 @@ function resolveAssetUrl(path) {
   return API_BASE ? `${API_BASE}${path}` : path
 }
 
+// Resolve the freshest image URL we have for a saved run. The run's own
+// imageUrl is a snapshot from when it was first saved — fine for the
+// current day, but it can rot across format swaps (jpg → webp) or cache-
+// bust changes (?v=…) if the run was started weeks/months ago. Prefer
+// the puzzle payload's current URL when it covers the run's date, fall
+// back to the saved one otherwise.
+function resolveResumeImageUrl(savedRun, puzzlePayload) {
+  if (puzzlePayload?.date && puzzlePayload.date === savedRun.puzzleDate) {
+    const fresh = resolvePuzzleImageUrl(puzzlePayload, savedRun.gameMode)
+    if (fresh && fresh !== sampleImage) {
+      return fresh
+    }
+  }
+  return resolveAssetUrl(savedRun.imageUrl)
+}
+
 function getIsoDate(value) {
   const y = value.getFullYear()
   const m = String(value.getMonth() + 1).padStart(2, '0')
@@ -1577,7 +1593,7 @@ function renderLauncher() {
 
     const savedRun = getRunForMode(puzzleDate, state.gameMode)
     if (savedRun) {
-      state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+      state.imageUrl = resolveResumeImageUrl(savedRun, state.puzzle)
       renderGame({ resumeRun: savedRun })
       return
     }
@@ -2578,7 +2594,7 @@ function renderArchivePage() {
 
     const savedRun = getRunForMode(puzzleDate, state.gameMode)
     if (savedRun) {
-      state.imageUrl = resolveAssetUrl(savedRun.imageUrl)
+      state.imageUrl = resolveResumeImageUrl(savedRun, state.puzzle)
       renderGame({ resumeRun: savedRun })
       return
     }
@@ -4463,7 +4479,15 @@ function renderGame({ resumeRun = null } = {}) {
       if (resumeRun) {
         state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)
         state.difficulty = resumeRun.difficulty || state.difficulty
-        state.imageUrl = resolveAssetUrl(resumeRun.imageUrl || state.imageUrl)
+        // Prefer the puzzle payload's current image URL when it's for the
+        // same date as the saved run — handles legacy runs whose stored
+        // imageUrl uses an obsolete extension (jpg → webp) or is missing
+        // a current ?v= cache-bust.
+        state.imageUrl = resolveResumeImageUrl({
+          imageUrl: resumeRun.imageUrl || state.imageUrl,
+          puzzleDate: resumeRun.puzzleDate,
+          gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
+        }, state.puzzle)
         // Keep the full puzzle payload (categories etc.) that the caller set
         // so Restart can re-resolve the current image URL from it. Only
         // replace it when it's missing or for a different date.
