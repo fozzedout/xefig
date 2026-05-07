@@ -14,15 +14,17 @@ const TEST_PNG_BUFFER = Buffer.from(TEST_PNG_BASE64, 'base64')
 
 function createTodayPayload() {
   const today = new Date().toISOString().slice(0, 10)
-  // Only jigsaw uses PUZZLE_IMG. Setting jigsaw's thumbnail equal to its
-  // imageUrl makes main.js's renderSlices preload-loop skip jigsaw
-  // (line ~1731: `if (fullUrl === thumbUrl) return`) — so the route
-  // mock fires once for the menu thumb, and once again for the play
-  // fetch. Other modes use HERO_URL for both, so menu pre-loads bypass us.
+  // Jigsaw's full image is PUZZLE_IMG (intercepted by the route mock so
+  // the test controls when it resolves / fails). Its thumbnail uses
+  // HERO_URL (handled by Vite directly) — that way the overlay's
+  // background-image fetch and the menu thumbnail rendering are
+  // independent of the test's failure scenarios. Menu's preload loop
+  // (main.js:~1731) will fire one extra PUZZLE_IMG request because
+  // fullUrl !== thumbUrl, but the menu phase of the router fulfills it.
   return {
     date: today,
     categories: {
-      jigsaw: { imageUrl: PUZZLE_IMG, thumbnailUrl: PUZZLE_IMG },
+      jigsaw: { imageUrl: PUZZLE_IMG, thumbnailUrl: HERO_URL },
       slider: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },
       swap: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },
       polygram: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },

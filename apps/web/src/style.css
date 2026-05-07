@@ -4075,6 +4075,44 @@ canvas.slice-image {
   pointer-events: auto;
 }
 
+/* When the thumbnail is available, it doubles as the loading visual —
+ * the user sees a preview of the puzzle they're about to play, instead
+ * of a generic spinner. Only a thin progress strip remains. */
+.puzzle-loading-thumb {
+  position: absolute;
+  inset: 0;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  display: none;
+}
+
+.puzzle-loading-overlay.has-thumb .puzzle-loading-thumb {
+  display: block;
+}
+
+.puzzle-loading-overlay.has-thumb .puzzle-loading-spinner,
+.puzzle-loading-overlay.has-thumb .puzzle-loading-label,
+.puzzle-loading-overlay.has-thumb .puzzle-loading-detail,
+.puzzle-loading-overlay.has-thumb .puzzle-loading-hint {
+  display: none;
+}
+
+.puzzle-loading-overlay.has-thumb .puzzle-loading-meter {
+  position: absolute;
+  bottom: calc(0.6rem + var(--sai-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(60%, 220px);
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 2;
+}
+
+.puzzle-loading-overlay.is-error .puzzle-loading-thumb {
+  display: none;
+}
+
 .puzzle-loading-spinner {
   width: 38px;
   height: 38px;

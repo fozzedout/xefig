@@ -3926,12 +3926,13 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
     })
 }
 
-function createPuzzleLoadingOverlay() {
+function createPuzzleLoadingOverlay({ thumbnailUrl } = {}) {
   const overlay = document.createElement('div')
   overlay.className = 'puzzle-loading-overlay'
   overlay.setAttribute('role', 'status')
   overlay.setAttribute('aria-live', 'polite')
   overlay.innerHTML = `
+    <div class="puzzle-loading-thumb" aria-hidden="true"></div>
     <div class="puzzle-loading-spinner" aria-hidden="true"></div>
     <div class="puzzle-loading-label">Loading puzzle…</div>
     <div class="puzzle-loading-meter" aria-hidden="true">
@@ -3940,7 +3941,23 @@ function createPuzzleLoadingOverlay() {
     <div class="puzzle-loading-detail"></div>
     <div class="puzzle-loading-hint">If this takes too long, your connection looks weak.</div>
   `
+  if (thumbnailUrl) {
+    overlay.classList.add('has-thumb')
+    // Inline style avoids CSS-injection edge cases with arbitrary URLs;
+    // JSON.stringify produces "…" which url() accepts and which escapes
+    // any embedded quotes / backslashes correctly.
+    const thumb = overlay.querySelector('.puzzle-loading-thumb')
+    thumb.style.backgroundImage = `url(${JSON.stringify(thumbnailUrl)})`
+  }
   return overlay
+}
+
+function resolvePuzzleThumbnailFromState(puzzlePayload, gameMode) {
+  if (!puzzlePayload?.categories) return null
+  const categoryKey = GAME_MODE_TO_PUZZLE_CATEGORY[normalizeGameMode(gameMode)] || 'jigsaw'
+  const raw = puzzlePayload.categories[categoryKey]?.thumbnailUrl
+    || puzzlePayload.categories.jigsaw?.thumbnailUrl
+  return raw ? resolveAssetUrl(raw) : null
 }
 
 function updatePuzzleLoadingOverlay(overlay, progress) {
@@ -4469,7 +4486,13 @@ function renderGame({ resumeRun = null } = {}) {
   // init() — anything inside #puzzle-mount would be torn down before
   // loadImage() ever ran. The workspace is positioned, so absolute-inset
   // styling on the overlay covers the mount.
-  const loadingOverlay = createPuzzleLoadingOverlay()
+  //
+  // The thumbnail (if known) becomes the loading visual — the menu
+  // already cached it when the user picked the puzzle, so it appears
+  // instantly while the full image streams in. The full overlay
+  // (spinner / label / hint) only shows when no thumb is available.
+  const thumbnailUrl = resolvePuzzleThumbnailFromState(state.puzzle, gameMode)
+  const loadingOverlay = createPuzzleLoadingOverlay({ thumbnailUrl })
   if (workspaceEl) workspaceEl.append(loadingOverlay)
 
   ;(async () => {
