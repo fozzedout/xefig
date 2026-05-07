@@ -1,4 +1,4 @@
-import { loadImage, releaseLoadedImage } from './image-loader.js'
+import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
 const MIN_COLS = 5
 const MIN_ROWS = 5
@@ -35,13 +35,14 @@ const TAP_MAX_DISTANCE = 10
 const TAP_MAX_DURATION_MS = 350
 
 export class SlidingTilePuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', onComplete, onProgress, onLoadProgress }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'easy', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('SlidingTilePuzzle requires a container element.')
     }
 
     this.container = container
     this.imageUrl = imageUrl
+    this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -63,8 +64,13 @@ export class SlidingTilePuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
-    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
+    // Thumb-first: start the puzzle from the cached thumbnail so the
+    // player can swipe tiles immediately. Full image streams in the
+    // background and tiles are repainted at full quality.
+    const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
+    this.image = image
+    this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
+    this._fullImageUpgradePending = isThumbnail
     this.calculateGrid()
     this.totalSlots = this.cols * this.rows
     this.tileCount = this.totalSlots - 1
@@ -101,6 +107,37 @@ export class SlidingTilePuzzle {
       this.containerObserver = new ResizeObserver(() => this.onWindowResize())
       this.containerObserver.observe(this.container)
     }
+
+    if (this._fullImageUpgradePending) {
+      this._fullImageUpgradePending = false
+      this.startFullImageUpgrade()
+    }
+  }
+
+  startFullImageUpgrade() {
+    const initialImage = this.image
+    loadImage(this.imageUrl)
+      .then((fullImage) => {
+        if (this.image !== initialImage) {
+          releaseLoadedImage(fullImage)
+          return
+        }
+        releaseLoadedImage(this.image)
+        this.image = fullImage
+        this.displayImageUrl = fullImage.currentSrc || fullImage.src || this.imageUrl
+        for (const tile of this.tiles) {
+          this.paintTileFace(tile)
+        }
+        if (this.victoryTile) {
+          this.victoryTile.style.backgroundImage = `url("${this.displayImageUrl}")`
+        }
+        if (this.referenceImage) {
+          this.referenceImage.src = this.displayImageUrl
+        }
+      })
+      .catch((err) => {
+        console.warn('Sliding-tile full image upgrade failed; staying on thumbnail.', err)
+      })
   }
 
   destroy() {

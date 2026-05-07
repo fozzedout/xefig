@@ -4556,6 +4556,7 @@ function renderGame({ resumeRun = null } = {}) {
       const puzzleConfig = {
         container: mount,
         imageUrl: state.imageUrl,
+        thumbnailUrl,
         difficulty: state.difficulty,
         boardColorIndex: getGlobalBoardColorIndex(),
         muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,

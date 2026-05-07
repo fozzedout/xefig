@@ -1,4 +1,4 @@
-import { loadImage, releaseLoadedImage } from './image-loader.js'
+import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
 const MIN_COLS = 5
 const MIN_ROWS = 5
@@ -33,13 +33,14 @@ function pickBestGrid(availW, availH, targetTotal) {
 }
 
 export class PictureSwapPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PictureSwapPuzzle requires a container element.')
     }
 
     this.container = container
     this.imageUrl = imageUrl
+    this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -67,8 +68,12 @@ export class PictureSwapPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
-    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
+    // Thumb-first: start the puzzle from the cached thumbnail so tiles
+    // are immediately swappable. Full image streams in the background
+    // and tiles are repainted at full quality.
+    const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
+    this.image = image
+    this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
     this.calculateGrid()
     this.totalTiles = this.cols * this.rows
     this.startedAtMs = Date.now()
@@ -92,6 +97,33 @@ export class PictureSwapPuzzle {
       this.containerObserver = new ResizeObserver(() => this.onWindowResize())
       this.containerObserver.observe(this.container)
     }
+
+    if (isThumbnail) {
+      this.startFullImageUpgrade()
+    }
+  }
+
+  startFullImageUpgrade() {
+    const initialImage = this.image
+    loadImage(this.imageUrl)
+      .then((fullImage) => {
+        if (this.image !== initialImage) {
+          releaseLoadedImage(fullImage)
+          return
+        }
+        releaseLoadedImage(this.image)
+        this.image = fullImage
+        this.displayImageUrl = fullImage.currentSrc || fullImage.src || this.imageUrl
+        for (const tile of this.tiles) {
+          this.paintTileFace(tile)
+        }
+        if (this.referenceImage) {
+          this.referenceImage.src = this.displayImageUrl
+        }
+      })
+      .catch((err) => {
+        console.warn('Picture-swap full image upgrade failed; staying on thumbnail.', err)
+      })
   }
 
   destroy() {

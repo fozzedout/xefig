@@ -1,4 +1,4 @@
-import { loadImage, releaseLoadedImage } from './image-loader.js'
+import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
 const SHARD_COUNT_RANGES = {
   easy: [36, 42],
@@ -14,13 +14,14 @@ const MAX_BOARD_SIZE = 1400
 const WHEEL_ROTATION_DEG = 15
 
 export class PolygramPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PolygramPuzzle requires a container element.')
     }
 
     this.container = container
     this.imageUrl = imageUrl
+    this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -62,8 +63,12 @@ export class PolygramPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
-    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
+    // Thumb-first so shards become draggable immediately; full image
+    // streams in the background and shards get repainted at full
+    // quality without disturbing positions or lock state.
+    const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
+    this.image = image
+    this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
 
     const rng = createSeededRng(`${this.imageUrl}|${String(this.difficulty || 'medium')}`)
     this.shardCount = resolveShardCount(this.difficulty, rng)
@@ -79,6 +84,33 @@ export class PolygramPuzzle {
     this.emitProgress()
 
     window.addEventListener('resize', this.handleWindowResize)
+
+    if (isThumbnail) {
+      this.startFullImageUpgrade()
+    }
+  }
+
+  startFullImageUpgrade() {
+    const initialImage = this.image
+    loadImage(this.imageUrl)
+      .then((fullImage) => {
+        if (this.image !== initialImage) {
+          releaseLoadedImage(fullImage)
+          return
+        }
+        releaseLoadedImage(this.image)
+        this.image = fullImage
+        this.displayImageUrl = fullImage.currentSrc || fullImage.src || this.imageUrl
+        // paintAllPieces re-applies background-image (with the new URL)
+        // and re-computes cover metrics from this.image's natural dims.
+        this.paintAllPieces()
+        if (this.referenceImage) {
+          this.referenceImage.src = this.displayImageUrl
+        }
+      })
+      .catch((err) => {
+        console.warn('Polygram full image upgrade failed; staying on thumbnail.', err)
+      })
   }
 
   destroy() {

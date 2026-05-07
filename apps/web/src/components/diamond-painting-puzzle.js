@@ -1,4 +1,4 @@
-import { loadImage, releaseLoadedImage } from './image-loader.js'
+import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
 const TARGET_CELLS = 10000
 const NUM_COLORS = 16
@@ -12,13 +12,14 @@ const MAX_CANVAS_DIMENSION = 4096
 const MAX_CANVAS_PIXELS = 4096 * 4096
 
 export class DiamondPaintingPuzzle {
-  constructor({ container, imageUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress, muted = false }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress, muted = false }) {
     if (!container) {
       throw new Error('DiamondPaintingPuzzle requires a container element.')
     }
 
     this.container = container
     this.imageUrl = imageUrl
+    this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -63,8 +64,16 @@ export class DiamondPaintingPuzzle {
   async init() {
     this.destroy()
 
-    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
-    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
+    // Thumb-first AND thumb-only: the diamond grid quantizes the image
+    // into a 16-colour palette over ~10k cells once, on init. Re-running
+    // that against a higher-res image later would shift cell colours
+    // (cheap thumbnails sample slightly differently from the full
+    // image), and any cells the user had already painted would suddenly
+    // look "wrong." Thumbnail resolution is plenty for the quantization
+    // anyway, so just use it and skip the full-image fetch entirely.
+    const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
+    this.image = image
+    this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
 
     const aspect = this.image.naturalWidth / this.image.naturalHeight
     this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(TARGET_CELLS * aspect)))

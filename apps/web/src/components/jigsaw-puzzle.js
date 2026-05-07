@@ -1,4 +1,4 @@
-import { loadImage, releaseLoadedImage } from './image-loader.js'
+import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
 const DIFFICULTY_TO_GRID = {
   easy: 8,
@@ -29,13 +29,14 @@ const MAX_BOARD_RATIO = 16 / 10
 const MAX_SIDEBAR_BOARD_RATIO = 2.1
 
 export class JigsawPuzzle {
-  constructor({ container, imageUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
     if (!container) {
       throw new Error('JigsawPuzzle requires a container element.')
     }
 
     this.container = container
     this.imageUrl = imageUrl
+    this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
     this.snapDistance = snapDistance
     this.onComplete = onComplete
@@ -83,8 +84,14 @@ export class JigsawPuzzle {
     this.destroy()
     this.completed = false
 
-    this.image = await loadImage(this.imageUrl, { onProgress: this.onLoadProgress })
-    this.displayImageUrl = this.image.currentSrc || this.image.src || this.imageUrl
+    // Thumb-first: render pieces from the small thumbnail (already
+    // cached when the user picked the puzzle from the menu) so the
+    // player can start dragging immediately. The full image streams
+    // in the background and silently swaps in at higher quality —
+    // piece positions, lock state, and tray order are preserved.
+    const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
+    this.image = image
+    this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
     this.gridSize = this.resolveGridSize(this.difficulty)
     this.rows = this.gridSize
     this.cols = this.gridSize
@@ -96,6 +103,42 @@ export class JigsawPuzzle {
     this.shuffleCarousel()
     this.resetView()
     this.setReferenceVisible(false)
+
+    if (isThumbnail) {
+      this.startFullImageUpgrade()
+    }
+  }
+
+  startFullImageUpgrade() {
+    const initialImage = this.image
+    // No onLoadProgress on the upgrade — the puzzle is already playable
+    // and the bottom-of-screen progress bar would just distract. If the
+    // upgrade fails, the puzzle stays on the thumbnail (fully playable).
+    loadImage(this.imageUrl)
+      .then((fullImage) => {
+        if (this.image !== initialImage) {
+          // Puzzle was destroyed (or already upgraded somehow); discard.
+          releaseLoadedImage(fullImage)
+          return
+        }
+        releaseLoadedImage(this.image)
+        this.image = fullImage
+        this.displayImageUrl = fullImage.currentSrc || fullImage.src || this.imageUrl
+        // Crop dimensions are pixel-space-relative to the source image,
+        // so they have to be recomputed against the new (higher-res)
+        // image's natural width/height.
+        this.imageCrop = this.calculateImageCrop(this.boardWidth / this.boardHeight)
+        this.paintGhostImage()
+        for (const piece of this.pieces) {
+          this.paintPiece(piece)
+        }
+        if (this.referenceImage) {
+          this.referenceImage.src = this.displayImageUrl
+        }
+      })
+      .catch((err) => {
+        console.warn('Jigsaw full image upgrade failed; staying on thumbnail.', err)
+      })
   }
 
   destroy() {

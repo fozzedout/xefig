@@ -12,19 +12,18 @@ const TEST_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGP8z8DAwMDAwsDAwMAwGgIAB4QAk9bKv6MAAAAASUVORK5CYII='
 const TEST_PNG_BUFFER = Buffer.from(TEST_PNG_BASE64, 'base64')
 
-function createTodayPayload() {
+function createTodayPayload({ jigsawThumb = PUZZLE_IMG } = {}) {
   const today = new Date().toISOString().slice(0, 10)
-  // Jigsaw's full image is PUZZLE_IMG (intercepted by the route mock so
-  // the test controls when it resolves / fails). Its thumbnail uses
-  // HERO_URL (handled by Vite directly) — that way the overlay's
-  // background-image fetch and the menu thumbnail rendering are
-  // independent of the test's failure scenarios. Menu's preload loop
-  // (main.js:~1731) will fire one extra PUZZLE_IMG request because
-  // fullUrl !== thumbUrl, but the menu phase of the router fulfills it.
+  // Default: jigsaw thumb === image === PUZZLE_IMG. loadImageThumbFirst
+  // skips the thumb attempt when the URLs match, so all attempts the
+  // route mock sees come from the puzzle's actual play-time loadImage
+  // call — the simplest case to reason about for slow / failing scenarios.
+  // Tests of the thumb-first happy path override jigsawThumb with a
+  // different URL (HERO_URL) so the thumbnail stage is exercised first.
   return {
     date: today,
     categories: {
-      jigsaw: { imageUrl: PUZZLE_IMG, thumbnailUrl: HERO_URL },
+      jigsaw: { imageUrl: PUZZLE_IMG, thumbnailUrl: jigsawThumb },
       slider: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },
       swap: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },
       polygram: { imageUrl: HERO_URL, thumbnailUrl: HERO_URL },
@@ -63,13 +62,13 @@ function createPuzzleRouter() {
   return { handler, setPlayHandler }
 }
 
-async function setupMenuAndStartJigsaw(page, playHandler) {
+async function setupMenuAndStartJigsaw(page, playHandler, payloadOptions = {}) {
   const context = page.context()
   await context.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(createTodayPayload()),
+      body: JSON.stringify(createTodayPayload(payloadOptions)),
     })
   })
 
@@ -114,13 +113,17 @@ test('shows loading overlay while puzzle image is downloading', async ({ page })
 })
 
 test('shows error card with retry when image load fails, then recovers', async ({ page }) => {
-  // The image-loader tries fetch first, then falls back to a native <img>
-  // request — that's two route hits per user-visible attempt. Abort both
-  // for the first user attempt; let the third (after Retry) succeed.
+  // Each render of the game page triggers up to three PUZZLE_IMG hits:
+  //   1. the loading overlay's CSS background-image (thumbnail preview)
+  //   2. the puzzle's loadImage fetch
+  //   3. its <img> fallback when (2) fails
+  // Abort all three to force loadImage to reject so the error card
+  // appears. After the user taps Retry, the next round of attempts
+  // succeeds and the puzzle loads.
   let attempts = 0
   await setupMenuAndStartJigsaw(page, async (route) => {
     attempts += 1
-    if (attempts <= 2) {
+    if (attempts <= 3) {
       await route.abort('failed')
     } else {
       await route.fulfill({
@@ -141,4 +144,31 @@ test('shows error card with retry when image load fails, then recovers', async (
 
   await expect(page.locator('.jigsaw-root')).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.puzzle-loading-overlay')).toBeHidden()
+})
+
+test('thumb-first: puzzle becomes playable from thumbnail while full image stalls', async ({ page }) => {
+  // Distinct thumb (HERO_URL via Vite) and full image (PUZZLE_IMG via
+  // route mock) — exercises the thumb-first path. Hold the full image
+  // forever; the puzzle should still become playable from the thumb.
+  let releaseFull
+  const fullReleased = new Promise((resolve) => { releaseFull = resolve })
+
+  await setupMenuAndStartJigsaw(page, async (route) => {
+    await fullReleased
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: TEST_PNG_BUFFER,
+    })
+  }, { jigsawThumb: HERO_URL })
+
+  // Puzzle root must appear from the thumbnail load alone, even though
+  // the route mock holds the full image hostage.
+  await expect(page.locator('.jigsaw-root')).toBeVisible({ timeout: 10000 })
+  // And the loading overlay should NOT be sitting on top — the puzzle
+  // is its own loading state.
+  await expect(page.locator('.puzzle-loading-overlay')).toBeHidden()
+
+  // Tear down cleanly without leaving a hung route handler.
+  releaseFull()
 })

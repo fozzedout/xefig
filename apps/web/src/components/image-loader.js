@@ -33,6 +33,24 @@ export async function loadImage(url, {
   }
 }
 
+// Try the thumbnail first (usually already cached from menu rendering)
+// so the puzzle can become playable immediately, then upgrade to the
+// full image in the background. Returns { image, isThumbnail }. Falls
+// straight through to the full image when no thumb URL is provided or
+// the thumb load fails — the caller still gets an image (or rejects).
+export async function loadImageThumbFirst(thumbnailUrl, imageUrl, options = {}) {
+  if (thumbnailUrl && thumbnailUrl !== imageUrl) {
+    try {
+      const image = await loadImage(thumbnailUrl, options)
+      return { image, isThumbnail: true }
+    } catch {
+      // Thumb missed (no cache + bad network). Fall through to full.
+    }
+  }
+  const image = await loadImage(imageUrl, options)
+  return { image, isThumbnail: false }
+}
+
 export function releaseLoadedImage(image) {
   const objectUrl = image?.__xefigObjectUrl
   if (!objectUrl) return
