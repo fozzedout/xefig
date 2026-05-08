@@ -342,7 +342,7 @@ export function createApp() {
 
       return c.json({
         ok: true,
-        defaultModel: (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it',
+        defaultModel: (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-31b-it',
         keyUsed: freeKey ? 'free' : 'paid',
         models,
       })
@@ -810,7 +810,7 @@ export function createApp() {
     const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
     const rewriter = makeGemmaRewriter(c.env, requestedModel)
     const resolvedModel =
-      requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it'
+      requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-31b-it'
 
     const prompts = await generatePromptPacks(c.env.DB, 1, rewriter ?? undefined)
 
@@ -902,7 +902,7 @@ export function createApp() {
     return c.json({
       ok: outcome.text !== null,
       category,
-      model: c.env.GEMMA_REWRITE_MODEL || 'gemma-4-26b-a4b-it',
+      model: c.env.GEMMA_REWRITE_MODEL || 'gemma-4-31b-it',
       keyUsed: outcome.keyUsed,
       elapsedMs,
       input: descriptive,
@@ -983,7 +983,7 @@ export function createApp() {
     }
 
     const finalPrompt = technicalPart ? `${outcome.text} ${technicalPart}` : outcome.text
-    const usedModel = requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it'
+    const usedModel = requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-31b-it'
 
     return c.json({
       ok: true,

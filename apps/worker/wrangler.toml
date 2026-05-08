@@ -33,7 +33,7 @@ crons = ["0 0 * * *", "15 * * * *"]
 name = "SEND_EMAIL"
 
 [vars]
-GEMMA_REWRITE_MODEL = "gemma-3n-e4b-it"
+GEMMA_REWRITE_MODEL = "gemma-4-31b-it"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
 
 # ─── Beta environment ────────────────────────────────────────────────
@@ -91,5 +91,5 @@ name = "SEND_EMAIL"
 [env.beta.vars]
 IS_BETA = "true"
 UPSTREAM_PUZZLE_ORIGIN = "https://xefig.com"
-GEMMA_REWRITE_MODEL = "gemma-3n-e4b-it"
+GEMMA_REWRITE_MODEL = "gemma-4-26b-a4b-it"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
