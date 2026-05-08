@@ -1186,7 +1186,7 @@ function populateRewriteModels(models, defaultModel) {
   }
 
   const previous = getSelectedRewriteModel()
-  const fallback = (typeof defaultModel === 'string' && defaultModel.trim()) || 'openrouter/free'
+  const fallback = (typeof defaultModel === 'string' && defaultModel.trim()) || 'gemma-4-26b-a4b-it'
   const options = Array.isArray(models) ? models : []
 
   rewriteModelSelect.innerHTML = ''
@@ -1229,11 +1229,11 @@ async function refreshFreeModels({ quiet = false } = {}) {
 
   refreshModelsBtn.disabled = true
   if (!quiet) {
-    setStatus('Loading free OpenRouter models...', 'working')
+    setStatus('Loading Google AI models...', 'working')
   }
 
   try {
-    const { response, payload } = await adminFetch('/api/admin/openrouter/free-models')
+    const { response, payload } = await adminFetch('/api/admin/google/models')
     if (response.status === 401) {
       if (!quiet) {
         setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')
@@ -1242,7 +1242,7 @@ async function refreshFreeModels({ quiet = false } = {}) {
     }
     if (!response.ok) {
       if (!quiet) {
-        setStatus(payload.error || 'Could not load free models.', 'error')
+        setStatus(payload.error || 'Could not load Google AI models.', 'error')
       }
       return
     }
@@ -1250,11 +1250,11 @@ async function refreshFreeModels({ quiet = false } = {}) {
     populateRewriteModels(payload.models, payload.defaultModel)
     if (!quiet) {
       const count = Array.isArray(payload.models) ? payload.models.length : 0
-      setStatus(`Loaded ${count} free models.`, 'ok')
+      setStatus(`Loaded ${count} Google AI models.`, 'ok')
     }
   } catch {
     if (!quiet) {
-      setStatus('Network error while loading free models.', 'error')
+      setStatus('Network error while loading Google AI models.', 'error')
     }
   } finally {
     refreshModelsBtn.disabled = false
@@ -2608,7 +2608,7 @@ if (testGemmaClearBtn) {
 // ─── Init ───
 
 if (rewriteModelSelect && rewriteModelSelect.options.length === 0) {
-  populateRewriteModels([], 'openrouter/free')
+  populateRewriteModels([], 'gemma-4-26b-a4b-it')
 }
 
 setAuthState(false)

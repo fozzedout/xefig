@@ -28,13 +28,8 @@ import {
   savePuzzleRecord,
   toCdnUrl,
 } from './lib/puzzles'
-import {
-  listOpenRouterFreeModels,
-  maybeRewritePromptPackWithOpenRouter,
-  rewriteSinglePromptWithOpenRouter,
-} from './lib/prompt-rewriter'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './lib/prompts'
-import { rewriteWithGemma } from './lib/gemma-rewriter'
+import { makeGemmaRewriter, rewriteWithGemma } from './lib/gemma-rewriter'
 import { ensurePuzzleTables, getScheduledDatesInRange } from './lib/puzzle-db'
 import {
   handleBatchSubmit,
@@ -295,7 +290,7 @@ export function createApp() {
     )
   })
 
-  app.get('/api/admin/openrouter/free-models', async (c) => {
+  app.get('/api/admin/google/models', async (c) => {
     const token = getCookie(c, ADMIN_SESSION_COOKIE)
     if (!(await hasAdminSession(c.env, token))) {
       deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
@@ -307,16 +302,53 @@ export function createApp() {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
+    const freeKey = (c.env.GOOGLE_AI_FREE_API_KEY || '').trim()
+    const paidKey = (c.env.GOOGLE_AI_API_KEY || '').trim()
+    const key = freeKey || paidKey
+    if (!key) {
+      return c.json({ error: 'No Google AI API key configured.' }, 500)
+    }
+
     try {
-      const models = await listOpenRouterFreeModels(c.env)
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${key}`
+      const response = await fetch(url)
+      const rawBody = await response.text()
+      if (!response.ok) {
+        return c.json({ error: `Model list failed: HTTP ${response.status}: ${rawBody.slice(0, 240)}` }, 502)
+      }
+
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(rawBody)
+      } catch {
+        return c.json({ error: 'Non-JSON response from Google API.' }, 502)
+      }
+
+      const raw = (parsed as { models?: Array<Record<string, unknown>> })?.models ?? []
+      const models = raw
+        .map((m) => {
+          const fullName = typeof m.name === 'string' ? m.name.replace(/^models\//, '') : ''
+          const displayName = typeof m.displayName === 'string' ? m.displayName.trim() : ''
+          const methods = Array.isArray(m.supportedGenerationMethods) ? (m.supportedGenerationMethods as string[]) : []
+          const contextLength =
+            typeof m.inputTokenLimit === 'number' && Number.isFinite(m.inputTokenLimit)
+              ? Math.max(0, Math.floor(m.inputTokenLimit))
+              : null
+          return { id: fullName, name: displayName || fullName, contextLength, methods }
+        })
+        .filter((m) => m.id && /gemma|gemini/i.test(m.id) && m.methods.includes('generateContent'))
+        .map(({ id, name, contextLength }) => ({ id, name, contextLength }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+
       return c.json({
         ok: true,
-        defaultModel: (c.env.OPENROUTER_MODEL || '').trim() || 'openrouter/free',
+        defaultModel: (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it',
+        keyUsed: freeKey ? 'free' : 'paid',
         models,
       })
     } catch (error) {
-      console.error('OpenRouter model list failed', error)
-      const message = error instanceof Error ? error.message : 'Unable to load OpenRouter free models.'
+      console.error('Google model list failed', error)
+      const message = error instanceof Error ? error.message : 'Unable to load Google models.'
       return c.json({ error: message }, 502)
     }
   })
@@ -776,37 +808,21 @@ export function createApp() {
     }
 
     const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
+    const rewriter = makeGemmaRewriter(c.env, requestedModel)
+    const resolvedModel =
+      requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it'
 
-    const prompts = await generatePromptPacks(c.env.DB, 1)
-    let rewrite = {
-      attempted: false,
-      applied: false,
-      model: null as string | null,
-      error: null as string | null,
-    }
-
-    const firstPack = prompts[0]
-    if (firstPack) {
-      const rewriteResult = await maybeRewritePromptPackWithOpenRouter(c.env, firstPack, requestedModel)
-      prompts[0] = rewriteResult.pack
-      if (rewriteResult.attempted && rewriteResult.error) {
-        console.warn('Prompt rewrite failed', {
-          model: rewriteResult.model,
-          error: rewriteResult.error,
-        })
-      }
-      rewrite = {
-        attempted: rewriteResult.attempted,
-        applied: rewriteResult.applied,
-        model: rewriteResult.model,
-        error: rewriteResult.error,
-      }
-    }
+    const prompts = await generatePromptPacks(c.env.DB, 1, rewriter ?? undefined)
 
     return c.json({
       ok: true,
       prompts,
-      promptRewrite: rewrite,
+      promptRewrite: {
+        attempted: Boolean(rewriter),
+        applied: Boolean(rewriter),
+        model: rewriter ? resolvedModel : null,
+        error: rewriter ? null : 'No Google AI API key configured.',
+      },
     })
   })
 
@@ -845,51 +861,6 @@ export function createApp() {
       console.error('Single category generation failed', error)
       return c.json({ error: 'Failed to generate category prompt.' }, 500)
     }
-  })
-
-  app.get('/api/admin/prompts/list-gemma-models', async (c) => {
-    const token = getCookie(c, ADMIN_SESSION_COOKIE)
-    if (!(await hasAdminSession(c.env, token))) {
-      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
-      return c.json({ error: 'Admin session required.' }, 401)
-    }
-
-    const freeKey = (c.env.GOOGLE_AI_FREE_API_KEY || '').trim()
-    const paidKey = (c.env.GOOGLE_AI_API_KEY || '').trim()
-    const key = freeKey || paidKey
-    if (!key) {
-      return c.json({ error: 'No Google AI API key configured.' }, 500)
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${key}`
-    const r = await fetch(url)
-    const body = await r.text()
-    if (!r.ok) {
-      return c.json({ error: `HTTP ${r.status}`, body: body.slice(0, 2000) }, 502)
-    }
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(body)
-    } catch {
-      return c.json({ error: 'non-JSON response', body: body.slice(0, 2000) }, 502)
-    }
-
-    const models = (parsed as { models?: Array<Record<string, unknown>> })?.models ?? []
-    const filtered = models
-      .map((m) => ({
-        name: typeof m.name === 'string' ? m.name.replace(/^models\//, '') : '',
-        displayName: typeof m.displayName === 'string' ? m.displayName : '',
-        methods: Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [],
-      }))
-      .filter(
-        (m) =>
-          /gemma|gemini/i.test(m.name) &&
-          (m.methods as string[]).includes('generateContent'),
-      )
-      .sort((a, b) => a.name.localeCompare(b.name))
-
-    return c.json({ ok: true, keyUsed: freeKey ? 'free' : 'paid', count: filtered.length, models: filtered })
   })
 
   app.post('/api/admin/prompts/test-gemma', async (c) => {
@@ -989,29 +960,36 @@ export function createApp() {
       return c.json({ error: 'Prompt text is required.' }, 400)
     }
 
-    const model = typeof body?.model === 'string' ? body.model.trim() : ''
+    const cleaned = prompt.replace(/\s+/g, ' ').trim()
+    const technicalMarker = cleaned.match(
+      /(?:Finally, ensure rendering quality|For the final render|Rendering requirement):/i,
+    )
+    const descriptivePart = technicalMarker ? cleaned.slice(0, technicalMarker.index).trim() : cleaned
+    const technicalPart = technicalMarker ? cleaned.slice(technicalMarker.index).trim() : ''
 
-    const rewritten = await rewriteSinglePromptWithOpenRouter(c.env, {
-      category,
-      prompt,
-      theme: typeof body?.theme === 'string' ? body.theme : undefined,
-      keywords: typeof body?.tags === 'string' ? parseTagList(body.tags) : undefined,
-      model,
-    })
+    const theme = typeof body?.theme === 'string' ? body.theme : undefined
+    const keywords = typeof body?.tags === 'string' ? parseTagList(body.tags) : undefined
+    const requestedModel = typeof body?.model === 'string' ? body.model.trim() : ''
 
-    if (!rewritten.attempted) {
-      return c.json({ error: rewritten.error || 'Prompt rewrite is unavailable.' }, 500)
+    const outcome = await rewriteWithGemma(
+      c.env,
+      descriptivePart,
+      { category, theme, keywords },
+      requestedModel,
+    )
+
+    if (!outcome.text) {
+      return c.json({ error: outcome.error || 'Unable to rewrite prompt.' }, 502)
     }
 
-    if (!rewritten.applied || !rewritten.prompt) {
-      return c.json({ error: rewritten.error || 'Unable to rewrite prompt.' }, 502)
-    }
+    const finalPrompt = technicalPart ? `${outcome.text} ${technicalPart}` : outcome.text
+    const usedModel = requestedModel || (c.env.GEMMA_REWRITE_MODEL || '').trim() || 'gemma-4-26b-a4b-it'
 
     return c.json({
       ok: true,
       category,
-      model: rewritten.model,
-      prompt: rewritten.prompt,
+      model: usedModel,
+      prompt: finalPrompt,
     })
   })
 

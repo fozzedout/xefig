@@ -6,8 +6,6 @@ export type Bindings = {
   SEND_EMAIL: { send: (message: unknown) => Promise<void> }
   ADMIN_PASSWORD?: string
   ADMIN_SESSION_SECRET?: string
-  OPENROUTER_API_KEY?: string
-  OPENROUTER_MODEL?: string
   GOOGLE_AI_API_KEY?: string
   GOOGLE_AI_FREE_API_KEY?: string
   GEMMA_REWRITE_MODEL?: string

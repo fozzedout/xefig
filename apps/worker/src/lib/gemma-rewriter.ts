@@ -35,12 +35,10 @@ export type GemmaRewriteOutcome = {
   error: string | null
 }
 
-// Match the OpenRouter rewriter's system + user prompt byte-for-byte
-// (see apps/worker/src/lib/prompt-rewriter.ts) so that swapping models
-// is the only variable. Gemma's API doesn't accept `systemInstruction`
-// for real, so for Gemma we concatenate the system text onto the user
-// turn with a blank line between; for Gemini models we use the
-// systemInstruction field and preserve the two-role shape.
+// Gemma's API doesn't accept `systemInstruction` for real, so for
+// Gemma we concatenate the system text onto the user turn with a
+// blank line between; for Gemini models we use the systemInstruction
+// field and preserve the two-role shape.
 const SYSTEM_MESSAGE = [
   'You are a creative writer specializing in vivid scene descriptions. You will be given a structured image prompt and its associated metadata.',
   'Your task is to transform the descriptive elements into a single, cohesive, and highly imaginative paragraph.',
@@ -232,8 +230,7 @@ async function callGemmaOnce(
   const useSystemInstruction = isGeminiModel(model)
 
   // For Gemma the system message is concatenated onto the user turn; for
-  // Gemini it goes into the systemInstruction field. Either way the
-  // generationConfig matches the OpenRouter rewriter (temp 1, 1024 toks).
+  // Gemini it goes into the systemInstruction field.
   const userText = useSystemInstruction
     ? userMessage
     : `${SYSTEM_MESSAGE}\n\n${userMessage}`
@@ -270,10 +267,11 @@ export async function rewriteWithGemma(
   env: Pick<Bindings, 'GOOGLE_AI_FREE_API_KEY' | 'GOOGLE_AI_API_KEY' | 'GEMMA_REWRITE_MODEL'>,
   descriptive: string,
   context: GemmaRewriteContext,
+  modelOverride?: string,
 ): Promise<GemmaRewriteOutcome> {
   const freeKey = (env.GOOGLE_AI_FREE_API_KEY || '').trim()
   const paidKey = (env.GOOGLE_AI_API_KEY || '').trim()
-  const model = (env.GEMMA_REWRITE_MODEL || '').trim() || DEFAULT_GEMMA_MODEL
+  const model = (modelOverride || '').trim() || (env.GEMMA_REWRITE_MODEL || '').trim() || DEFAULT_GEMMA_MODEL
 
   const attempts: Array<{ key: string; label: 'free' | 'paid' }> = []
   if (freeKey) attempts.push({ key: freeKey, label: 'free' })
@@ -362,12 +360,13 @@ export async function rewriteWithGemma(
 // fails, so the pipeline never stalls on a text-LLM outage).
 export function makeGemmaRewriter(
   env: Pick<Bindings, 'GOOGLE_AI_FREE_API_KEY' | 'GOOGLE_AI_API_KEY' | 'GEMMA_REWRITE_MODEL'>,
+  modelOverride?: string,
 ): GemmaRewriter | null {
   const hasKey = Boolean((env.GOOGLE_AI_FREE_API_KEY || env.GOOGLE_AI_API_KEY || '').trim())
   if (!hasKey) return null
 
   return async (descriptive, context) => {
-    const outcome = await rewriteWithGemma(env, descriptive, context)
+    const outcome = await rewriteWithGemma(env, descriptive, context, modelOverride)
     if (outcome.text) {
       console.log(
         `[gemma-rewriter] ${context.category} rewritten via ${outcome.keyUsed} key (${outcome.text.length} chars)`,

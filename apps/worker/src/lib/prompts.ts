@@ -643,7 +643,7 @@ export function buildImagePromptParts(
   ].filter((line): line is string => line !== null)
 
   // Composition prose tells the LLM HOW to compose; keyword block tells
-  // it WHAT to compose with. The rewriter (prompt-rewriter.ts) is told
+  // it WHAT to compose with. The rewriter (gemma-rewriter.ts) is told
   // to "transform the descriptive elements into a single, cohesive,
   // imaginative paragraph" — labelled keywords let it pick up role
   // information the flat keywords list it also receives can't convey.
