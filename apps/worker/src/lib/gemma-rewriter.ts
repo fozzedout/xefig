@@ -5,7 +5,7 @@ import type { Bindings, PuzzleCategory } from '../types'
 // param, so we can transparently retry against the paid key when the
 // free tier hits its daily / per-minute quota.
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const DEFAULT_GEMMA_MODEL = 'gemma-4-31b-it'
+const DEFAULT_GEMMA_MODEL = 'gemini-flash-lite-latest'
 
 type GenerateContentResponse = {
   candidates?: Array<{

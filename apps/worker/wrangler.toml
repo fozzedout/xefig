@@ -33,7 +33,7 @@ crons = ["0 0 * * *", "15 * * * *"]
 name = "SEND_EMAIL"
 
 [vars]
-GEMMA_REWRITE_MODEL = "gemma-4-31b-it"
+GEMMA_REWRITE_MODEL = "gemini-flash-lite-latest"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
 
 # ─── Beta environment ────────────────────────────────────────────────

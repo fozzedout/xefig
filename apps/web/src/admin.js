@@ -1186,7 +1186,7 @@ function populateRewriteModels(models, defaultModel) {
   }
 
   const previous = getSelectedRewriteModel()
-  const fallback = (typeof defaultModel === 'string' && defaultModel.trim()) || 'gemma-4-31b-it'
+  const fallback = (typeof defaultModel === 'string' && defaultModel.trim()) || 'gemini-flash-lite-latest'
   const options = Array.isArray(models) ? models : []
 
   rewriteModelSelect.innerHTML = ''
@@ -2608,7 +2608,7 @@ if (testGemmaClearBtn) {
 // ─── Init ───
 
 if (rewriteModelSelect && rewriteModelSelect.options.length === 0) {
-  populateRewriteModels([], 'gemma-4-31b-it')
+  populateRewriteModels([], 'gemini-flash-lite-latest')
 }
 
 setAuthState(false)
