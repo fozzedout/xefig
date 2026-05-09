@@ -239,7 +239,6 @@ async function callGemmaOnce(
     contents: [{ role: 'user', parts: [{ text: userText }] }],
     generationConfig: {
       temperature: 1,
-      maxOutputTokens: 1024,
     },
   }
   if (useSystemInstruction) {
