@@ -572,6 +572,122 @@ function resolveAssetUrl(path) {
 // bust changes (?v=…) if the run was started weeks/months ago. Prefer
 // the puzzle payload's current URL when it covers the run's date, fall
 // back to the saved one otherwise.
+// Returns true when the connection is healthy enough to spend bandwidth
+// on speculative prefetch / cache priming. We err on the side of "go"
+// when the API isn't available (some browsers, desktop, etc.).
+function isHealthyNetwork() {
+  if (typeof navigator === 'undefined') return true
+  const conn = navigator.connection
+  if (!conn) return true
+  if (conn.saveData) return false
+  if (conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') return false
+  return true
+}
+
+// Iterate localStorage for every saved run that hasn't been completed.
+// Active runs are stored under `xefig:run:<date>:<mode>` (see
+// activeRunKey). We use this to drive prefetch priority and to know
+// which images to keep cached even if the user is browsing the archive.
+function listAllActiveRuns() {
+  const runs = []
+  if (typeof localStorage === 'undefined') return runs
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith('xefig:run:')) continue
+      const run = readJsonStorage(key)
+      if (!run || run.completed) continue
+      if (!run.puzzleDate || !run.imageUrl || !run.gameMode) continue
+      // Drop runs whose completion arrived via sync from another device —
+      // getRunForMode does the same self-heal.
+      if (getCompletionEntry(run.puzzleDate, run.gameMode)) continue
+      runs.push(run)
+    }
+  } catch {
+    // localStorage can throw in private browsing modes.
+  }
+  return runs
+}
+
+async function isImageCached(url) {
+  if (typeof caches === 'undefined') return false
+  try {
+    return Boolean(await caches.match(url))
+  } catch {
+    return false
+  }
+}
+
+// Prefetch full-resolution puzzle images into the SW cache, in priority
+// order: active resume runs first, then today's unplayed modes. Skips
+// completed puzzles entirely — those are marked for cache eviction on
+// completion, so re-fetching them would defeat the eviction policy.
+//
+// Throttled to one in-flight fetch at a time so we don't saturate the
+// uplink while the user is doing something else, and re-checks
+// connection health between fetches in case the link degrades mid-pass.
+async function prefetchPlayableImages(puzzlePayload) {
+  if (!isHealthyNetwork()) return
+
+  const seen = new Set()
+  const queue = []
+
+  for (const run of listAllActiveRuns()) {
+    const url = resolveResumeImageUrl(run, puzzlePayload)
+    if (url && url !== sampleImage && !seen.has(url)) {
+      seen.add(url)
+      queue.push(url)
+    }
+  }
+
+  if (puzzlePayload?.categories && puzzlePayload?.date) {
+    const completedToday = getCompletedModesForDate(puzzlePayload.date)
+    const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
+    for (const mode of modes) {
+      if (completedToday.has(mode)) continue
+      const url = resolvePuzzleImageUrl(puzzlePayload, mode)
+      if (url && url !== sampleImage && !seen.has(url)) {
+        seen.add(url)
+        queue.push(url)
+      }
+    }
+  }
+
+  for (const url of queue) {
+    if (!isHealthyNetwork()) return
+    if (await isImageCached(url)) continue
+    try {
+      // Just fetch — sw.js intercepts /cdn paths and writes a 200
+      // response into the cache. If the SW isn't installed yet, the
+      // browser HTTP cache still picks it up, so the puzzle's
+      // loadImage() short-circuits the same way.
+      await fetch(url, { credentials: 'same-origin' })
+    } catch {
+      // Best effort. If the connection has degraded, bail.
+      if (!isHealthyNetwork()) return
+    }
+  }
+}
+
+// Tell the SW to drop the full-res image for a completed puzzle. The
+// thumbnail stays cached because the menu / archive views still use
+// it; only the heavy full image is evicted. If the user replays, the
+// image will be re-fetched on demand.
+function evictCompletedImageFromCache(run) {
+  if (!run?.imageUrl) return
+  if (typeof navigator === 'undefined') return
+  const sw = navigator.serviceWorker
+  if (!sw?.controller) return
+  try {
+    sw.controller.postMessage({
+      type: 'evict-cached',
+      urls: [resolveAssetUrl(run.imageUrl)],
+    })
+  } catch {
+    // Cross-origin / permission edge cases — best effort.
+  }
+}
+
 function resolveResumeImageUrl(savedRun, puzzlePayload) {
   if (puzzlePayload?.date && puzzlePayload.date === savedRun.puzzleDate) {
     const fresh = resolvePuzzleImageUrl(puzzlePayload, savedRun.gameMode)
@@ -781,6 +897,14 @@ function recordCompletedRun(run) {
     puzzleDate,
     gameMode: mode,
   })
+
+  // Mark the full image for eviction from the SW cache. Images are
+  // validated before going live, so until a puzzle is completed the
+  // cached copy is still working capital — we keep it around. After
+  // completion, the heavy bytes are dead weight: the user has finished,
+  // the archive / completion screen can use the thumbnail, and a replay
+  // can re-fetch on demand. Frees cache budget for unplayed puzzles.
+  evictCompletedImageFromCache(run)
 }
 
 // One-time migration: drop completion records stuck below the plausible
@@ -1736,22 +1860,21 @@ function renderLauncher() {
         }))
       })
 
-      // Progressive image upgrade: swap thumbnails for full-size images once loaded
-      // (skip diamond — it uses a canvas grid thumbnail instead)
-      const sliceImages = container.querySelectorAll('.slice-image')
-      sliceImages.forEach((img, index) => {
-        const mode = modes[index]
-        if (mode === GAME_MODE_DIAMOND) return
-        const fullUrl = resolvePuzzleImageUrl(payload, mode)
-        const thumbUrl = img.src
-        if (fullUrl === thumbUrl) return
-
-        const full = new Image()
-        full.src = fullUrl
-        full.onload = () => {
-          if (img.isConnected) img.src = fullUrl
-        }
-      })
+      // Prefetch full-resolution images in priority order — active
+      // resume runs first, then today's unplayed modes. Throttled,
+      // gated on healthy network, deferred to idle so it never fights
+      // user interaction. Completed puzzles are NOT prefetched: their
+      // images get evicted from cache on completion (see
+      // evictCompletedImageFromCache) and we don't want to re-pull
+      // them just to evict again.
+      const triggerPrefetch = () => {
+        prefetchPlayableImages(payload).catch(() => {})
+      }
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(triggerPrefetch, { timeout: 4000 })
+      } else {
+        setTimeout(triggerPrefetch, 800)
+      }
 
       // Render diamond grid thumbnails
       renderDiamondGridThumbnails(container, payload?.date || todayDate)

@@ -63,6 +63,19 @@ function createPuzzleRouter() {
 }
 
 async function setupMenuAndStartJigsaw(page, playHandler, payloadOptions = {}) {
+  // Disable the menu's background prefetch by reporting saveData=true.
+  // Otherwise prefetchPlayableImages races the play-click and pre-warms
+  // the route mock's image, defeating the slow / failure scenarios we
+  // want to assert. The prefetch path is exercised separately.
+  await page.addInitScript(() => {
+    try {
+      Object.defineProperty(navigator, 'connection', {
+        value: { saveData: true, effectiveType: '4g' },
+        configurable: true,
+      })
+    } catch {}
+  })
+
   const context = page.context()
   await context.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({

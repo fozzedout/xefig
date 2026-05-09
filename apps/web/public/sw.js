@@ -22,6 +22,27 @@ self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
+// Eviction channel from the page. The page tells us which cached URLs
+// are no longer worth keeping (e.g. full-res images for puzzles the
+// user has just completed) so the budget stays focused on unplayed
+// content. ignoreSearch handles the ?v= cache-bust on /cdn images.
+self.addEventListener('message', (event) => {
+  const data = event.data
+  if (!data || data.type !== 'evict-cached') return
+  const urls = Array.isArray(data.urls) ? data.urls : []
+  if (urls.length === 0) return
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    await Promise.all(urls.map((url) => {
+      try {
+        return cache.delete(url, { ignoreSearch: true })
+      } catch {
+        return null
+      }
+    }))
+  })())
+})
+
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys()
