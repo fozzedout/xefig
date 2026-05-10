@@ -6,6 +6,9 @@ const MIN_COLS = 20
 const MIN_ROWS = 20
 const CELL_PX = 24
 const CELL_SAMPLE_GRID = 3
+const DITHER_ENABLED = true
+const CLEANUP_ENABLED = true
+const CLEANUP_MIN_REGION = 3
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const MAX_CANVAS_DIMENSION = 4096
@@ -84,7 +87,10 @@ export class DiamondPaintingPuzzle {
     const pixels = cellSamples.map((cell) => cell.representative)
     this.palette = createDistinctPalette(pixels, NUM_COLORS)
     sortPaletteDarkToLight(this.palette)
-    this.grid = assignCellColors(cellSamples, this.palette)
+    this.grid = assignCellColors(cellSamples, this.palette, this.cols)
+    if (CLEANUP_ENABLED) {
+      this.grid = cleanupTinyRegions(this.grid, this.cols, this.rows)
+    }
     this.fills = new Int8Array(this.totalCells).fill(-1)
 
     this.createLayout()
@@ -897,7 +903,7 @@ function getCanvasRenderScale(width, height) {
 
 // ─── Color Quantization (Median Cut) ────────────────────────
 
-export function sampleCellRegions(image, cols, rows, sampleGrid) {
+export function sampleCellRegions(image, cols, rows, sampleGrid, useMedian = false, bilateralStrength = 0) {
   const canvas = document.createElement('canvas')
   canvas.width = cols * sampleGrid
   canvas.height = rows * sampleGrid
@@ -905,7 +911,11 @@ export function sampleCellRegions(image, cols, rows, sampleGrid) {
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  if (bilateralStrength > 0) {
+    imageData = bilateralFilter(imageData, bilateralStrength * 0.4, bilateralStrength * 5)
+  }
+  const data = imageData.data
   const regions = new Array(cols * rows)
 
   for (let row = 0; row < rows; row++) {
@@ -937,13 +947,10 @@ export function sampleCellRegions(image, cols, rows, sampleGrid) {
         blues.push(255)
       }
 
+      const reduce = useMedian ? medianChannel : meanChannel
       regions[row * cols + col] = {
         samples,
-        representative: [
-          medianChannel(reds),
-          medianChannel(greens),
-          medianChannel(blues),
-        ],
+        representative: [reduce(reds), reduce(greens), reduce(blues)],
       }
     }
   }
@@ -951,7 +958,7 @@ export function sampleCellRegions(image, cols, rows, sampleGrid) {
   return regions
 }
 
-export function createDistinctPalette(pixels, targetColors) {
+export function createDistinctPalette(pixels, targetColors, chromaWeight = 0) {
   const boxes = medianCutBoxes(pixels, targetColors * 4)
   const candidates = boxes.map((box) => {
     const color = boxAvg(box)
@@ -963,7 +970,7 @@ export function createDistinctPalette(pixels, targetColors) {
   })
 
   const merged = mergeNearbyCandidates(candidates, 0.05)
-  const selected = selectDistinctCandidates(merged, targetColors)
+  const selected = selectDistinctCandidates(merged, targetColors, chromaWeight)
   return selected.map((candidate) => candidate.color)
 }
 
@@ -1063,7 +1070,7 @@ function mergeNearbyCandidates(candidates, minDistance) {
   return merged.sort((a, b) => b.weight - a.weight)
 }
 
-function selectDistinctCandidates(candidates, targetColors) {
+function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0) {
   if (candidates.length <= targetColors) {
     return candidates
   }
@@ -1097,7 +1104,11 @@ function selectDistinctCandidates(candidates, targetColors) {
         minDistance = Math.min(minDistance, oklabDistSq(candidate.lab, remaining[i].lab))
       }
       const weightFactor = 0.7 + 0.3 * (remaining[i].weight / maxWeight)
-      const score = minDistance * weightFactor
+      const a = remaining[i].lab[1]
+      const b = remaining[i].lab[2]
+      const chroma = Math.sqrt(a * a + b * b)
+      const chromaBoost = 1 + chroma * chromaWeight
+      const score = minDistance * weightFactor * chromaBoost
       if (score > bestScore) {
         bestScore = score
         bestIndex = i
@@ -1119,36 +1130,167 @@ function boxAvg(box) {
   return [Math.round(r / n), Math.round(g / n), Math.round(b / n)]
 }
 
-export function assignCellColors(cellSamples, palette) {
+export function assignCellColors(cellSamples, palette, cols, dither = DITHER_ENABLED) {
   const result = new Uint8Array(cellSamples.length)
   const paletteLabs = palette.map((color) => rgbToOklab(color))
 
-  for (let i = 0; i < cellSamples.length; i++) {
-    const votes = new Uint16Array(palette.length)
-    for (const sample of cellSamples[i].samples) {
-      votes[nearestPaletteIndex(sample, palette, paletteLabs)]++
+  if (!dither || !cols) {
+    // Vote-based: each of the 9 sub-pixel samples votes for its nearest
+    // palette colour, the cell takes the dominant. Representative breaks
+    // ties. This suppresses single-cell anomalies vs pure rep-nearest.
+    for (let i = 0; i < cellSamples.length; i++) {
+      const votes = new Uint16Array(palette.length)
+      for (const sample of cellSamples[i].samples) {
+        votes[nearestPaletteIndex(sample, palette, paletteLabs)]++
+      }
+      const representativeLab = rgbToOklab(cellSamples[i].representative)
+      const representativeIndex = nearestPaletteIndex(cellSamples[i].representative, palette, paletteLabs)
+      let bestIndex = representativeIndex
+      let bestVotes = -1
+      let bestDistance = Infinity
+      for (let p = 0; p < palette.length; p++) {
+        const distance = oklabDistSq(representativeLab, paletteLabs[p])
+        if (
+          votes[p] > bestVotes ||
+          (votes[p] === bestVotes && distance < bestDistance) ||
+          (votes[p] === bestVotes && distance === bestDistance && p === representativeIndex)
+        ) {
+          bestIndex = p
+          bestVotes = votes[p]
+          bestDistance = distance
+        }
+      }
+      result[i] = bestIndex
     }
+    return result
+  }
 
-    const representativeLab = rgbToOklab(cellSamples[i].representative)
-    const representativeIndex = nearestPaletteIndex(cellSamples[i].representative, palette, paletteLabs)
-    let bestIndex = representativeIndex
-    let bestVotes = -1
-    let bestDistance = Infinity
+  const rows = Math.floor(cellSamples.length / cols)
+  const workR = new Float32Array(cellSamples.length)
+  const workG = new Float32Array(cellSamples.length)
+  const workB = new Float32Array(cellSamples.length)
+  for (let i = 0; i < cellSamples.length; i++) {
+    workR[i] = cellSamples[i].representative[0]
+    workG[i] = cellSamples[i].representative[1]
+    workB[i] = cellSamples[i].representative[2]
+  }
 
-    for (let p = 0; p < palette.length; p++) {
-      const distance = oklabDistSq(representativeLab, paletteLabs[p])
-      if (
-        votes[p] > bestVotes ||
-        (votes[p] === bestVotes && distance < bestDistance) ||
-        (votes[p] === bestVotes && distance === bestDistance && p === representativeIndex)
-      ) {
-        bestIndex = p
-        bestVotes = votes[p]
-        bestDistance = distance
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const i = row * cols + col
+      const r = clamp255(workR[i])
+      const g = clamp255(workG[i])
+      const b = clamp255(workB[i])
+      const idx = nearestPaletteIndex([r, g, b], palette, paletteLabs)
+      result[i] = idx
+
+      const errR = r - palette[idx][0]
+      const errG = g - palette[idx][1]
+      const errB = b - palette[idx][2]
+
+      const right = col + 1 < cols ? i + 1 : -1
+      const below = row + 1 < rows
+      const belowLeft = below && col > 0 ? i + cols - 1 : -1
+      const belowSame = below ? i + cols : -1
+      const belowRight = below && col + 1 < cols ? i + cols + 1 : -1
+
+      if (right >= 0) {
+        workR[right] += errR * (7 / 16)
+        workG[right] += errG * (7 / 16)
+        workB[right] += errB * (7 / 16)
+      }
+      if (belowLeft >= 0) {
+        workR[belowLeft] += errR * (3 / 16)
+        workG[belowLeft] += errG * (3 / 16)
+        workB[belowLeft] += errB * (3 / 16)
+      }
+      if (belowSame >= 0) {
+        workR[belowSame] += errR * (5 / 16)
+        workG[belowSame] += errG * (5 / 16)
+        workB[belowSame] += errB * (5 / 16)
+      }
+      if (belowRight >= 0) {
+        workR[belowRight] += errR * (1 / 16)
+        workG[belowRight] += errG * (1 / 16)
+        workB[belowRight] += errB * (1 / 16)
+      }
+    }
+  }
+
+  return result
+}
+
+function clamp255(v) {
+  return v < 0 ? 0 : v > 255 ? 255 : v
+}
+
+// Absorb connected regions smaller than `minRegion` (8-direction) into
+// the dominant colour among their external 8-neighbours. Targets the
+// "1-cell hide-and-seek" gameplay pain without touching larger regions.
+export function cleanupTinyRegions(grid, cols, rows, minRegion = CLEANUP_MIN_REGION) {
+  const total = grid.length
+  const visited = new Uint8Array(total)
+  const result = new Uint8Array(grid)
+  const region = []
+
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const color = grid[start]
+    region.length = 0
+    const stack = [start]
+    visited[start] = 1
+
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      region.push(idx)
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === color) {
+            visited[n] = 1
+            stack.push(n)
+          }
+        }
       }
     }
 
-    result[i] = bestIndex
+    if (region.length >= minRegion) continue
+
+    const counts = new Map()
+    for (const idx of region) {
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const neighbourColor = grid[nr * cols + nc]
+          if (neighbourColor === color) continue
+          counts.set(neighbourColor, (counts.get(neighbourColor) || 0) + 1)
+        }
+      }
+    }
+
+    if (counts.size === 0) continue
+
+    let bestColor = color
+    let bestCount = -1
+    for (const [c, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count
+        bestColor = c
+      }
+    }
+
+    for (const idx of region) result[idx] = bestColor
   }
 
   return result
@@ -1170,9 +1312,68 @@ function nearestPaletteIndex(color, palette, paletteLabs = palette.map((entry) =
   return bestIdx
 }
 
+function meanChannel(values) {
+  if (values.length === 0) return 0
+  let sum = 0
+  for (const v of values) sum += v
+  return Math.round(sum / values.length)
+}
+
 function medianChannel(values) {
+  if (values.length === 0) return 0
   const sorted = values.slice().sort((a, b) => a - b)
   return sorted[Math.floor(sorted.length / 2)]
+}
+
+// Bilateral filter on the rendered sample-grid image. Smooths fine
+// noise while preserving edges, so the median/mean reductions later
+// see less polarized samples in transition zones.
+function bilateralFilter(imageData, sigmaSpatial, sigmaRange) {
+  const { data, width, height } = imageData
+  const out = new Uint8ClampedArray(data.length)
+  const radius = Math.max(1, Math.ceil(2 * sigmaSpatial))
+  const spatialFactor = -1 / (2 * sigmaSpatial * sigmaSpatial)
+  const rangeFactor = -1 / (2 * sigmaRange * sigmaRange)
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const cr = data[i]
+      const cg = data[i + 1]
+      const cb = data[i + 2]
+      let wsum = 0
+      let rsum = 0
+      let gsum = 0
+      let bsum = 0
+
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = y + dy
+        if (ny < 0 || ny >= height) continue
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx
+          if (nx < 0 || nx >= width) continue
+          const j = (ny * width + nx) * 4
+          const dr = data[j] - cr
+          const dg = data[j + 1] - cg
+          const db = data[j + 2] - cb
+          const colourDistSq = dr * dr + dg * dg + db * db
+          const spatialDistSq = dx * dx + dy * dy
+          const w = Math.exp(spatialDistSq * spatialFactor + colourDistSq * rangeFactor)
+          wsum += w
+          rsum += data[j] * w
+          gsum += data[j + 1] * w
+          bsum += data[j + 2] * w
+        }
+      }
+
+      out[i] = Math.round(rsum / wsum)
+      out[i + 1] = Math.round(gsum / wsum)
+      out[i + 2] = Math.round(bsum / wsum)
+      out[i + 3] = data[i + 3]
+    }
+  }
+
+  return new ImageData(out, width, height)
 }
 
 function rgbToOklab(rgb) {

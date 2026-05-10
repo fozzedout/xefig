@@ -4,6 +4,7 @@ import {
   createDistinctPalette,
   sortPaletteDarkToLight,
   assignCellColors,
+  cleanupTinyRegions,
 } from './diamond-painting-puzzle.js'
 
 const TARGET_CELLS = 10000
@@ -68,7 +69,8 @@ async function quantizeFromImage(imageUrl) {
     const pixels = cellSamples.map((cell) => cell.representative)
     const palette = createDistinctPalette(pixels, NUM_COLORS)
     sortPaletteDarkToLight(palette)
-    const grid = assignCellColors(cellSamples, palette)
+    let grid = assignCellColors(cellSamples, palette, cols)
+    grid = cleanupTinyRegions(grid, cols, rows)
 
     return { cols, rows, palette, grid: Array.from(grid) }
   } finally {
@@ -76,7 +78,7 @@ async function quantizeFromImage(imageUrl) {
   }
 }
 
-function drawGrid(canvas, cols, rows, palette, grid, fills) {
+export function drawGrid(canvas, cols, rows, palette, grid, fills) {
   // One pixel per cell — CSS object-fit:cover + image-rendering:pixelated
   // scales this up to the container size with crisp edges.
   canvas.width = cols

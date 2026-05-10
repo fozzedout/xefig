@@ -2274,6 +2274,27 @@ details.trigger-card[open] > summary.trigger-card-header::after {
 
 .complexity-row .btn-micro:disabled { opacity: 0.55; cursor: progress; }
 
+.complexity-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.complexity-toggle input[type="number"] {
+  width: 3.2em;
+  padding: 0.1rem 0.25rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface, transparent);
+  color: var(--text);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.2));
+  border-radius: 3px;
+}
+
 .complexity-result {
   display: inline-flex;
   align-items: center;

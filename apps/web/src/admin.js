@@ -1,7 +1,7 @@
 import './admin.css'
-import { sampleCellRegions, createDistinctPalette, sortPaletteDarkToLight, assignCellColors } from './components/diamond-painting-puzzle.js'
+import { sampleCellRegions, createDistinctPalette, sortPaletteDarkToLight, assignCellColors, cleanupTinyRegions } from './components/diamond-painting-puzzle.js'
 import { loadImage, releaseLoadedImage } from './components/image-loader.js'
-import { renderDiamondSliceThumbnail } from './components/diamond-grid-thumbnail.js'
+import { renderDiamondSliceThumbnail, drawGrid as drawDiamondGrid } from './components/diamond-grid-thumbnail.js'
 
 const API_BASE = ''
 const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
@@ -895,15 +895,30 @@ async function checkDiamondComplexity() {
     const cols = Math.max(DIAMOND_MIN_DIM, Math.round(Math.sqrt(DIAMOND_TARGET_CELLS * aspect)))
     const rows = Math.max(DIAMOND_MIN_DIM, Math.round(DIAMOND_TARGET_CELLS / cols))
 
-    const cellSamples = sampleCellRegions(image, cols, rows, DIAMOND_SAMPLE_GRID)
+    const useMedian = !!document.getElementById('diamond-median-toggle')?.checked
+    const bilateralStrength = Math.max(0, parseInt(document.getElementById('diamond-bilateral-strength')?.value, 10) || 0)
+    const cellSamples = sampleCellRegions(image, cols, rows, DIAMOND_SAMPLE_GRID, useMedian, bilateralStrength)
     const pixels = cellSamples.map((cell) => cell.representative)
-    const palette = createDistinctPalette(pixels, DIAMOND_NUM_COLORS)
+    const chromaWeight = Math.max(0, parseInt(document.getElementById('diamond-chroma')?.value, 10) || 0)
+    const palette = createDistinctPalette(pixels, DIAMOND_NUM_COLORS, chromaWeight)
     sortPaletteDarkToLight(palette)
-    const grid = assignCellColors(cellSamples, palette)
+    const dither = !!document.getElementById('diamond-dither-toggle')?.checked
+    const cleanupMax = Math.max(0, parseInt(document.getElementById('diamond-cleanup-max')?.value, 10) || 0)
+    let grid = assignCellColors(cellSamples, palette, cols, dither)
+    if (cleanupMax > 0) grid = cleanupTinyRegions(grid, cols, rows, cleanupMax + 1)
 
     const adjDiff = computeAdjacencyDiffRate(grid, cols, rows)
     const { regionCount, largestRegionFraction } = computeRegionStats(grid, cols, rows)
+    const isolatedCount = computeIsolatedCellCount(grid, cols, rows)
     const verdict = classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction)
+
+    // Re-paint the on-page preview using the (possibly dithered) grid we
+    // just computed so the visual matches the metrics the admin is reading.
+    const previewCanvas = document.getElementById('diamond-quantized-canvas')
+    if (previewCanvas) {
+      const completedFills = Array.from(grid)
+      drawDiamondGrid(previewCanvas, cols, rows, palette, grid, completedFills)
+    }
 
     result.dataset.state = verdict.state
     result.innerHTML = ''
@@ -925,6 +940,12 @@ async function checkDiamondComplexity() {
     largestEl.title = 'Fraction of cells in the largest single contiguous region'
     largestEl.innerHTML = `largest <strong>${(largestRegionFraction * 100).toFixed(0)}%</strong>`
     result.appendChild(largestEl)
+
+    const isolatedEl = document.createElement('span')
+    isolatedEl.className = 'complexity-metric'
+    isolatedEl.title = 'Cells with no same-colour neighbour in any of the 8 surrounding cells (hide-and-seek for the flood-fill)'
+    isolatedEl.innerHTML = `isolated <strong>${isolatedCount}</strong>`
+    result.appendChild(isolatedEl)
 
     const verdictEl = document.createElement('span')
     verdictEl.className = 'complexity-verdict'
@@ -951,6 +972,8 @@ function getDiamondImageSource() {
   return null
 }
 
+// 8-direction adjacency to match flood-fill. Each unique pair counted
+// once via the 4 forward directions (right, down, down-right, down-left).
 function computeAdjacencyDiffRate(grid, cols, rows) {
   let diffs = 0
   let pairs = 0
@@ -965,11 +988,23 @@ function computeAdjacencyDiffRate(grid, cols, rows) {
         pairs++
         if (grid[i] !== grid[i + cols]) diffs++
       }
+      if (r + 1 < rows && c + 1 < cols) {
+        pairs++
+        if (grid[i] !== grid[i + cols + 1]) diffs++
+      }
+      if (r + 1 < rows && c > 0) {
+        pairs++
+        if (grid[i] !== grid[i + cols - 1]) diffs++
+      }
     }
   }
   return pairs === 0 ? 0 : diffs / pairs
 }
 
+// 8-direction connectivity to match diamond-painting-puzzle.js flood-fill
+// (collectFloodIndices / collectFloodWaves use all 4 orthogonal + 4
+// diagonal neighbours). Region count and largest-fraction therefore
+// reflect what the player's tap actually fills as a single blob.
 function computeRegionStats(grid, cols, rows) {
   const total = grid.length
   const visited = new Uint8Array(total)
@@ -990,21 +1025,18 @@ function computeRegionStats(grid, cols, rows) {
       size++
       const r = (idx / cols) | 0
       const c = idx - r * cols
-      if (c > 0) {
-        const n = idx - 1
-        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
-      }
-      if (c + 1 < cols) {
-        const n = idx + 1
-        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
-      }
-      if (r > 0) {
-        const n = idx - cols
-        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
-      }
-      if (r + 1 < rows) {
-        const n = idx + cols
-        if (!visited[n] && grid[n] === color) { visited[n] = 1; stack.push(n) }
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === color) {
+            visited[n] = 1
+            stack.push(n)
+          }
+        }
       }
     }
 
@@ -1015,12 +1047,47 @@ function computeRegionStats(grid, cols, rows) {
   return { regionCount, largestRegionFraction: largestSize / total }
 }
 
+// 8-direction adjacency to match diamond-painting-puzzle.js flood-fill —
+// cells with no same-colour neighbour in any of the 8 surrounding cells
+// can never be merged into a larger fill, so the player taps them one
+// at a time after hunting visually.
+function computeIsolatedCellCount(grid, cols, rows) {
+  let count = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c
+      const color = grid[idx]
+      let hasMatch = false
+      for (let dr = -1; dr <= 1 && !hasMatch; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          if (grid[nr * cols + nc] === color) { hasMatch = true; break }
+        }
+      }
+      if (!hasMatch) count++
+    }
+  }
+  return count
+}
+
 // Calibrated 2026-05-04 against 10 completed puzzles. Two clean
 // clusters in the data, separated by a ~15-minute completion-time gap:
 //   simple cluster (14-27 min): edges < 28% AND (regions < 900 OR largest > 25%)
 //   good cluster   (42-56 min): edges >= 35% AND regions >= 1100 AND largest <= 15%
 // Strongest single predictor of completion time was edges (r ≈ 0.95);
 // regions r ≈ 0.91; largest r ≈ -0.57.
+//
+// STALE 2026-05-09/10: all three metrics switched from 4-dir to 8-dir
+// to match flood-fill. Regions read lower, largest reads higher, edges
+// shift (denominator ~2× since diagonals are added). Old thresholds
+// will tend to over-classify "simple" and under-classify "good."
+// Re-run Check Complexity on the original 10 puzzles to recalibrate,
+// and consider folding `isolated` in — early evidence (21:41 puzzle on
+// 2026-05-10 with isolated=36) suggests it's the missing predictor and
+// `regions` could probably be dropped.
 function classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction) {
   if (adjDiff < 0.28 && (regionCount < 900 || largestRegionFraction > 0.25)) {
     return { state: 'simple', label: 'likely too simple (~15-25 min)' }

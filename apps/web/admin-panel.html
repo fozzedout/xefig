@@ -356,6 +356,11 @@
               <button type="button" class="gen-thumb-btn btn-micro" data-mode="diamond" hidden>Generate Thumbnail</button>
               <div class="complexity-row" id="diamond-complexity-row">
                 <button type="button" id="diamond-complexity-btn" class="btn-micro">Check complexity</button>
+                <label class="complexity-toggle"><input type="checkbox" id="diamond-median-toggle" /> median</label>
+                <label class="complexity-toggle"><input type="checkbox" id="diamond-dither-toggle" checked /> dither</label>
+                <label class="complexity-toggle">smooth <input type="number" id="diamond-bilateral-strength" value="0" min="0" max="8" /></label>
+                <label class="complexity-toggle">chroma <input type="number" id="diamond-chroma" value="0" min="0" max="20" /></label>
+                <label class="complexity-toggle">cleanup ≤ <input type="number" id="diamond-cleanup-max" value="2" min="0" max="50" /></label>
                 <div id="diamond-complexity-result" class="complexity-result" hidden></div>
               </div>
               <label class="drop-zone" id="drop-diamond">
