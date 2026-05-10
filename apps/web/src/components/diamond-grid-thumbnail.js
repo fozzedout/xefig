@@ -1,14 +1,15 @@
 import { loadImage, releaseLoadedImage } from './image-loader.js'
 import {
   sampleCellRegions,
+  samplePixelsForPalette,
   createDistinctPalette,
   sortPaletteDarkToLight,
   assignCellColors,
   cleanupTinyRegions,
 } from './diamond-painting-puzzle.js'
 
-const TARGET_CELLS = 10000
-const NUM_COLORS = 16
+const TARGET_CELLS = 15000
+const NUM_COLORS = 24
 const MIN_COLS = 20
 const MIN_ROWS = 20
 const CELL_SAMPLE_GRID = 3
@@ -66,8 +67,8 @@ async function quantizeFromImage(imageUrl) {
     const rows = Math.max(MIN_ROWS, Math.round(TARGET_CELLS / cols))
 
     const cellSamples = sampleCellRegions(image, cols, rows, CELL_SAMPLE_GRID)
-    const pixels = cellSamples.map((cell) => cell.representative)
-    const palette = createDistinctPalette(pixels, NUM_COLORS)
+    const palettePixels = samplePixelsForPalette(image, 20000)
+    const palette = createDistinctPalette(palettePixels, NUM_COLORS)
     sortPaletteDarkToLight(palette)
     let grid = assignCellColors(cellSamples, palette, cols)
     grid = cleanupTinyRegions(grid, cols, rows)

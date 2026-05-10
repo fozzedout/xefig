@@ -1,5 +1,5 @@
 import './admin.css'
-import { sampleCellRegions, createDistinctPalette, sortPaletteDarkToLight, assignCellColors, cleanupTinyRegions } from './components/diamond-painting-puzzle.js'
+import { sampleCellRegions, samplePixelsForPalette, createDistinctPalette, sortPaletteDarkToLight, assignCellColors, cleanupTinyRegions, splitLargeRegions } from './components/diamond-painting-puzzle.js'
 import { loadImage, releaseLoadedImage } from './components/image-loader.js'
 import { renderDiamondSliceThumbnail, drawGrid as drawDiamondGrid } from './components/diamond-grid-thumbnail.js'
 
@@ -7,10 +7,10 @@ const API_BASE = ''
 const CATEGORIES = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
 
 // Diamond complexity check — mirrors DiamondPaintingPuzzle's quantization
-// (TARGET_CELLS=10000, NUM_COLORS=16, CELL_SAMPLE_GRID=3) so the score
+// (TARGET_CELLS=15000, NUM_COLORS=24, CELL_SAMPLE_GRID=3) so the score
 // reflects exactly what the user paints, not the raw image.
-const DIAMOND_TARGET_CELLS = 10000
-const DIAMOND_NUM_COLORS = 16
+const DIAMOND_TARGET_CELLS = 15000
+const DIAMOND_NUM_COLORS = 24
 const DIAMOND_MIN_DIM = 20
 const DIAMOND_SAMPLE_GRID = 3
 
@@ -898,13 +898,20 @@ async function checkDiamondComplexity() {
     const useMedian = !!document.getElementById('diamond-median-toggle')?.checked
     const bilateralStrength = Math.max(0, parseInt(document.getElementById('diamond-bilateral-strength')?.value, 10) || 0)
     const cellSamples = sampleCellRegions(image, cols, rows, DIAMOND_SAMPLE_GRID, useMedian, bilateralStrength)
-    const pixels = cellSamples.map((cell) => cell.representative)
+    const widePalette = !!document.getElementById('diamond-wide-palette-toggle')?.checked
+    const chromaBias = Math.max(0, parseInt(document.getElementById('diamond-chroma-bias')?.value, 10) || 0)
+    const palettePixels = widePalette
+      ? samplePixelsForPalette(image, 20000, 1024, chromaBias)
+      : cellSamples.map((cell) => cell.representative)
     const chromaWeight = Math.max(0, parseInt(document.getElementById('diamond-chroma')?.value, 10) || 0)
-    const palette = createDistinctPalette(pixels, DIAMOND_NUM_COLORS, chromaWeight)
+    const chromaReserve = Math.max(0, parseInt(document.getElementById('diamond-chroma-reserve')?.value, 10) || 0)
+    const palette = createDistinctPalette(palettePixels, DIAMOND_NUM_COLORS, chromaWeight, chromaReserve)
     sortPaletteDarkToLight(palette)
     const dither = !!document.getElementById('diamond-dither-toggle')?.checked
     const cleanupMax = Math.max(0, parseInt(document.getElementById('diamond-cleanup-max')?.value, 10) || 0)
+    const splitPercent = Math.max(0, parseInt(document.getElementById('diamond-split-max')?.value, 10) || 0)
     let grid = assignCellColors(cellSamples, palette, cols, dither)
+    if (splitPercent > 0) grid = splitLargeRegions(grid, cellSamples, palette, cols, rows, splitPercent / 100)
     if (cleanupMax > 0) grid = cleanupTinyRegions(grid, cols, rows, cleanupMax + 1)
 
     const adjDiff = computeAdjacencyDiffRate(grid, cols, rows)

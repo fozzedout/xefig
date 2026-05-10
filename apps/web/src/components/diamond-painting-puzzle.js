@@ -1,14 +1,14 @@
 import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
-const TARGET_CELLS = 10000
-const NUM_COLORS = 16
+const TARGET_CELLS = 15000
+const NUM_COLORS = 24
 const MIN_COLS = 20
 const MIN_ROWS = 20
 const CELL_PX = 24
 const CELL_SAMPLE_GRID = 3
-const DITHER_ENABLED = true
+const DITHER_ENABLED = false
 const CLEANUP_ENABLED = true
-const CLEANUP_MIN_REGION = 3
+const CLEANUP_MIN_REGION = 2
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const MAX_CANVAS_DIMENSION = 4096
@@ -84,8 +84,8 @@ export class DiamondPaintingPuzzle {
     this.totalCells = this.cols * this.rows
 
     const cellSamples = sampleCellRegions(this.image, this.cols, this.rows, CELL_SAMPLE_GRID)
-    const pixels = cellSamples.map((cell) => cell.representative)
-    this.palette = createDistinctPalette(pixels, NUM_COLORS)
+    const palettePixels = samplePixelsForPalette(this.image, 20000)
+    this.palette = createDistinctPalette(palettePixels, NUM_COLORS)
     sortPaletteDarkToLight(this.palette)
     this.grid = assignCellColors(cellSamples, this.palette, this.cols)
     if (CLEANUP_ENABLED) {
@@ -903,6 +903,50 @@ function getCanvasRenderScale(width, height) {
 
 // ─── Color Quantization (Median Cut) ────────────────────────
 
+// Fine-grained pixel sample for palette construction. Independent of
+// the cell grid so palette selection can see chromatic pockets that
+// would be averaged away by per-cell reduction. chromaBias > 0
+// rejection-samples to over-represent saturated pixels — useful when
+// the image is dark/desaturated-dominant and median cut would otherwise
+// drown the chromatic pockets.
+export function samplePixelsForPalette(image, sampleCount = 20000, maxDim = 1024, chromaBias = 0) {
+  const srcW = image.naturalWidth || image.width
+  const srcH = image.naturalHeight || image.height
+  const scale = Math.min(1, maxDim / Math.max(srcW, srcH))
+  const w = Math.max(1, Math.round(srcW * scale))
+  const h = Math.max(1, Math.round(srcH * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(image, 0, 0, w, h)
+  const data = ctx.getImageData(0, 0, w, h).data
+  const total = w * h
+  // Oversample 4× when biasing so rejection has headroom to reach the
+  // target count even if most candidates are grey.
+  const stride = chromaBias > 0
+    ? Math.max(1, Math.floor(total / (sampleCount * 4)))
+    : Math.max(1, Math.floor(total / sampleCount))
+  const pixels = []
+  for (let i = 0; i < total && pixels.length < sampleCount; i += stride) {
+    const off = i * 4
+    const r = data[off]
+    const g = data[off + 1]
+    const b = data[off + 2]
+    if (chromaBias > 0) {
+      const lab = rgbToOklab([r, g, b])
+      const chroma = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2])
+      // chroma >= 0.05 → keep (counts as "saturated enough");
+      // grey pixel drop probability scales with chromaBias.
+      const dropProb = Math.max(0, 1 - chroma / 0.05) * chromaBias * 0.1
+      if (Math.random() < dropProb) continue
+    }
+    pixels.push([r, g, b])
+  }
+  return pixels
+}
+
 export function sampleCellRegions(image, cols, rows, sampleGrid, useMedian = false, bilateralStrength = 0) {
   const canvas = document.createElement('canvas')
   canvas.width = cols * sampleGrid
@@ -958,7 +1002,7 @@ export function sampleCellRegions(image, cols, rows, sampleGrid, useMedian = fal
   return regions
 }
 
-export function createDistinctPalette(pixels, targetColors, chromaWeight = 0) {
+export function createDistinctPalette(pixels, targetColors, chromaWeight = 0, chromaReserve = 0) {
   const boxes = medianCutBoxes(pixels, targetColors * 4)
   const candidates = boxes.map((box) => {
     const color = boxAvg(box)
@@ -969,8 +1013,11 @@ export function createDistinctPalette(pixels, targetColors, chromaWeight = 0) {
     }
   })
 
-  const merged = mergeNearbyCandidates(candidates, 0.05)
-  const selected = selectDistinctCandidates(merged, targetColors, chromaWeight)
+  // Keep ~2× targetColors in the pool so chromatic candidates have
+  // somewhere to live after the highest-weight greys are picked.
+  const minKeep = Math.min(candidates.length, targetColors * 2)
+  const merged = mergeNearbyCandidates(candidates, 0.05, minKeep)
+  const selected = selectDistinctCandidates(merged, targetColors, chromaWeight, chromaReserve)
   return selected.map((candidate) => candidate.color)
 }
 
@@ -1026,62 +1073,91 @@ function medianCutBoxes(pixels, targetColors) {
   return boxes
 }
 
-function mergeNearbyCandidates(candidates, minDistance) {
-  const remaining = candidates
-    .slice()
-    .sort((a, b) => b.weight - a.weight)
-  const merged = []
+// Greedy pairwise merge: repeatedly fuse the two perceptually closest
+// candidates within `minDistance`, stopping when either no pair is
+// closer than `minDistance` or pruning further would drop us below
+// `minKeep`. Result preserves at least `minKeep` distinct candidates
+// when the input has that many.
+function mergeNearbyCandidates(candidates, minDistance, minKeep = 0) {
+  const items = candidates.slice()
   const minDistanceSq = minDistance ** 2
 
-  while (remaining.length > 0) {
-    const seed = remaining.shift()
-    const cluster = [seed]
+  while (items.length > minKeep) {
+    let bestI = -1
+    let bestJ = -1
+    let bestDist = minDistanceSq
 
-    for (let i = remaining.length - 1; i >= 0; i--) {
-      if (oklabDistSq(seed.lab, remaining[i].lab) < minDistanceSq) {
-        cluster.push(remaining[i])
-        remaining.splice(i, 1)
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const d = oklabDistSq(items[i].lab, items[j].lab)
+        if (d < bestDist) {
+          bestDist = d
+          bestI = i
+          bestJ = j
+        }
       }
     }
 
-    let totalWeight = 0
-    let r = 0
-    let g = 0
-    let b = 0
-    for (const candidate of cluster) {
-      totalWeight += candidate.weight
-      r += candidate.color[0] * candidate.weight
-      g += candidate.color[1] * candidate.weight
-      b += candidate.color[2] * candidate.weight
-    }
+    if (bestI === -1) break
 
+    const a = items[bestI]
+    const b = items[bestJ]
+    const totalWeight = a.weight + b.weight
     const color = [
-      Math.round(r / totalWeight),
-      Math.round(g / totalWeight),
-      Math.round(b / totalWeight),
+      Math.round((a.color[0] * a.weight + b.color[0] * b.weight) / totalWeight),
+      Math.round((a.color[1] * a.weight + b.color[1] * b.weight) / totalWeight),
+      Math.round((a.color[2] * a.weight + b.color[2] * b.weight) / totalWeight),
     ]
-    merged.push({
+    items.splice(bestJ, 1)
+    items.splice(bestI, 1)
+    items.push({
       color,
       lab: rgbToOklab(color),
       weight: totalWeight,
     })
   }
 
-  return merged.sort((a, b) => b.weight - a.weight)
+  return items.sort((a, b) => b.weight - a.weight)
 }
 
-function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0) {
+function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, chromaReserve = 0) {
   if (candidates.length <= targetColors) {
     return candidates
   }
 
   const selected = []
   const remaining = candidates.slice()
-  const maxWeight = remaining[0]?.weight || 1
+  const maxWeight = remaining.reduce((max, c) => Math.max(max, c.weight), 1)
 
-  selected.push(remaining.shift())
+  // Hard-reserve the top-N most chromatic candidates so saturation is
+  // guaranteed to appear even when grey candidates dominate by weight.
+  if (chromaReserve > 0) {
+    const reserveCount = Math.min(chromaReserve, targetColors, remaining.length)
+    const ranked = remaining
+      .map((cand, idx) => ({
+        idx,
+        chroma: Math.sqrt(cand.lab[1] * cand.lab[1] + cand.lab[2] * cand.lab[2]),
+      }))
+      .sort((a, b) => b.chroma - a.chroma)
+      .slice(0, reserveCount)
+    const indicesToRemove = ranked.map((r) => r.idx).sort((a, b) => b - a)
+    for (const idx of indicesToRemove) {
+      selected.push(remaining.splice(idx, 1)[0])
+    }
+  }
 
-  if (remaining.length > 0 && selected.length < targetColors) {
+  // Anchor: highest-weight remaining candidate
+  if (selected.length < targetColors && remaining.length > 0) {
+    let maxIdx = 0
+    for (let i = 1; i < remaining.length; i++) {
+      if (remaining[i].weight > remaining[maxIdx].weight) maxIdx = i
+    }
+    selected.push(remaining.splice(maxIdx, 1)[0])
+  }
+
+  // Second anchor (preserves original behaviour when nothing is reserved):
+  // pick the candidate furthest from the first anchor.
+  if (chromaReserve === 0 && selected.length === 1 && selected.length < targetColors && remaining.length > 0) {
     let bestIndex = 0
     let bestDistance = -1
     for (let i = 0; i < remaining.length; i++) {
@@ -1121,13 +1197,23 @@ function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0) {
   return selected
 }
 
+// Chroma-weighted centroid: saturated pixels in the box pull the
+// representative toward themselves instead of being averaged out by the
+// grey majority. Grey pixels still contribute (weight = 1), so boxes
+// with no chromatic members fall back to the arithmetic mean.
 function boxAvg(box) {
-  let r = 0, g = 0, b = 0
+  if (box.pixels.length === 0) return [128, 128, 128]
+  let r = 0, g = 0, b = 0, w = 0
   for (const px of box.pixels) {
-    r += px[0]; g += px[1]; b += px[2]
+    const lab = rgbToOklab(px)
+    const chroma = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2])
+    const weight = 1 + chroma * 30
+    r += px[0] * weight
+    g += px[1] * weight
+    b += px[2] * weight
+    w += weight
   }
-  const n = box.pixels.length || 1
-  return [Math.round(r / n), Math.round(g / n), Math.round(b / n)]
+  return [Math.round(r / w), Math.round(g / w), Math.round(b / w)]
 }
 
 export function assignCellColors(cellSamples, palette, cols, dither = DITHER_ENABLED) {
@@ -1222,6 +1308,80 @@ export function assignCellColors(cellSamples, palette, cols, dither = DITHER_ENA
 
 function clamp255(v) {
   return v < 0 ? 0 : v > 255 ? 255 : v
+}
+
+// Break up any 8-connected region larger than `maxFraction` of the
+// grid by reassigning the most-ambiguous cells (those whose
+// representative is closest in ratio to the second-nearest palette
+// colour) to that next-nearest colour, until the region is at or below
+// the target size. Cells that are firmly the dominant colour stay
+// put — only the fence-sitters move, preserving overall fidelity.
+export function splitLargeRegions(grid, cellSamples, palette, cols, rows, maxFraction = 0.05) {
+  const total = grid.length
+  const maxSize = Math.max(1, Math.floor(total * maxFraction))
+  const result = new Uint8Array(grid)
+  const paletteLabs = palette.map((c) => rgbToOklab(c))
+  const visited = new Uint8Array(total)
+
+  const oversized = []
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const color = grid[start]
+    const cells = []
+    const stack = [start]
+    visited[start] = 1
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      cells.push(idx)
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === color) {
+            visited[n] = 1
+            stack.push(n)
+          }
+        }
+      }
+    }
+    if (cells.length > maxSize) oversized.push({ color, cells })
+  }
+
+  for (const region of oversized) {
+    const scored = region.cells.map((idx) => {
+      const sample = cellSamples[idx].representative
+      const sampleLab = rgbToOklab(sample)
+      const dominantDist = oklabDistSq(sampleLab, paletteLabs[region.color])
+      let nearestOther = -1
+      let nearestOtherDist = Infinity
+      for (let p = 0; p < palette.length; p++) {
+        if (p === region.color) continue
+        const d = oklabDistSq(sampleLab, paletteLabs[p])
+        if (d < nearestOtherDist) {
+          nearestOtherDist = d
+          nearestOther = p
+        }
+      }
+      const ratio = nearestOtherDist > 0 ? dominantDist / nearestOtherDist : 0
+      return { idx, ratio, nearestOther }
+    })
+
+    scored.sort((a, b) => b.ratio - a.ratio)
+
+    const switchCount = Math.max(0, scored.length - maxSize)
+    for (let i = 0; i < switchCount; i++) {
+      if (scored[i].nearestOther >= 0) {
+        result[scored[i].idx] = scored[i].nearestOther
+      }
+    }
+  }
+
+  return result
 }
 
 // Absorb connected regions smaller than `minRegion` (8-direction) into
