@@ -633,6 +633,13 @@ async function prefetchPlayableImages(puzzlePayload) {
   const queue = []
 
   for (const run of listAllActiveRuns()) {
+    // Only prefetch when the payload covers the run's date, so the URL
+    // is the freshly-resolved one. The saved imageUrl on older runs is a
+    // snapshot that can rot (jpg→webp re-renders, ?v=… cache busts);
+    // those will be re-resolved against a fresh payload when the user
+    // opens the archive day, so prefetching the stale URL only spams
+    // 404s into the console.
+    if (run.puzzleDate !== puzzlePayload?.date) continue
     const url = resolveResumeImageUrl(run, puzzlePayload)
     if (url && url !== sampleImage && !seen.has(url)) {
       seen.add(url)
