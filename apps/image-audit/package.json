@@ -1,0 +1,13 @@
+{
+  "name": "image-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audit": "node src/audit.js",
+    "status": "node src/status.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1"
+  }
+}

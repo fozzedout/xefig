@@ -1,0 +1,4 @@
+audit.db
+audit.db-journal
+audit.db-wal
+audit.db-shm
