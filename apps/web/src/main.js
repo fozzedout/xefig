@@ -45,6 +45,11 @@ const puzzleLoaders = {
   diamond: () => import('./components/diamond-painting-puzzle.js').then((m) => m.DiamondPaintingPuzzle),
 }
 
+// In-game helper. Loaded on demand alongside the puzzle engine so the
+// homepage bundle stays small. The same module powers every mode's
+// tutorial / hint flow.
+const loadAssistant = () => import('./components/assistant.js')
+
 const app = document.querySelector('#app')
 // Beta build flag — Vite statically replaces import.meta.env.MODE at
 // build time, so anything gated on BETA is tree-shaken from production
@@ -109,7 +114,7 @@ function getThemePref() {
 
 function setThemePref(pref) {
   if (!VALID_THEME_PREFS.has(pref)) return
-  try { localStorage.setItem(THEME_PREF_KEY, pref) } catch {}
+  try { localStorage.setItem(THEME_PREF_KEY, pref) } catch { }
 }
 
 function resolveTheme(pref = getThemePref()) {
@@ -180,7 +185,7 @@ function getDiamondSfxMuted() {
 }
 
 function setDiamondSfxMuted(muted) {
-  try { localStorage.setItem(DIAMOND_SFX_MUTED_KEY, muted ? '1' : '0') } catch {}
+  try { localStorage.setItem(DIAMOND_SFX_MUTED_KEY, muted ? '1' : '0') } catch { }
 }
 
 function applyLandscapeLayout() {
@@ -245,6 +250,7 @@ const state = {
 }
 
 let puzzle = null
+let activeAssistant = null
 let currentRun = null
 let activeElapsedBaseMs = 0
 let activeStartedAtMs = null
@@ -424,7 +430,7 @@ function pickRandomTrackIndex(excluding) {
 }
 
 function prefetchTrack(idx) {
-  fetch(MUSIC_TRACKS[idx]).then((r) => r.arrayBuffer()).catch(() => {})
+  fetch(MUSIC_TRACKS[idx]).then((r) => r.arrayBuffer()).catch(() => { })
 }
 
 function ensureMusicAudio() {
@@ -876,8 +882,8 @@ function recordCompletedRun(run) {
   const mode = normalizeGameMode(run.gameMode)
   const dateRuns =
     completedRunsByDate[puzzleDate] &&
-    typeof completedRunsByDate[puzzleDate] === 'object' &&
-    !Array.isArray(completedRunsByDate[puzzleDate])
+      typeof completedRunsByDate[puzzleDate] === 'object' &&
+      !Array.isArray(completedRunsByDate[puzzleDate])
       ? completedRunsByDate[puzzleDate]
       : {}
   const previousEntry =
@@ -992,7 +998,7 @@ function getRunForMode(puzzleDate, gameMode) {
   // as authoritative, clean up the stale active, and return null. Keeps
   // the launcher from showing "Resume" over "Done".
   if (getCompletionEntry(puzzleDate, gameMode)) {
-    try { localStorage.removeItem(key) } catch {}
+    try { localStorage.removeItem(key) } catch { }
     return null
   }
   return { ...run, gameMode: normalizeGameMode(run.gameMode), _storageKey: key }
@@ -1460,9 +1466,9 @@ function bindMoreSheetSyncIndicator(sheetEl) {
   // inside the More sheet; this wires the dot + status update + onStatusChange
   // subscription, and returns a teardown to call when the sheet closes.
   const card = sheetEl.querySelector('#more-devices-card')
-  if (!card) return () => {}
+  if (!card) return () => { }
   const cloud = card.querySelector('.more-card-sync-cloud')
-  if (!cloud) return () => {}
+  if (!cloud) return () => { }
   const apply = (status) => {
     const hasChanges = hasPendingChanges()
     let cloudState = 'saved'
@@ -1488,7 +1494,7 @@ function bindMoreSheetSyncIndicator(sheetEl) {
   }
   apply(getSyncStatus())
   const off = onStatusChange(apply)
-  return typeof off === 'function' ? off : () => {}
+  return typeof off === 'function' ? off : () => { }
 }
 
 // ─── PWA install detection ──────────────────────────────────────────────────
@@ -1501,10 +1507,10 @@ function readInstalledFlag() {
   try { return localStorage.getItem(INSTALLED_FLAG_KEY) === '1' } catch { return false }
 }
 function writeInstalledFlag() {
-  try { localStorage.setItem(INSTALLED_FLAG_KEY, '1') } catch {}
+  try { localStorage.setItem(INSTALLED_FLAG_KEY, '1') } catch { }
 }
 function clearInstalledFlag() {
-  try { localStorage.removeItem(INSTALLED_FLAG_KEY) } catch {}
+  try { localStorage.removeItem(INSTALLED_FLAG_KEY) } catch { }
 }
 function rerenderMoreSheet() {
   const open = document.querySelector('.more-sheet-overlay')
@@ -1539,12 +1545,12 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   try {
     if (window.matchMedia('(display-mode: standalone)').matches) writeInstalledFlag()
     else if (typeof navigator !== 'undefined' && navigator.standalone === true) writeInstalledFlag()
-  } catch {}
+  } catch { }
 }
 // Chromium also exposes getInstalledRelatedApps (mostly Android). The manifest
 // declares related_applications: [{ platform: "webapp", url: ... }] pointing
 // at our own manifest so this returns truthy when installed.
-;(async () => {
+; (async () => {
   try {
     if (typeof navigator.getInstalledRelatedApps !== 'function') return
     const apps = await navigator.getInstalledRelatedApps()
@@ -1553,7 +1559,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
       writeInstalledFlag()
       rerenderMoreSheet()
     }
-  } catch {}
+  } catch { }
 })()
 function bindInstallPromptListeners() { /* listeners are bound at module load */ }
 
@@ -1561,7 +1567,7 @@ function isStandaloneDisplay() {
   try {
     if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true
     if (typeof navigator !== 'undefined' && navigator.standalone === true) return true
-  } catch {}
+  } catch { }
   return false
 }
 
@@ -1842,7 +1848,7 @@ function renderLauncher() {
     removeStorage(ACTIVE_RUN_KEY)
   }
 
-  ;(async () => {
+  ; (async () => {
     try {
       const payload = await fetchPuzzlePayload()
       state.puzzle = payload
@@ -1875,7 +1881,7 @@ function renderLauncher() {
       // evictCompletedImageFromCache) and we don't want to re-pull
       // them just to evict again.
       const triggerPrefetch = () => {
-        prefetchPlayableImages(payload).catch(() => {})
+        prefetchPlayableImages(payload).catch(() => { })
       }
       if (typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(triggerPrefetch, { timeout: 4000 })
@@ -1908,20 +1914,20 @@ const ARCHIVE_ACCENT_MAP = {
   [GAME_MODE_POLYGRAM]: '#a060f0',
   [GAME_MODE_DIAMOND]: '#e070a0',
 }
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
-const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // Petal positions match brand favicon: diamond at 0° after the -20° root
 // rotation, then sliding/polygram/jigsaw/swap clockwise. baseRot is applied
 // to both the petal and its matching star arm so a completed mode lights
 // up its colour wedge AND fills in that arm of the central gold star.
 const ARCHIVE_GLYPH_MODES = [
-  { key: GAME_MODE_DIAMOND,  color: '#e070a0', baseRot: 0 },
-  { key: GAME_MODE_SLIDING,  color: '#40d0f0', baseRot: 72 },
+  { key: GAME_MODE_DIAMOND, color: '#e070a0', baseRot: 0 },
+  { key: GAME_MODE_SLIDING, color: '#40d0f0', baseRot: 72 },
   { key: GAME_MODE_POLYGRAM, color: '#a060f0', baseRot: 144 },
-  { key: GAME_MODE_JIGSAW,   color: '#f0c040', baseRot: 216 },
-  { key: GAME_MODE_SWAP,     color: '#50d070', baseRot: 288 },
+  { key: GAME_MODE_JIGSAW, color: '#f0c040', baseRot: 216 },
+  { key: GAME_MODE_SWAP, color: '#50d070', baseRot: 288 },
 ]
 const ARCHIVE_MODES = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
 
@@ -1978,9 +1984,9 @@ const MEDAL_PETAL_OFF_OPACITY = '0.28'
 const MEDAL_HIGHLIGHT = 'rgba(255, 255, 255, 0.22)'
 
 const MEDAL_GEOM = {
-  day:   { bodyR: 78, goldR: 72, goldWidth: 5.5, glyphScale: 0.62, highlightPath: 'M -56 -36 A 68 68 0 0 1 56 -36', highlightWidth: 1.1 },
-  week:  { bodyR: 82, goldR: 76, goldWidth: 3,   pipR: 64, pipSize: 5.5, bezelR: 52, glyphScale: 0.4, highlightPath: 'M -60 -38 A 72 72 0 0 1 60 -38', highlightWidth: 1.3 },
-  month: { bodyR: 92, goldR: 85, goldWidth: 4,   tickInner: 70, tickOuter: 80, tickWidthFilled: 4, tickWidthEmpty: 3, bezelR: 60, glyphScale: 0.46, highlightPath: 'M -68 -45 A 82 82 0 0 1 68 -45', highlightWidth: 1.5 },
+  day: { bodyR: 78, goldR: 72, goldWidth: 5.5, glyphScale: 0.62, highlightPath: 'M -56 -36 A 68 68 0 0 1 56 -36', highlightWidth: 1.1 },
+  week: { bodyR: 82, goldR: 76, goldWidth: 3, pipR: 64, pipSize: 5.5, bezelR: 52, glyphScale: 0.4, highlightPath: 'M -60 -38 A 72 72 0 0 1 60 -38', highlightWidth: 1.3 },
+  month: { bodyR: 92, goldR: 85, goldWidth: 4, tickInner: 70, tickOuter: 80, tickWidthFilled: 4, tickWidthEmpty: 3, bezelR: 60, glyphScale: 0.46, highlightPath: 'M -68 -45 A 82 82 0 0 1 68 -45', highlightWidth: 1.5 },
 }
 
 function medalBodyDisc(geom, isComplete) {
@@ -2607,7 +2613,20 @@ function renderArchivePage() {
 
   if (window.matchMedia) {
     window.matchMedia('(orientation: landscape)')
-      .addEventListener('change', () => placeArchiveResumeBtn())
+      .addEventListener('change', () => {
+        // Rotation changes card content widths while deck.scrollLeft is
+        // preserved, so the saved offset now points between months. Capture
+        // activeMonthIndex up front and silence the pending scroll-snap
+        // timer — without this, reflow-triggered scroll events update
+        // activeMonthIndex to an adjacent month before we re-center, and
+        // we'd then jump to the wrong target.
+        const target = activeMonthIndex
+        clearTimeout(scrollTimer)
+        placeArchiveResumeBtn()
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          jumpToMonth(target)
+        }))
+      })
   }
 
   function stepMonth(delta) {
@@ -2667,7 +2686,7 @@ function renderArchivePage() {
     if (isLockedDate(dateKey)) return
     openDetailDate = dateKey
     const d = new Date(Date.parse(`${dateKey}T00:00:00Z`))
-    const weekday = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()]
+    const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getUTCDay()]
     detailTitleEl.textContent = `${weekday}, ${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}`
 
     const completed = getCompletedModesForDate(dateKey).size
@@ -2823,7 +2842,7 @@ function renderArchivePage() {
     if (openDetailDate === date) {
       fetchPuzzlePayload({ date }).then((payload) => {
         if (openDetailDate === date) renderDetailThumbs(payload, date)
-      }).catch(() => {})
+      }).catch(() => { })
     }
   }
 
@@ -2991,11 +3010,11 @@ function showCompletionOverlay({
       ${rankStampHtml}
       <div class="completion-actions">
         ${typeof onShowSource === 'function'
-          ? `<button type="button" class="completion-show-source">
+      ? `<button type="button" class="completion-show-source">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
               Show source image
             </button>`
-          : ''}
+      : ''}
         <button type="button" class="completion-dismiss">Continue</button>
       </div>
     </div>
@@ -3268,7 +3287,7 @@ function showNameDialog({ defaultName = '', onDone }) {
   requestAnimationFrame(() => overlay.classList.add('is-visible'))
 
   const input = overlay.querySelector('.name-input')
-  setTimeout(() => { try { input.focus(); input.select() } catch {} }, 50)
+  setTimeout(() => { try { input.focus(); input.select() } catch { } }, 50)
 
   let done = false
   const close = (saved, name) => {
@@ -3313,9 +3332,9 @@ function makeSyncShareUrl(code) {
 function requestPersistentStorage() {
   try {
     if (navigator.storage && typeof navigator.storage.persist === 'function') {
-      navigator.storage.persist().catch(() => {})
+      navigator.storage.persist().catch(() => { })
     }
-  } catch {}
+  } catch { }
 }
 
 function escapeHtml(str) {
@@ -3399,7 +3418,7 @@ function showSyncCodeCelebration({ name, code, onDone }) {
       await navigator.clipboard.writeText(code)
       copyBtn.textContent = 'Copied!'
       setTimeout(() => { copyBtn.textContent = 'Copy code' }, 2000)
-    } catch {}
+    } catch { }
   })
 
   const syncNowBtn = overlay.querySelector('.sync-celebrate-syncnow')
@@ -3455,7 +3474,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
   overlay.setAttribute('aria-modal', 'true')
   overlay.setAttribute('aria-label', 'More options')
 
-  let detachSync = () => {}
+  let detachSync = () => { }
   const renderCards = () => {
     const cards = []
 
@@ -3585,7 +3604,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
         <div class="more-sheet-cards">${renderCards()}</div>
       </div>
     `
-    detachSync = bindMoreSheetSyncIndicator(overlay) || (() => {})
+    detachSync = bindMoreSheetSyncIndicator(overlay) || (() => { })
 
     overlay.querySelector('.more-sheet-close').addEventListener('click', closeMoreSheet)
 
@@ -3609,7 +3628,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
             try {
               deferredInstallPrompt.prompt()
               await deferredInstallPrompt.userChoice
-            } catch {}
+            } catch { }
             deferredInstallPrompt = null
             closeMoreSheet()
             return
@@ -3644,7 +3663,7 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
             try {
               const payload = await fetchPuzzlePayload({ date: resumeDate })
               state.puzzle = payload
-            } catch {}
+            } catch { }
             handleSliceClick(resumeMode, resumeDate)
           }
           return
@@ -3847,10 +3866,10 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
   const imageUrl = resolvePuzzleImageUrl(state.puzzle, gameMode)
   const loaderKey = gameMode === GAME_MODE_JIGSAW ? 'jigsaw'
     : gameMode === GAME_MODE_SLIDING ? 'sliding'
-    : gameMode === GAME_MODE_SWAP ? 'swap'
-    : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
-    : gameMode === GAME_MODE_DIAMOND ? 'diamond'
-    : null
+      : gameMode === GAME_MODE_SWAP ? 'swap'
+        : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
+          : gameMode === GAME_MODE_DIAMOND ? 'diamond'
+            : null
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
@@ -3891,11 +3910,11 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
       </aside>
       <div class="completed-screen-actions">
         ${gameMode === GAME_MODE_DIAMOND
-          ? `<button id="completed-show-source-btn" class="completed-screen-show-source" type="button" aria-pressed="false" aria-label="Show source image">
+      ? `<button id="completed-show-source-btn" class="completed-screen-show-source" type="button" aria-pressed="false" aria-label="Show source image">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>
               <span>Show source</span>
             </button>`
-          : ''}
+      : ''}
         <button id="replay-btn" class="completed-screen-replay" type="button">Play Again</button>
       </div>
     </main>
@@ -3960,8 +3979,8 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
         imageUrl,
         difficulty: state.difficulty,
         boardColorIndex: getGlobalBoardColorIndex(),
-        onProgress: () => {},
-        onComplete: () => {},
+        onProgress: () => { },
+        onComplete: () => { },
       })
       previewPuzzle = preview
       preview.init().then(() => {
@@ -3982,7 +4001,7 @@ function showCompletedPuzzleScreen({ gameMode, puzzleDate, entry, onReplay, onBa
       }).catch(() => {
         // Non-fatal — preview just won't render; topbar/pill/sheet still work.
       })
-    }).catch(() => {})
+    }).catch(() => { })
   }
 
   const renderBoard = (lb) => {
@@ -4161,9 +4180,9 @@ function renderGame({ resumeRun = null } = {}) {
   const gameEl = document.querySelector('#page-game')
   const accentColor = gameMode === GAME_MODE_JIGSAW ? '#f0c040'
     : gameMode === GAME_MODE_SLIDING ? '#40d0f0'
-    : gameMode === GAME_MODE_SWAP ? '#50d070'
-    : gameMode === GAME_MODE_DIAMOND ? '#e070a0'
-    : '#a060f0'
+      : gameMode === GAME_MODE_SWAP ? '#50d070'
+        : gameMode === GAME_MODE_DIAMOND ? '#e070a0'
+          : '#a060f0'
   const dateLabel = state.puzzle?.date
     ? new Date(Date.parse(`${state.puzzle.date}T00:00:00Z`)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
     : ''
@@ -4180,7 +4199,7 @@ function renderGame({ resumeRun = null } = {}) {
   // Diamond hides the view button until completion: the puzzle's intent
   // is to discover what the painting becomes, so peeking mid-paint would
   // spoil it. After completion, the painted output can be ambiguous
-  // (small subjects collapse to a few pixels at 16 colours), so the
+  // (small subjects collapse to a few pixels at 24 colours), so the
   // toggle becomes useful for verifying the source.
   const viewButtonHiddenAttr = gameMode === GAME_MODE_DIAMOND ? ' hidden' : ''
   const viewButtonMarkup = `<button id="view-btn" class="gt-menu-item" type="button" aria-pressed="false"${viewButtonHiddenAttr}>
@@ -4282,11 +4301,30 @@ function renderGame({ resumeRun = null } = {}) {
           </button>
           <div class="floating-game-controls">
             <div class="gt-menu-wrap gt-menu-wrap--floating">
-              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating" type="button" aria-label="Puzzle menu" aria-expanded="false" title="Puzzle menu">
-                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome ? 'Helper menu' : 'Puzzle menu'}">
+                ${useImmersiveJigsawChrome ? `
+                <svg class="assistant-logo" viewBox="0 0 200 200" aria-hidden="true">
+                  <g transform="translate(100 100) rotate(-20)">
+                    <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#e070a0"/>
+                    <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#40d0f0" transform="rotate(72)"/>
+                    <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#a060f0" transform="rotate(144)"/>
+                    <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#f0c040" transform="rotate(216)"/>
+                    <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#50d070" transform="rotate(288)"/>
+                  </g>
+                </svg>
+                ` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`}
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
                 ${useImmersiveJigsawChrome ? `
+                <button id="how-to-play-btn" class="gt-menu-item" type="button">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.6 15h-1.3v-1.3h1.3Zm1.7-5.4-.6.6c-.5.5-.7.9-.7 1.8h-1.3v-.3c0-.7.3-1.3.8-1.8l.8-.8a1.5 1.5 0 1 0-2.6-1H8.7a3 3 0 1 1 5.6 1.5Z"/></svg>
+                  How to play
+                </button>
+                <button id="hint-btn" class="gt-menu-item" type="button">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21h6v-1H9Zm3-19a7 7 0 0 0-4 12.7c.6.4.9 1 .9 1.7v1.1c0 .3.2.5.5.5h5.2c.3 0 .5-.2.5-.5v-1.1c0-.7.3-1.3.9-1.7A7 7 0 0 0 12 2Z"/></svg>
+                  I need a hint!
+                </button>
+                <div class="gt-menu-divider" aria-hidden="true"></div>
                 <button id="highlight-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
                   Highlight loose
@@ -4387,7 +4425,7 @@ function renderGame({ resumeRun = null } = {}) {
     document.removeEventListener('gestureend', preventBrowserZoom)
     document.removeEventListener('click', closeMenu)
     persistActiveRun()
-    if (isSyncEnabled()) forcePush().catch(() => {})
+    if (isSyncEnabled()) forcePush().catch(() => { })
     returnFromGame()
   })
 
@@ -4399,6 +4437,9 @@ function renderGame({ resumeRun = null } = {}) {
     const pressed = active ? 'true' : 'false'
     if (viewBtn) viewBtn.setAttribute('aria-pressed', pressed)
     if (showSourceFloatingBtn) showSourceFloatingBtn.setAttribute('aria-pressed', pressed)
+    // Jigsaw also exposes the reveal as a tray-side eye button; mirror it.
+    const revealTrayBtn = gameEl.querySelector('#jigsaw-reveal-btn')
+    if (revealTrayBtn) revealTrayBtn.setAttribute('aria-pressed', pressed)
   }
 
   if (viewBtn) {
@@ -4408,6 +4449,13 @@ function renderGame({ resumeRun = null } = {}) {
       syncSourceButtons(active)
     })
   }
+
+  // Jigsaw dispatches this when the in-tray eye button toggles the reference.
+  // Mirror the state across all reference-control surfaces (menu view-btn,
+  // diamond floating button) so any one of them reflects the live truth.
+  gameEl.addEventListener('jigsaw:reference-toggled', (event) => {
+    syncSourceButtons(Boolean(event.detail?.active))
+  })
 
   if (showSourceFloatingBtn) {
     showSourceFloatingBtn.addEventListener('click', () => {
@@ -4429,10 +4477,219 @@ function renderGame({ resumeRun = null } = {}) {
       setImmersiveControlsVisible(true, { persist: show })
     }
   }
-  if (menuBtn) menuBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu() })
+  if (menuBtn) menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    // Tapping the assistant button settles its bouncing/nudge bubble so the
+    // menu doesn't open with the bubble still floating over the workspace.
+    if (activeAssistant) activeAssistant.dismissNudge()
+    toggleMenu()
+  })
   const closeMenu = () => toggleMenu(false)
   document.addEventListener('click', closeMenu)
   if (menuPanel) menuPanel.addEventListener('click', closeMenu)
+
+  // ─── In-game helper (jigsaw v1; will expand to every mode) ───
+  // Loaded lazily so the homepage bundle isn't dragged into the puzzle path.
+  const howToPlayBtn = gameEl.querySelector('#how-to-play-btn')
+  const hintBtn = gameEl.querySelector('#hint-btn')
+  const useAssistant = useImmersiveJigsawChrome && menuBtn && menuPanel && workspaceEl
+  let assistantPuzzleReady = false
+  let assistantNudgeFn = null
+  const tryAssistantNudge = () => {
+    if (assistantPuzzleReady && assistantNudgeFn) assistantNudgeFn()
+  }
+  if (useAssistant) {
+    loadAssistant().then(({ GameAssistant, shouldNudge, recordPlayed }) => {
+      // renderGame may have torn down by the time the dynamic import resolves;
+      // bail if our DOM no longer represents the current view.
+      if (!menuBtn.isConnected) return
+      activeAssistant = new GameAssistant({
+        button: menuBtn,
+        menu: menuPanel,
+        workspace: workspaceEl,
+        mode: gameMode,
+      })
+
+      // Find a piece currently visible in the tray viewport and compute
+      // where it goes on the board. Shared by both flows so the tutorial's
+      // drag demo and the hint pick the same kind of target.
+      const pickDemoPieceAndTarget = () => {
+        if (!puzzle || !puzzle.pieces) return { carouselItem: null, targetRect: null }
+        const carouselEl = puzzle.carousel || document.querySelector('.jigsaw-carousel')
+        const carouselRect = carouselEl?.getBoundingClientRect?.() || null
+        const isVisibleInTray = (piece) => {
+          if (!piece.inCarousel || piece.locked) return false
+          if (!piece.carouselItem || !carouselRect) return false
+          const r = piece.carouselItem.getBoundingClientRect()
+          const cx = r.left + r.width / 2
+          return cx >= carouselRect.left + 8 && cx <= carouselRect.right - 8
+        }
+        const candidate = puzzle.pieces.find(isVisibleInTray)
+          || puzzle.pieces.find((p) => p.inCarousel && !p.locked)
+          || null
+        if (!candidate) return { carouselItem: null, targetRect: null }
+        const carouselItem = candidate.carouselItem || null
+        // stageContent's bounding rect already accounts for the puzzle's
+        // live transform (translate(panX, panY) scale(zoom)) — using it
+        // dodges the old bug where we computed scale ourselves and ended
+        // up off the right edge, where the clamp parked the bouncer.
+        const stageContent = puzzle.stageContent || document.querySelector('.jigsaw-stage-content')
+        const targetRect = stageContent && puzzle.boardWidth && puzzle.boardHeight ? (() => {
+          const scRect = stageContent.getBoundingClientRect()
+          const piecePx = puzzle.pieceWidth || 0
+          const piecePxY = puzzle.pieceHeight || piecePx
+          const localX = candidate.targetX + (puzzle.bleed || 0) + piecePx / 2
+          const localY = candidate.targetY + (puzzle.bleed || 0) + piecePxY / 2
+          const cx = scRect.left + (localX / puzzle.boardWidth) * scRect.width
+          const cy = scRect.top + (localY / puzzle.boardHeight) * scRect.height
+          return { left: cx - 12, top: cy - 12, width: 24, height: 24 }
+        })() : null
+        return { carouselItem, targetRect }
+      }
+
+      // Animate the carousel's scroll back-and-forth so the player sees
+      // that swiping/scrolling the tray is a thing — the gesture isn't
+      // obvious from a static row of pieces. Returns a cleanup that aborts
+      // mid-animation if the tutorial step ends early.
+      const demoTrayScroll = () => {
+        const carousel = puzzle?.carousel || document.querySelector('.jigsaw-carousel')
+        if (!carousel) return undefined
+        const horizontalRange = carousel.scrollWidth - carousel.clientWidth
+        const verticalRange = carousel.scrollHeight - carousel.clientHeight
+        const horizontal = horizontalRange > 4
+        const vertical = !horizontal && verticalRange > 4
+        if (!horizontal && !vertical) return undefined
+        const prop = horizontal ? 'scrollLeft' : 'scrollTop'
+        const range = horizontal ? horizontalRange : verticalRange
+        const origin = carousel[prop]
+        // Visible swing without dumping every piece off-screen.
+        const amplitude = Math.min(range * 0.55, 220)
+        // If we're already at one edge, only swing toward the room we have.
+        const forward = Math.min(origin + amplitude, range)
+        const backward = Math.max(origin - amplitude, 0)
+        let aborted = false
+        let rafId = 0
+        const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((1 - t) * (1 - t) * 2))
+        const tween = (from, to, ms) => new Promise((resolve) => {
+          const start = performance.now()
+          const tick = (now) => {
+            if (aborted) return resolve()
+            const k = Math.min(1, (now - start) / ms)
+            carousel[prop] = from + (to - from) * ease(k)
+            if (k < 1) rafId = requestAnimationFrame(tick)
+            else resolve()
+          }
+          rafId = requestAnimationFrame(tick)
+        })
+        ;(async () => {
+          // Small delay so the bubble appears first, then the demo plays.
+          await new Promise((r) => { rafId = requestAnimationFrame(() => setTimeout(r, 250)) })
+          if (aborted) return
+          await tween(origin, forward, 700)
+          if (aborted) return
+          await tween(carousel[prop], backward, 900)
+          if (aborted) return
+          await tween(carousel[prop], origin, 600)
+        })()
+        return () => {
+          aborted = true
+          cancelAnimationFrame(rafId)
+        }
+      }
+
+      const buildJigsawTutorialSteps = () => {
+        // Targets resolved at run-time because they're inside the puzzle's
+        // root (which init() rebuilds). Anchoring to selectors keeps the
+        // tutorial robust to puzzle re-init mid-session. The trailing drag
+        // demo uses a live piece + computed slot so the player sees the
+        // verb, not just the controls.
+        const { carouselItem, targetRect } = pickDemoPieceAndTarget()
+        const steps = [
+          { target: null, message: "Welcome! Let's run through how Jigsaw works." },
+          {
+            target: '.jigsaw-carousel',
+            message: 'These are your pieces. Scroll the tray to see more, then drag one onto the board.',
+            onShow: demoTrayScroll,
+          },
+          { target: '#jigsaw-reveal-btn', message: 'Tap the eye anytime to peek at the finished picture.' },
+          { target: '.jigsaw-tray-tools .jigsaw-tray-tool:nth-child(2)', message: 'Filter the tray to just the edge pieces — most people start with the frame.' },
+          { target: '.jigsaw-tray-tools .jigsaw-tray-tool:nth-child(1)', message: 'Lost a piece on the board? Tap the sparkle to flash all loose pieces.' },
+        ]
+        if (carouselItem && targetRect) {
+          // Auto-advance when the player presses on the carousel piece —
+          // the natural next gesture after the helper highlights it.
+          steps.push({
+            target: carouselItem,
+            message: 'Press and hold this piece to pick it up.',
+            advanceOn: [{ element: carouselItem, event: 'pointerdown' }],
+          })
+          // Then auto-advance again when they release (drop) the piece —
+          // wherever it lands. Document-level pointerup catches the
+          // gesture even if the piece itself has been re-parented onto
+          // the board by the time release fires.
+          steps.push({
+            target: targetRect,
+            message: 'Drag it to about here on the board — pieces snap when they get close.',
+            advanceOn: [{ element: document, event: 'pointerup' }],
+          })
+        }
+        steps.push({ target: null, message: "That's it. Have fun!" })
+        return steps
+      }
+
+      const buildJigsawHintSteps = () => {
+        const { carouselItem, targetRect } = pickDemoPieceAndTarget()
+        if (!carouselItem) {
+          return [{ target: null, message: 'All pieces are out of the tray — keep nudging them into place!' }]
+        }
+        const steps = [{
+          target: carouselItem,
+          message: 'Press and hold this piece to pick it up.',
+          advanceOn: [{ element: carouselItem, event: 'pointerdown' }],
+        }]
+        if (targetRect) {
+          steps.push({
+            target: targetRect,
+            message: 'It goes about here on the board.',
+            advanceOn: [{ element: document, event: 'pointerup' }],
+          })
+        }
+        return steps
+      }
+
+      if (howToPlayBtn) {
+        howToPlayBtn.addEventListener('click', () => {
+          if (!activeAssistant) return
+          activeAssistant.runSequence(buildJigsawTutorialSteps())
+        })
+      }
+
+      if (hintBtn) {
+        hintBtn.addEventListener('click', () => {
+          if (!activeAssistant) return
+          const steps = buildJigsawHintSteps()
+          if (!steps.length) return
+          // Silent +30s clock penalty. We bump the base directly so the
+          // timer keeps running normally afterwards — the user only ever
+          // sees the new total.
+          activeElapsedBaseMs += 30000
+          if (timerEl) timerEl.textContent = formatDuration(getActiveElapsedMs())
+          activeAssistant.runSequence(steps)
+        })
+      }
+
+      assistantNudgeFn = () => {
+        if (!activeAssistant) return
+        if (shouldNudge(gameMode)) {
+          activeAssistant.showNudge('Need some help?')
+        }
+        recordPlayed(gameMode)
+      }
+      tryAssistantNudge()
+    }).catch((error) => {
+      console.error('Failed to load in-game assistant', error)
+    })
+  }
 
   let immersiveControlsHideTimer = null
   const clearImmersiveControlsTimer = () => {
@@ -4448,6 +4705,10 @@ function renderGame({ resumeRun = null } = {}) {
     if (visible && !persist) {
       immersiveControlsHideTimer = window.setTimeout(() => {
         if (menuPanel && !menuPanel.hidden) return
+        // Helper-active is sticky-visibility too: the tutorial bouncer is
+        // pointing at chrome the player needs to see, so the timer must not
+        // dim them out from under it.
+        if (workspaceEl.classList.contains('workspace--helper-active')) return
         workspaceEl.classList.add('workspace--controls-hidden')
       }, 2600)
     }
@@ -4625,387 +4886,393 @@ function renderGame({ resumeRun = null } = {}) {
   const loadingOverlay = createPuzzleLoadingOverlay({ thumbnailUrl })
   if (workspaceEl) workspaceEl.append(loadingOverlay)
 
-  ;(async () => {
-    try {
-      destroyPuzzle()
+    ; (async () => {
+      try {
+        destroyPuzzle()
 
-      if (resumeRun) {
-        state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)
-        state.difficulty = resumeRun.difficulty || state.difficulty
-        // Prefer the puzzle payload's current image URL when it's for the
-        // same date as the saved run — handles legacy runs whose stored
-        // imageUrl uses an obsolete extension (jpg → webp) or is missing
-        // a current ?v= cache-bust.
-        state.imageUrl = resolveResumeImageUrl({
-          imageUrl: resumeRun.imageUrl || state.imageUrl,
-          puzzleDate: resumeRun.puzzleDate,
-          gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
-        }, state.puzzle)
-        // Keep the full puzzle payload (categories etc.) that the caller set
-        // so Restart can re-resolve the current image URL from it. Only
-        // replace it when it's missing or for a different date.
-        if (!state.puzzle?.categories || state.puzzle.date !== resumeRun.puzzleDate) {
-          state.puzzle = { date: resumeRun.puzzleDate }
+        if (resumeRun) {
+          state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)
+          state.difficulty = resumeRun.difficulty || state.difficulty
+          // Prefer the puzzle payload's current image URL when it's for the
+          // same date as the saved run — handles legacy runs whose stored
+          // imageUrl uses an obsolete extension (jpg → webp) or is missing
+          // a current ?v= cache-bust.
+          state.imageUrl = resolveResumeImageUrl({
+            imageUrl: resumeRun.imageUrl || state.imageUrl,
+            puzzleDate: resumeRun.puzzleDate,
+            gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
+          }, state.puzzle)
+          // Keep the full puzzle payload (categories etc.) that the caller set
+          // so Restart can re-resolve the current image URL from it. Only
+          // replace it when it's missing or for a different date.
+          if (!state.puzzle?.categories || state.puzzle.date !== resumeRun.puzzleDate) {
+            state.puzzle = { date: resumeRun.puzzleDate }
+          }
+          currentRun = {
+            ...resumeRun,
+            gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
+          }
+        } else {
+          currentRun = {
+            version: 1,
+            runId: createGuid(),
+            playerGuid,
+            gameMode,
+            puzzleDate: state.puzzle?.date || getIsoDate(new Date()),
+            difficulty: state.difficulty,
+            imageUrl: state.imageUrl,
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            elapsedActiveMs: 0,
+            completed: false,
+            puzzleState: null,
+          }
         }
-        currentRun = {
-          ...resumeRun,
-          gameMode: normalizeGameMode(resumeRun.gameMode || state.gameMode),
+
+        // For resumed games, start timer immediately. For new games, defer until first interaction.
+        const isResume = Boolean(resumeRun)
+        timerState.started = isResume
+        let initDone = false
+        if (isResume) {
+          startActiveTimer(currentRun.elapsedActiveMs)
         }
-      } else {
-        currentRun = {
-          version: 1,
-          runId: createGuid(),
-          playerGuid,
-          gameMode,
-          puzzleDate: state.puzzle?.date || getIsoDate(new Date()),
-          difficulty: state.difficulty,
+        bindGameActivity(() => persistActiveRun())
+
+        const loaderKey = gameMode === GAME_MODE_SLIDING ? 'sliding'
+          : gameMode === GAME_MODE_SWAP ? 'swap'
+            : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
+              : gameMode === GAME_MODE_DIAMOND ? 'diamond'
+                : 'jigsaw'
+        const PuzzleClass = await puzzleLoaders[loaderKey]()
+        const puzzleConfig = {
+          container: mount,
           imageUrl: state.imageUrl,
-          startedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          elapsedActiveMs: 0,
-          completed: false,
-          puzzleState: null,
-        }
-      }
+          thumbnailUrl,
+          difficulty: state.difficulty,
+          boardColorIndex: getGlobalBoardColorIndex(),
+          muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
+          onLoadProgress: (progress) => updatePuzzleLoadingOverlay(loadingOverlay, progress),
+          onProgress: ({ completed, state: progressState }) => {
+            if (currentRun) {
+              currentRun.completed = Boolean(completed)
+            }
+            // Start timer on first piece interaction (not on puzzle load / init)
+            if (!timerState.started && initDone) {
+              timerState.started = true
+              startActiveTimer(0)
+              startTimerDisplay()
+            }
+            // Skip init-time emit: a fresh updatedAt here would beat an in-flight sync pull.
+            if (timerState.started) {
+              persistActiveRun(progressState)
+            }
+            updatePieceCount()
+            // Sync view button if puzzle auto-hid the reference
+            if (viewBtn && puzzle && !puzzle.referenceVisible) {
+              viewBtn.setAttribute('aria-pressed', 'false')
+            }
+          },
+          onComplete: async () => {
+            if (!currentRun || leaderboardDone) {
+              return
+            }
+            leaderboardDone = true
 
-      // For resumed games, start timer immediately. For new games, defer until first interaction.
-      const isResume = Boolean(resumeRun)
-      timerState.started = isResume
-      let initDone = false
-      if (isResume) {
-        startActiveTimer(currentRun.elapsedActiveMs)
-      }
-      bindGameActivity(() => persistActiveRun())
+            // Diamond's source-image controls are hidden during play;
+            // reveal them once the painting is finished so the user can
+            // compare against the source (small subjects collapse to a
+            // few pixels under 16-colour quantization and aren't always
+            // self-evident from the painted output alone). Both the
+            // menu entry and the persistent floating button reveal
+            // together.
+            if (gameMode === GAME_MODE_DIAMOND) {
+              if (viewBtn) viewBtn.hidden = false
+              if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
+            }
 
-      const loaderKey = gameMode === GAME_MODE_SLIDING ? 'sliding'
-        : gameMode === GAME_MODE_SWAP ? 'swap'
-        : gameMode === GAME_MODE_POLYGRAM ? 'polygram'
-        : gameMode === GAME_MODE_DIAMOND ? 'diamond'
-        : 'jigsaw'
-      const PuzzleClass = await puzzleLoaders[loaderKey]()
-      const puzzleConfig = {
-        container: mount,
-        imageUrl: state.imageUrl,
-        thumbnailUrl,
-        difficulty: state.difficulty,
-        boardColorIndex: getGlobalBoardColorIndex(),
-        muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
-        onLoadProgress: (progress) => updatePuzzleLoadingOverlay(loadingOverlay, progress),
-        onProgress: ({ completed, state: progressState }) => {
-          if (currentRun) {
-            currentRun.completed = Boolean(completed)
-          }
-          // Start timer on first piece interaction (not on puzzle load / init)
-          if (!timerState.started && initDone) {
-            timerState.started = true
-            startActiveTimer(0)
-            startTimerDisplay()
-          }
-          // Skip init-time emit: a fresh updatedAt here would beat an in-flight sync pull.
-          if (timerState.started) {
-            persistActiveRun(progressState)
-          }
-          updatePieceCount()
-          // Sync view button if puzzle auto-hid the reference
-          if (viewBtn && puzzle && !puzzle.referenceVisible) {
-            viewBtn.setAttribute('aria-pressed', 'false')
-          }
-        },
-        onComplete: async () => {
-          if (!currentRun || leaderboardDone) {
-            return
-          }
-          leaderboardDone = true
+            stopTimerDisplay()
+            pauseActiveTimer()
+            currentRun.elapsedActiveMs = getActiveElapsedMs()
+            currentRun.completed = true
+            currentRun.updatedAt = new Date().toISOString()
+            recordCompletedRun(currentRun)
+            const completedRun = currentRun
 
-          // Diamond's source-image controls are hidden during play;
-          // reveal them once the painting is finished so the user can
-          // compare against the source (small subjects collapse to a
-          // few pixels under 16-colour quantization and aren't always
-          // self-evident from the painted output alone). Both the
-          // menu entry and the persistent floating button reveal
-          // together.
-          if (gameMode === GAME_MODE_DIAMOND) {
-            if (viewBtn) viewBtn.hidden = false
-            if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
-          }
+            // Celebration confetti
+            const workspace = document.querySelector('.workspace')
+            if (workspace) createConfettiOverlay(workspace)
 
-          stopTimerDisplay()
-          pauseActiveTimer()
-          currentRun.elapsedActiveMs = getActiveElapsedMs()
-          currentRun.completed = true
-          currentRun.updatedAt = new Date().toISOString()
-          recordCompletedRun(currentRun)
-          const completedRun = currentRun
+            const durationLabel = formatDuration(currentRun.elapsedActiveMs)
 
-          // Celebration confetti
-          const workspace = document.querySelector('.workspace')
-          if (workspace) createConfettiOverlay(workspace)
+            setStatus(
+              `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Submitting...`,
+              'ok',
+            )
 
-          const durationLabel = formatDuration(currentRun.elapsedActiveMs)
-
-          setStatus(
-            `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Submitting...`,
-            'ok',
-          )
-
-          // Show the modal immediately with just the local time — waiting
-          // on the leaderboard round-trip used to block it for 10-15s on
-          // slow connections (and sometimes never appeared until the user
-          // tapped elsewhere). Fill in the rank + leaderboard section as
-          // soon as the network resolves.
-          const presentOverlay = () => {
-            const syncActive = isSyncEnabled() && navigator.onLine
-            // Diamond gets a "Show source image" action on the overlay
-            // so first-time finishers discover the toggle without
-            // hunting for it in the menu. Clicking reveals the source
-            // overlay on the canvas behind, dismisses the celebration,
-            // and leaves the persistent floating button (already
-            // revealed above) for ongoing access.
-            const onShowSource = gameMode === GAME_MODE_DIAMOND
-              ? () => {
+            // Show the modal immediately with just the local time — waiting
+            // on the leaderboard round-trip used to block it for 10-15s on
+            // slow connections (and sometimes never appeared until the user
+            // tapped elsewhere). Fill in the rank + leaderboard section as
+            // soon as the network resolves.
+            const presentOverlay = () => {
+              const syncActive = isSyncEnabled() && navigator.onLine
+              // Diamond gets a "Show source image" action on the overlay
+              // so first-time finishers discover the toggle without
+              // hunting for it in the menu. Clicking reveals the source
+              // overlay on the canvas behind, dismisses the celebration,
+              // and leaves the persistent floating button (already
+              // revealed above) for ongoing access.
+              const onShowSource = gameMode === GAME_MODE_DIAMOND
+                ? () => {
                   if (!puzzle) return
                   const active = puzzle.toggleReferenceVisible()
                   syncSourceButtons(active)
                 }
-              : undefined
-            const overlay = showCompletionOverlay({
-              gameMode,
-              duration: durationLabel,
-              elapsedMs: currentRun.elapsedActiveMs,
-              submissionElapsedMs: currentRun.elapsedActiveMs,
-              playerGuid,
-              completedRun,
-              showRankPill: syncActive,
-              onShowSource,
-            })
+                : undefined
+              const overlay = showCompletionOverlay({
+                gameMode,
+                duration: durationLabel,
+                elapsedMs: currentRun.elapsedActiveMs,
+                submissionElapsedMs: currentRun.elapsedActiveMs,
+                playerGuid,
+                completedRun,
+                showRankPill: syncActive,
+                onShowSource,
+              })
 
-            if (!syncActive) return
+              if (!syncActive) return
 
-            const stamp = overlay.querySelector('.completion-rank-stamp')
-            if (!stamp) return
+              const stamp = overlay.querySelector('.completion-rank-stamp')
+              if (!stamp) return
 
-            const stampShownAt = performance.now()
-            let pulseTimer
-            let dimmed = false
-            let period = 900
-            const tick = () => {
-              dimmed = !dimmed
-              stamp.classList.toggle('is-dim', dimmed)
-              period = Math.max(100, period * 0.78)
+              const stampShownAt = performance.now()
+              let pulseTimer
+              let dimmed = false
+              let period = 900
+              const tick = () => {
+                dimmed = !dimmed
+                stamp.classList.toggle('is-dim', dimmed)
+                period = Math.max(100, period * 0.78)
+                pulseTimer = setTimeout(tick, period)
+              }
               pulseTimer = setTimeout(tick, period)
-            }
-            pulseTimer = setTimeout(tick, period)
 
-            ;(async () => {
-              let rank = null
-              let bestMs = null
-              let previousBestMs = null
-              let submissionRank = null
-              let submissionElapsedMs = currentRun.elapsedActiveMs
-              let leaderboardEntries = null
-              let totalEntries = 0
+                ; (async () => {
+                  let rank = null
+                  let bestMs = null
+                  let previousBestMs = null
+                  let submissionRank = null
+                  let submissionElapsedMs = currentRun.elapsedActiveMs
+                  let leaderboardEntries = null
+                  let totalEntries = 0
 
-              try {
-                const result = await submitLeaderboard(currentRun)
-                rank = result.rank
-                bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
-                previousBestMs = Number.isFinite(result.previousBestMs) ? result.previousBestMs : null
-                submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
-                if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
-                if (Number.isFinite(result.totalEntries)) totalEntries = result.totalEntries
+                  try {
+                    const result = await submitLeaderboard(currentRun)
+                    rank = result.rank
+                    bestMs = Number.isFinite(result.bestMs) ? result.bestMs : null
+                    previousBestMs = Number.isFinite(result.previousBestMs) ? result.previousBestMs : null
+                    submissionRank = Number.isFinite(result.submissionRank) ? result.submissionRank : null
+                    if (Number.isFinite(result.submissionElapsedMs)) submissionElapsedMs = result.submissionElapsedMs
+                    if (Number.isFinite(result.totalEntries)) totalEntries = result.totalEntries
 
-                const lb = await fetchLeaderboard(
-                  currentRun.puzzleDate,
-                  currentRun.gameMode,
-                  100,
-                )
-                leaderboardEntries = lb.entries || []
-                if (Number.isFinite(lb.totalEntries)) totalEntries = lb.totalEntries
-              } catch {
-                // Non-fatal
-              }
-
-              const elapsed = performance.now() - stampShownAt
-              if (elapsed < 2000) {
-                await new Promise(r => setTimeout(r, 2000 - elapsed))
-              }
-
-              clearTimeout(pulseTimer)
-              stamp.classList.remove('is-dim')
-
-              if (overlay.dataset.dismissed === '1') return
-
-              const headerRank = submissionRank ?? rank
-
-              // Update PB stat now that we have server data
-              if (Number.isFinite(previousBestMs)) {
-                const pbStat = overlay.querySelectorAll('.completion-stat')[1]
-                if (pbStat) {
-                  const delta = submissionElapsedMs - previousBestMs
-                  if (delta < 0) {
-                    pbStat.className = 'completion-stat completion-stat-pb-better'
-                    pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
-                    pbStat.querySelector('.stat-label').textContent = 'New PB!'
-                  } else if (delta === 0) {
-                    pbStat.className = 'completion-stat completion-stat-pb-neutral'
-                    pbStat.querySelector('.stat-value').textContent = '00:00'
-                    pbStat.querySelector('.stat-label').textContent = 'Tied PB'
-                  } else {
-                    pbStat.className = 'completion-stat completion-stat-pb-worse'
-                    pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
-                    pbStat.querySelector('.stat-label').textContent = 'vs PB'
+                    const lb = await fetchLeaderboard(
+                      currentRun.puzzleDate,
+                      currentRun.gameMode,
+                      100,
+                    )
+                    leaderboardEntries = lb.entries || []
+                    if (Number.isFinite(lb.totalEntries)) totalEntries = lb.totalEntries
+                  } catch {
+                    // Non-fatal
                   }
-                }
-              }
 
-              if (headerRank) {
-                const stampText = stamp.querySelector('.rank-stamp-text')
-                stampText.textContent = `Rank #${headerRank}`
-                stamp.classList.remove('is-loading')
-                stamp.classList.add('is-revealed')
+                  const elapsed = performance.now() - stampShownAt
+                  if (elapsed < 2000) {
+                    await new Promise(r => setTimeout(r, 2000 - elapsed))
+                  }
 
-                if (leaderboardEntries && leaderboardEntries.length > 0) {
-                  const lbData = { rank, bestMs, previousBestMs, submissionRank, submissionElapsedMs, leaderboardEntries, playerGuid }
-                  stamp.addEventListener('click', () => {
-                    const existing = overlay.querySelector('.completion-leaderboard')
-                    if (existing) {
-                      const willClose = existing.classList.contains('is-expanded')
-                      existing.classList.toggle('is-expanded')
-                      if (willClose) return
-                    } else {
-                      const html = buildLeaderboardHtml(lbData)
-                      stamp.insertAdjacentHTML('afterend', html)
-                      const lb = overlay.querySelector('.completion-leaderboard')
-                      requestAnimationFrame(() => lb.classList.add('is-expanded'))
-                      const pinned = lb.querySelector('#lb-pinned')
-                      const scrollEl = lb.querySelector('#lb-scroll')
-                      if (pinned && scrollEl) {
-                        pinned.addEventListener('click', () => {
-                          const target = scrollEl.querySelector('.lb-row-best') || scrollEl.querySelector('.lb-row-me')
-                          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                        })
+                  clearTimeout(pulseTimer)
+                  stamp.classList.remove('is-dim')
+
+                  if (overlay.dataset.dismissed === '1') return
+
+                  const headerRank = submissionRank ?? rank
+
+                  // Update PB stat now that we have server data
+                  if (Number.isFinite(previousBestMs)) {
+                    const pbStat = overlay.querySelectorAll('.completion-stat')[1]
+                    if (pbStat) {
+                      const delta = submissionElapsedMs - previousBestMs
+                      if (delta < 0) {
+                        pbStat.className = 'completion-stat completion-stat-pb-better'
+                        pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
+                        pbStat.querySelector('.stat-label').textContent = 'New PB!'
+                      } else if (delta === 0) {
+                        pbStat.className = 'completion-stat completion-stat-pb-neutral'
+                        pbStat.querySelector('.stat-value').textContent = '00:00'
+                        pbStat.querySelector('.stat-label').textContent = 'Tied PB'
+                      } else {
+                        pbStat.className = 'completion-stat completion-stat-pb-worse'
+                        pbStat.querySelector('.stat-value').textContent = formatDelta(delta)
+                        pbStat.querySelector('.stat-label').textContent = 'vs PB'
                       }
                     }
-                  })
-                }
-              } else {
-                const stampText = stamp.querySelector('.rank-stamp-text')
-                stampText.textContent = 'Unranked'
-                stamp.classList.remove('is-loading')
-                stamp.classList.add('is-unranked')
-              }
+                  }
 
-              setStatus(
-                headerRank
-                  ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${headerRank}.`
-                  : `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
-                'ok',
-              )
-            })()
-          }
+                  if (headerRank) {
+                    const stampText = stamp.querySelector('.rank-stamp-text')
+                    stampText.textContent = `Rank #${headerRank}`
+                    stamp.classList.remove('is-loading')
+                    stamp.classList.add('is-revealed')
 
-          // Prompt for a leaderboard name on every completion until the
-          // player actually sets one. Saving enables server sync so the
-          // name propagates, and we then surface the freshly-minted sync
-          // code so the player can back up their progress to another
-          // device — otherwise they'd never see it unless they dug into
-          // Settings. Skip just continues to the overlay.
-          const hasName = !!(getProfileName() || '').trim()
-          if (!hasName) {
-            showNameDialog({
-              onDone: async (result) => {
-                if (!result || !result.name) {
-                  presentOverlay()
-                  return
-                }
-                const wasSyncEnabled = isSyncEnabled()
-                try {
-                  setProfileName(result.name)
-                } catch (e) {
-                  console.error('Failed to save profile name', e)
-                }
-                if (wasSyncEnabled) {
-                  presentOverlay()
-                  return
-                }
-                try {
-                  const code = await enableSync(playerGuid)
-                  requestPersistentStorage()
-                  if (code) {
-                    showSyncCodeCelebration({
-                      name: result.name,
-                      code,
-                      onDone: presentOverlay,
-                    })
+                    if (leaderboardEntries && leaderboardEntries.length > 0) {
+                      const lbData = { rank, bestMs, previousBestMs, submissionRank, submissionElapsedMs, leaderboardEntries, playerGuid }
+                      stamp.addEventListener('click', () => {
+                        const existing = overlay.querySelector('.completion-leaderboard')
+                        if (existing) {
+                          const willClose = existing.classList.contains('is-expanded')
+                          existing.classList.toggle('is-expanded')
+                          if (willClose) return
+                        } else {
+                          const html = buildLeaderboardHtml(lbData)
+                          stamp.insertAdjacentHTML('afterend', html)
+                          const lb = overlay.querySelector('.completion-leaderboard')
+                          requestAnimationFrame(() => lb.classList.add('is-expanded'))
+                          const pinned = lb.querySelector('#lb-pinned')
+                          const scrollEl = lb.querySelector('#lb-scroll')
+                          if (pinned && scrollEl) {
+                            pinned.addEventListener('click', () => {
+                              const target = scrollEl.querySelector('.lb-row-best') || scrollEl.querySelector('.lb-row-me')
+                              if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            })
+                          }
+                        }
+                      })
+                    }
+                  } else {
+                    const stampText = stamp.querySelector('.rank-stamp-text')
+                    stampText.textContent = 'Unranked'
+                    stamp.classList.remove('is-loading')
+                    stamp.classList.add('is-unranked')
+                  }
+
+                  setStatus(
+                    headerRank
+                      ? `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}. Rank #${headerRank}.`
+                      : `Completed ${MODE_LABELS[gameMode]} in ${durationLabel}.`,
+                    'ok',
+                  )
+                })()
+            }
+
+            // Prompt for a leaderboard name on every completion until the
+            // player actually sets one. Saving enables server sync so the
+            // name propagates, and we then surface the freshly-minted sync
+            // code so the player can back up their progress to another
+            // device — otherwise they'd never see it unless they dug into
+            // Settings. Skip just continues to the overlay.
+            const hasName = !!(getProfileName() || '').trim()
+            if (!hasName) {
+              showNameDialog({
+                onDone: async (result) => {
+                  if (!result || !result.name) {
+                    presentOverlay()
                     return
                   }
-                } catch (e) {
-                  console.error('Failed to enable sync', e)
-                }
-                presentOverlay()
-              },
-            })
-          } else {
-            presentOverlay()
-          }
-        },
-      }
-
-      if (gameMode === GAME_MODE_JIGSAW) {
-        puzzleConfig.snapDistance = 10
-      }
-
-      puzzle = new PuzzleClass(puzzleConfig)
-
-      await puzzle.init()
-      initDone = true
-
-      if (resumeRun?.puzzleState) {
-        puzzle.applyProgressState(resumeRun.puzzleState)
-
-        // Resuming a fully-completed diamond run also needs the source-
-        // image controls revealed — onComplete only fires on the
-        // painting's final stroke, not on resume.
-        if (gameMode === GAME_MODE_DIAMOND && puzzle.completed) {
-          if (viewBtn) viewBtn.hidden = false
-          if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
+                  const wasSyncEnabled = isSyncEnabled()
+                  try {
+                    setProfileName(result.name)
+                  } catch (e) {
+                    console.error('Failed to save profile name', e)
+                  }
+                  if (wasSyncEnabled) {
+                    presentOverlay()
+                    return
+                  }
+                  try {
+                    const code = await enableSync(playerGuid)
+                    requestPersistentStorage()
+                    if (code) {
+                      showSyncCodeCelebration({
+                        name: result.name,
+                        code,
+                        onDone: presentOverlay,
+                      })
+                      return
+                    }
+                  } catch (e) {
+                    console.error('Failed to enable sync', e)
+                  }
+                  presentOverlay()
+                },
+              })
+            } else {
+              presentOverlay()
+            }
+          },
         }
 
         if (gameMode === GAME_MODE_JIGSAW) {
-          if (edgesBtn && puzzle.edgesOnly) {
-            edgesBtn.setAttribute('aria-pressed', 'true')
+          puzzleConfig.snapDistance = 10
+        }
+
+        puzzle = new PuzzleClass(puzzleConfig)
+
+        await puzzle.init()
+        initDone = true
+
+        if (resumeRun?.puzzleState) {
+          puzzle.applyProgressState(resumeRun.puzzleState)
+
+          // Resuming a fully-completed diamond run also needs the source-
+          // image controls revealed — onComplete only fires on the
+          // painting's final stroke, not on resume.
+          if (gameMode === GAME_MODE_DIAMOND && puzzle.completed) {
+            if (viewBtn) viewBtn.hidden = false
+            if (showSourceFloatingBtn) showSourceFloatingBtn.hidden = false
+          }
+
+          if (gameMode === GAME_MODE_JIGSAW) {
+            if (edgesBtn && puzzle.edgesOnly) {
+              edgesBtn.setAttribute('aria-pressed', 'true')
+            }
           }
         }
+
+        if (isResume) persistActiveRun(puzzle.getProgressState())
+
+        updatePieceCount()
+        if (isResume) startTimerDisplay()
+
+        const puzzleLabel = state.puzzle ? `${state.puzzle.date}` : 'Puzzle ready'
+        const elapsedLabel = formatDuration(getActiveElapsedMs())
+        setStatus(
+          `${puzzleLabel}. ${MODE_LABELS[gameMode]} mode. ${getInteractionHint(gameMode)} Active ${elapsedLabel}.`,
+          'ok',
+        )
+
+        // Reveal the puzzle once setup has fully succeeded — including any
+        // applyProgressState — so a failure mid-restore still shows the
+        // error card instead of an empty page over a half-built puzzle.
+        if (loadingOverlay && loadingOverlay.parentElement) {
+          loadingOverlay.remove()
+        }
+
+        // Helper nudge gate. The bouncing "need some help?" prompt only fires
+        // after the puzzle is fully drawn so it isn't competing with the
+        // loading spinner for attention.
+        assistantPuzzleReady = true
+        tryAssistantNudge()
+      } catch (error) {
+        console.error(error)
+        setStatus('Failed to load puzzle image.', 'error')
+        if (loadingOverlay && loadingOverlay.parentElement) {
+          renderPuzzleLoadError(loadingOverlay, {
+            onRetry: () => renderGame({ resumeRun }),
+          })
+        }
       }
-
-      if (isResume) persistActiveRun(puzzle.getProgressState())
-
-      updatePieceCount()
-      if (isResume) startTimerDisplay()
-
-      const puzzleLabel = state.puzzle ? `${state.puzzle.date}` : 'Puzzle ready'
-      const elapsedLabel = formatDuration(getActiveElapsedMs())
-      setStatus(
-        `${puzzleLabel}. ${MODE_LABELS[gameMode]} mode. ${getInteractionHint(gameMode)} Active ${elapsedLabel}.`,
-        'ok',
-      )
-
-      // Reveal the puzzle once setup has fully succeeded — including any
-      // applyProgressState — so a failure mid-restore still shows the
-      // error card instead of an empty page over a half-built puzzle.
-      if (loadingOverlay && loadingOverlay.parentElement) {
-        loadingOverlay.remove()
-      }
-    } catch (error) {
-      console.error(error)
-      setStatus('Failed to load puzzle image.', 'error')
-      if (loadingOverlay && loadingOverlay.parentElement) {
-        renderPuzzleLoadError(loadingOverlay, {
-          onRetry: () => renderGame({ resumeRun }),
-        })
-      }
-    }
-  })()
+    })()
 }
 
 function destroyPuzzle() {
@@ -5018,6 +5285,10 @@ function destroyPuzzle() {
   if (puzzle) {
     puzzle.destroy()
     puzzle = null
+  }
+  if (activeAssistant) {
+    activeAssistant.destroy()
+    activeAssistant = null
   }
 }
 
@@ -5082,7 +5353,7 @@ function prefetchNextDayPuzzle() {
         img.src = resolveAssetUrl(u)
       })
     })
-  }).catch(() => {})
+  }).catch(() => { })
 }
 
 function scheduleDayRollover() {
@@ -5147,7 +5418,7 @@ function initAppShell() {
     if (pageName === 'play') {
       renderLauncher()
       flushPendingSyncConflicts()
-      if (isSyncEnabled()) pullOnForeground().catch(() => {})
+      if (isSyncEnabled()) pullOnForeground().catch(() => { })
     } else if (pageName === 'archive') {
       if (!archiveRendered) renderArchivePage()
       else if (typeof updateArchiveThumb === 'function') {
@@ -5200,7 +5471,7 @@ function getOpenSections() {
     if (!raw) return new Set(SETTINGS_DEFAULT_OPEN)
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) return new Set(parsed)
-  } catch {}
+  } catch { }
   return new Set(SETTINGS_DEFAULT_OPEN)
 }
 
@@ -5209,7 +5480,7 @@ function setSectionOpen(id, open) {
   if (open) set.add(id); else set.delete(id)
   try {
     localStorage.setItem(SETTINGS_OPEN_SECTIONS_KEY, JSON.stringify([...set]))
-  } catch {}
+  } catch { }
 }
 
 function renderSettingsPage() {
@@ -5270,16 +5541,16 @@ function renderSettingsPage() {
               <div class="settings-subtitle">Board background</div>
               <div id="settings-board-colors" class="settings-color-grid">
                 ${colors
-                  .map(
-                    (c, i) =>
-                      `<div style="text-align:center">
+      .map(
+        (c, i) =>
+          `<div style="text-align:center">
                         <button class="settings-color-swatch${i === activeIndex ? ' is-active' : ''}" type="button" data-index="${i}" aria-label="${c.name}" title="${c.name}"${c.color ? ` style="background:${c.color}"` : ''}>
                           ${c.color ? '' : '\ud83d\uddbc'}
                         </button>
                         <div class="settings-color-label">${c.name}</div>
                       </div>`,
-                  )
-                  .join('')}
+      )
+      .join('')}
               </div>
             </div>
           </details>
@@ -5499,7 +5770,7 @@ function renderProfileSettings() {
         const btn = el.querySelector('#sync-copy-btn')
         btn.textContent = 'Copied!'
         setTimeout(() => { btn.textContent = 'Copy' }, 2000)
-      } catch {}
+      } catch { }
     })
     const revealBtn = el.querySelector('.sync-code-reveal')
     const codeDisplay = el.querySelector('.sync-code-display')
@@ -5741,7 +6012,7 @@ async function handleSyncLinkParam() {
   // the URL means a reload would retry a link that may have already been
   // consumed or declined.
   const cleanUrl = location.pathname + location.hash
-  try { history.replaceState(null, '', cleanUrl) } catch {}
+  try { history.replaceState(null, '', cleanUrl) } catch { }
 
   if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(code)) return
 
@@ -5758,7 +6029,7 @@ async function handleSyncLinkParam() {
       })
     })
     if (!proceed) return
-    try { disableSync() } catch {}
+    try { disableSync() } catch { }
   }
 
   try {
@@ -5874,5 +6145,5 @@ function showSyncConflictModal(conflicts = []) {
 // ─── Service Worker Registration ───
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {})
+  navigator.serviceWorker.register('/sw.js').catch(() => { })
 }

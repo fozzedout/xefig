@@ -272,22 +272,29 @@ export class JigsawPuzzle {
     this.edgesTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>'
     this.edgesTrayBtn.addEventListener('click', () => this.toggleEdgesOnly())
 
-    this.carouselTools.append(this.highlightTrayBtn, this.edgesTrayBtn)
+    this.revealTrayBtn = document.createElement('button')
+    this.revealTrayBtn.type = 'button'
+    this.revealTrayBtn.id = 'jigsaw-reveal-btn'
+    this.revealTrayBtn.className = 'jigsaw-tray-tool'
+    this.revealTrayBtn.setAttribute('aria-label', 'Show reference image')
+    this.revealTrayBtn.setAttribute('aria-pressed', 'false')
+    this.revealTrayBtn.title = 'Show reference image'
+    this.revealTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>'
+    this.revealTrayBtn.addEventListener('click', () => {
+      const active = this.toggleReferenceVisible()
+      this.revealTrayBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+      this.container.dispatchEvent(new CustomEvent('jigsaw:reference-toggled', { detail: { active }, bubbles: true }))
+    })
+
+    this.carouselTools.append(this.highlightTrayBtn, this.edgesTrayBtn, this.revealTrayBtn)
 
     this.carouselTrack = document.createElement('div')
     this.carouselTrack.className = 'jigsaw-carousel-track'
 
-    this.svgDefs = document.createElementNS(SVG_NS, 'svg')
-    this.svgDefs.setAttribute('class', 'jigsaw-clip-defs')
-    this.svgDefs.setAttribute('aria-hidden', 'true')
-
-    this.defs = document.createElementNS(SVG_NS, 'defs')
-    this.svgDefs.append(this.defs)
-
     this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer)
     this.stage.append(this.stageContent)
     this.carousel.append(this.carouselTrack)
-    this.root.append(this.svgDefs, this.stage, this.carousel, this.carouselTools)
+    this.root.append(this.stage, this.carousel, this.carouselTools)
     this.container.append(this.root)
 
     // Adopt floating game controls into the jigsaw grid so they align with tray tools
