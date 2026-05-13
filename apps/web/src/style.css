@@ -2715,7 +2715,7 @@ canvas.slice-image {
      the title + icon stay legible against the image's traces. */
   .ls-default .slice-more {
     background-color: #0a0a0f;
-    background-image: url('/more-bg.jpg');
+    background-image: url('/more-bg.webp');
     background-size: cover;
     background-position: center;
     cursor: pointer;
@@ -3008,7 +3008,7 @@ canvas.slice-image {
      image rationale. */
   .ls-default .slice-more {
     background-color: #0a0a0f;
-    background-image: url('/more-bg.jpg');
+    background-image: url('/more-bg.webp');
     background-size: cover;
     background-position: center;
     cursor: pointer;
