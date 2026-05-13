@@ -2297,15 +2297,18 @@ canvas.slice-image {
      arrow uses cal-region as its containing block, not a tiny dots-row
      grid cell. Without this, top:calc(50% - 14px) is computed against
      a ~16px cell, putting arrows just above the dots row. */
+  /* Parent .archive-page already pads by var(--sai-left/right); don't add
+     it again here or the arrow lands on top of the medal hero / WK column
+     on notched iPhones (Chrome emulator returns 0 so it looks fine there). */
   .ls-default .cal-side-arrow-prev {
     grid-row: auto;
     grid-column: auto;
-    left: calc(6px + var(--sai-left));
+    left: 6px;
   }
   .ls-default .cal-side-arrow-next {
     grid-row: auto;
     grid-column: auto;
-    right: calc(6px + var(--sai-right));
+    right: 6px;
   }
 
   /* Resume button in landscape lives inside the active month-hero so it
