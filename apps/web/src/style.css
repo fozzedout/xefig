@@ -277,7 +277,12 @@ h1 {
 .ls-default .page-back-btn { display: flex; }
 
 .settings-page {
-  background: #0a0a0f;
+  background-color: #0a0a0f;
+  background-image: url('/panel-bg.webp');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: local;
   color: #e8e6e0;
   padding: calc(52px + var(--sai-top) + 2rem) calc(2rem + var(--sai-right)) calc(2rem + var(--sai-bottom)) calc(2rem + var(--sai-left));
   overflow-y: auto;
@@ -1020,16 +1025,20 @@ h1 {
 
 .archive-page {
   background-color: #07070b;
+  /* Blueprint sits underneath; corner radial glows add the colour warmth
+     the monochrome blueprint lacks. The blueprint already carries a grid
+     and faint circuit traces, so the old hand-drawn 48px grid lines are
+     no longer needed. */
   background-image:
     radial-gradient(ellipse 90% 55% at 50% 0%, rgba(64, 90, 140, 0.16), transparent 70%),
     radial-gradient(ellipse 60% 40% at 0% 100%, rgba(160, 96, 240, 0.07), transparent 70%),
     radial-gradient(ellipse 60% 40% at 100% 100%, rgba(240, 192, 64, 0.06), transparent 70%),
     radial-gradient(ellipse 40% 30% at 100% 0%, rgba(80, 232, 160, 0.05), transparent 70%),
-    linear-gradient(transparent 0, transparent 47px, rgba(120, 160, 220, 0.04) 47px, rgba(120, 160, 220, 0.04) 48px),
-    linear-gradient(90deg, transparent 0, transparent 47px, rgba(120, 160, 220, 0.04) 47px, rgba(120, 160, 220, 0.04) 48px);
-  background-size: auto, auto, auto, auto, 48px 48px, 48px 48px;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
-  background-attachment: local, local, local, local, local, local;
+    url('/panel-bg.webp');
+  background-size: auto, auto, auto, auto, cover;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position: center, center, center, center, center top;
+  background-attachment: local, local, local, local, local;
   color: #e8e6e0;
   padding: calc(52px + var(--sai-top) + 1.5rem) var(--sai-right) calc(2rem + var(--sai-bottom)) var(--sai-left);
   overflow-y: auto;
