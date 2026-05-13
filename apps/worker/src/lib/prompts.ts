@@ -24,6 +24,9 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'suspension bridge', 'viaduct', 'dam', 'lock gate', 'canal', 'wharf',
     'bell tower', 'cupola', 'dome', 'spire', 'battlement', 'drawbridge',
     'portcullis', 'rampart', 'keep', 'citadel', 'watchtower', 'bastion',
+    'hammam', 'conservatory', 'greenhouse', 'gazebo', 'pergola', 'stupa',
+    'riad', 'caravanserai', 'granary', 'dovecote', 'gristmill', 'beach hut',
+    'cloister', 'belvedere', 'rotunda', 'tile kiln', 'salt works', 'paper mill',
     // nature & geography
     'waterfall', 'canyon', 'glacier', 'reef', 'oasis', 'hot spring',
     'geyser', 'cenote', 'sinkhole', 'tide pool', 'kelp forest', 'mangrove',
@@ -32,6 +35,9 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'aurora', 'thunderhead', 'supercell', 'rainbow', 'ice cave', 'sea arch',
     'sea stack', 'coral atoll', 'volcanic caldera', 'lava flow', 'basalt columns',
     'slot canyon', 'hoodoo formations', 'sand dunes', 'salt flat', 'petrified forest',
+    'salt marsh', 'river delta', 'oxbow lake', 'mineral pool', 'redwood grove',
+    'baobab tree', 'banyan tree', 'mangrove channel', 'savanna fire',
+    'monsoon clouds', 'dust devil', 'sirocco wind', 'braided river',
     // wildlife
     'fox', 'wolf', 'jaguar', 'elephant', 'whale', 'dolphin', 'jellyfish',
     'owl', 'koi', 'eagle', 'heron', 'flamingo', 'peacock', 'tiger',
@@ -88,6 +94,13 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'marketplace square', 'cobblestone street', 'lantern-lit alley',
     'canal district', 'old town', 'fishing village', 'mountain monastery',
     'desert oasis', 'palm grove', 'mangrove coast', 'coral shallows',
+    'salt pan', 'scrubland', 'atoll', 'lagoon shore', 'river headwaters',
+    'olive grove', 'citrus grove', 'fig orchard', 'rose garden',
+    'herb garden', 'kitchen garden', 'monastery garden', 'souk alley',
+    'casbah rooftop', 'thatched village', 'plantation veranda',
+    'palm-lined avenue', 'dune sea', 'redwood forest', 'savanna plain',
+    'terraced rice paddies', 'volcanic black-sand beach', 'fjord wall',
+    'spice-market lane', 'hill station', 'monsoon coast',
   ],
 
   state: [
@@ -104,6 +117,11 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'reflected', 'translucent', 'iridescent', 'pearlescent', 'textured',
     'crumbling', 'restored', 'timeworn', 'freshly built', 'half-finished',
     'ceremonial', 'sacred', 'wild', 'domesticated', 'migratory', 'seasonal',
+    'sunbaked', 'sun-warmed', 'dust-coated', 'salt-sprayed', 'fog-shrouded',
+    'sun-drenched', 'lantern-lit', 'candlelit', 'paper-thin', 'glass-walled',
+    'bronze-cast', 'lacquered', 'embroidered', 'vine-draped', 'leaf-strewn',
+    'sand-strewn', 'flame-touched', 'incense-scented', 'rope-bound',
+    'tide-washed', 'spice-stained',
   ],
 
   lighting: [
@@ -120,6 +138,11 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'bioluminescent glow', 'shaft of light through clouds', 'rainbow prism light',
     'eclipse shadow', 'polar twilight', 'tropical noon glare',
     'autumn leaf-filtered light', 'cherry blossom haze', 'campfire embers',
+    'harvest moon glow', 'paper lanterns at dusk', 'distant fireworks burst',
+    'monsoon downpour shimmer', 'equatorial midday glare', 'dust storm haze',
+    'marigold dawn glow', 'jasmine dusk haze', 'river mist morning',
+    'shoji paper diffusion', 'harvest gold afternoon', 'brass-warm interior',
+    'terracotta-hour glow', 'blossom-pink dawn', 'spice-market sunbeams',
   ],
 
   mood: [
@@ -134,6 +157,9 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'lonely and isolated', 'magical and enchanted', 'gritty and raw',
     'elegant and refined', 'chaotic and lively', 'sacred and transcendent',
     'brooding and atmospheric', 'festive and exuberant',
+    'spirited and breezy', 'hushed and reverent', 'sun-soaked and lazy',
+    'sultry and slow', 'jubilant and folkloric', 'tender and homely',
+    'languid and tropical', 'rapturous and exuberant', 'wistful and golden',
   ],
 
   palette: [
@@ -169,6 +195,16 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'sapphire and gold leaf as dominant tones with natural colour variation throughout',
     'mauve and olive as dominant tones with natural colour variation throughout',
     'graphite and sunflower as dominant tones with natural colour variation throughout',
+    'amber and sea-glass green as dominant tones with natural colour variation throughout',
+    'pomegranate and pearl as dominant tones with natural colour variation throughout',
+    'tobacco and saffron as dominant tones with natural colour variation throughout',
+    'terracotta and lime as dominant tones with natural colour variation throughout',
+    'jasmine cream and persimmon as dominant tones with natural colour variation throughout',
+    'lapis and pearl as dominant tones with natural colour variation throughout',
+    'copper and aquamarine as dominant tones with natural colour variation throughout',
+    'ochre and ruby as dominant tones with natural colour variation throughout',
+    'celadon and persimmon as dominant tones with natural colour variation throughout',
+    'mahogany and ivory as dominant tones with natural colour variation throughout',
   ],
 
   camera: [
@@ -187,6 +223,9 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'rule-of-thirds off-centre placement', 'tilt-shift miniature effect',
     'long exposure motion blur', 'golden spiral composition',
     'environmental portrait with context', 'receding planes depth shot',
+    'aerial drone perspective', 'through-the-foliage framing',
+    'pavilion-archway framing', 'hilltop sweeping vantage',
+    'balcony perspective looking outward', 'curtain-edge peek angle',
   ],
 }
 
@@ -196,72 +235,71 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 // ---------------------------------------------------------------------------
 
 const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
-  // Concepts that have natural medium-scale shapes (~20-60 paintable
-  // regions), not microscopic texture. Avoid subjects that imply
-  // "hundreds of tiny things" — those collapse to noise at 16 colours
-  // and are miserable to paint.
+  // Concepts have natural medium-scale shapes (~20-60 paintable regions),
+  // not microscopic texture. Avoid subjects that imply "hundreds of tiny
+  // things" — those collapse to noise at 24 colours and are miserable to
+  // paint. Single-subject entries pair with the Setting line below to form
+  // varied combinations; compound entries (still-lifes, busy scenes,
+  // decorative patterns) carry their own internal composition and are
+  // treated as one atomic subject.
   concept: [
-    // hero subjects in styled settings
-    'lighthouse on a cliff', 'sailboat on calm water', 'hot air balloon over hills',
+    // single hero subjects — animals
+    'fox', 'owl', 'stag', 'cat', 'flamingo flock',
+    'peacock with tail fan', 'hummingbird among tropical flowers',
+    'parrot pair', 'lion pride at rest', 'giraffe family browsing',
+    'zebras at a watering hole', 'gorilla in a misty clearing',
+    'orangutan in the canopy', 'sea otters floating in kelp',
+    'penguin colony', 'puffin colony', 'tortoise',
+    'tree frog on a glossy leaf', 'crane in shallow water',
+    'whale breaching near fishing boats', 'pelican on a piling',
+    'capybara at a river edge', 'tapir in a clearing',
+    'lemur troop in a baobab', 'hornbill on a fig branch',
+    'macaws in a jungle canopy', 'jaguar resting on a tree branch',
+    'elephant beside a river crossing', 'swan pair on a lily pond',
+    'meerkats on a kopje', 'fennec fox among dunes',
+    'hare among meadow flowers', 'fawn in a clearing',
+    'koi pond with lotus flowers and stepping stones',
+    'butterfly swarm above wildflowers',
+    // single hero subjects — architectural / object
+    'lighthouse', 'sailboat on calm water', 'hot air balloon',
     'windmill in a field', 'cottage with garden path',
     'stone bridge over a river', 'chapel on a hill',
     'pagoda in a quiet garden', 'palm tree on a beach',
     'cherry blossom tree by a river', 'autumn tree on a lawn',
     'mountain reflected in a still lake', 'barn under a starry sky',
-    // iconic animals in richer environments
-    'fox in a snowy forest', 'owl on a branch among autumn leaves',
-    'stag in a coastal meadow with boats in the bay',
-    'hummingbirds among tropical flowers', 'cat on a windowsill overlooking rooftops',
-    'parrots in a jungle canopy', 'peacock with tail fan in a walled garden',
-    'deer at a forest edge with wildflowers', 'whale breaching near fishing boats',
-    'koi pond with lotus flowers and stepping stones',
-    'flamingos wading in a tropical lagoon', 'polar bear on ice with an aurora sky',
-    'lion pride at rest under acacia trees on the savanna',
-    'giraffes browsing under acacias at golden hour',
-    'zebras at a watering hole with reflected clouds',
-    'gorilla in a misty jungle clearing with ferns',
-    'orangutan among rainforest canopy vines and orchids',
-    'sea otters floating in a kelp forest at sunset',
-    'penguins on an icy shore with snowy mountains behind',
-    'puffin colony on a windswept sea cliff above the surf',
-    'tortoise in a desert garden with prickly pears and wildflowers',
-    'tree frog on a glossy leaf among tropical orchids',
-    // still-life and decorative scenes
-    'vase of sunflowers on a tiled table by a window',
-    'bowl of fruit on a patterned cloth', 'teapot and cups on a folk-art runner',
-    'lantern on a porch with climbing roses',
-    'bicycle against a wall with flowers in the basket and market stalls behind',
-    'rocking chair on a wooden porch overlooking a garden',
-    // landscapes with layered elements
-    'rolling hills at sunset with a village nestled below',
-    'lavender field at dawn with a farmhouse',
-    'tulip field in rows with a windmill behind',
-    'sunflower field with a red barn under a blue sky',
-    'vineyard terrace at dusk with a chateau', 'harbour with fishing boats and dockside buildings',
-    'beach scene with umbrellas, towels and swimmers',
-    'snowy pine forest with a cabin and aurora',
-    // busier scenes — lots of small flat-colour elements
-    'village market square with stalls, awnings and shoppers',
-    'circus tent in a town square with crowds and bunting',
-    'harvest festival with stalls, bunting and families',
-    'canal town with layered rooftops and boats',
-    'alpine village with chalets, skiers and pine trees',
-    'seaside promenade with beach huts, strollers and gulls',
-    'old town plaza with cafes, trees and passers-by',
-    'carnival parade through a decorated street',
+    'gazebo wrapped in climbing roses', 'wooden footbridge with reeds',
+    'stone well in a courtyard', 'beach huts along the shore',
+    'fishing boat at anchor', 'olive tree on a hillside',
+    'whitewashed bell tower', 'tiled-roof cottage',
+    // still-life focal subjects (the arrangement context comes from accents)
+    'vase of sunflowers', 'bowl of fruit', 'bowl of lemons',
+    'teapot and cups', 'flower cart', 'lantern on a porch',
+    'bicycle with flowers in the basket', 'rocking chair on a porch',
+    'pomegranates and figs on a copper tray',
+    // landscape focal subjects (companion features come from accents)
+    'rolling hills at sunset', 'lavender field at dawn',
+    'tulip field in rows', 'sunflower field', 'vineyard terrace at dusk',
+    'harbour with fishing boats', 'beach scene with umbrellas',
+    'terraced rice paddies', 'olive grove', 'citrus grove',
+    'desert oasis',
+    // busy-scene focal subjects — accents fill in stalls, crowds, props
+    'village market square', 'circus tent in a town square',
+    'harvest festival', 'canal town', 'seaside promenade',
+    'old town plaza', 'carnival parade', 'tea plantation',
+    'souk lane', 'harbour fish market', 'monsoon street scene',
     'rooftop view across a tiled city',
-    'botanical scene with layered plants, butterflies and birds',
-    'forest clearing with animals gathered around a stream',
-    'tea plantation with workers, baskets and mountains behind',
-    // folk-art / decorative patterns
+    'botanical scene with layered plants',
+    'forest clearing with animals around a stream',
+    // folk-art / decorative patterns (each is one composition, no accents)
     'stained glass flower panel', 'mandala with 8-fold symmetry',
     'folk-art tree of life with birds and fruit',
     'talavera plate pattern with central motif',
     'paper-cut bird and flower motif', 'quilted heart block',
-    // architectural
-    'red barn in snow with pine trees', 'windmill at sunset over tulip fields',
-    'lighthouse at night with moon and sailboats',
-    'church steeple against sky with cottages below',
+    'pysanka egg pattern', 'suzani embroidery panel',
+    // architectural focal subjects
+    'windmill at sunset', 'lighthouse at night',
+    'church steeple with cottages', 'Mediterranean harbour at midday',
+    'whitewashed village on a hill',
   ],
 
   location: [
@@ -271,6 +309,14 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'harbour', 'pier', 'village square', 'mountain pass',
     'riverbank', 'desert vista', 'market street', 'parkland',
     'clifftop', 'terrace', 'canal side', 'woodland path',
+    'olive grove', 'citrus grove', 'vineyard ridge', 'herb garden',
+    'palm avenue', 'lagoon island', 'rose garden', 'tropical balcony',
+    'monastery garden', 'spice-market lane', 'thatched-village edge',
+    'desert oasis', 'reed-edged pond', 'cherry blossom park',
+    'savanna kopje', 'jungle clearing', 'wisteria walk',
+    'tiled rooftop view', 'cobbled lane', 'cypress avenue',
+    'baobab plain', 'rice-paddy terrace', 'forest stream',
+    'whitewashed alley', 'sunlit veranda',
   ],
 
   state: [
@@ -281,6 +327,9 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'layered flat shapes', 'richly patterned', 'hand-crafted',
     'retro-styled', 'folk-inspired', 'whimsical', 'ornamental',
     'jewel-toned',
+    'paint-thick', 'silkscreen-flat', 'mosaic-clean', 'tile-bordered',
+    'lacquer-bright', 'enamel-rich', 'broad-stroked', 'block-printed',
+    'banner-bold', 'tapestry-like',
   ],
 
   lighting: [
@@ -290,6 +339,9 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'cool morning light', 'rosy dawn light', 'late afternoon amber',
     'overcast silvery light', 'pastel twilight glow', 'strong midday sun',
     'gentle backlit haze', 'crisp autumn light',
+    'golden afternoon glow', 'paper-lantern dusk', 'amber lamp light',
+    'jasmine-dawn pink', 'orange-sky sunset', 'marigold morning light',
+    'noon shadow-flat light',
   ],
 
   mood: [
@@ -298,16 +350,18 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'dreamy and soft', 'festive and lively', 'mysterious and dusky',
     'serene and spacious', 'tender and intimate', 'vibrant and energetic',
     'stately and elegant', 'whimsical and charming',
+    'balmy and breezy', 'sun-soaked and joyful', 'sleepy and warm',
+    'hushed and contemplative', 'lively and bustling', 'languid and golden',
   ],
 
   palette: [
     'jewel tones laid down in large flat panels with clean boundaries',
     'stained-glass palette: a dozen saturated flat panels separated by bold dark leading',
     'folk-art palette: primaries, earth tones and one accent in simple, bold shapes',
-    'mid-century poster palette: a limited set of flat colours in strong silhouettes',
+    'mid-century poster palette: a set of bold flat colours in strong silhouettes',
     'tropical flat palette: turquoise, coral, green, sand, magenta — each as broad zones',
     'autumn flat palette: red, orange, gold, ochre, brown — each as substantial shapes',
-    'botanical flat palette: a few greens plus one or two petal colours as solid fills',
+    'botanical flat palette: a few greens plus various petal colours as distinct fills',
     'muted Scandinavian palette: pale sky, warm wood, soft red, cream — flat and spacious',
     'seaside palette: navy, white, sky blue, sand, coral — clean and fresh',
     'sunset palette: peach, magenta, gold, violet, deep blue — warm and vivid',
@@ -317,6 +371,12 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'candy palette: pink, mint, lavender, lemon, peach — sweet and bright',
     'woodland palette: moss, bark brown, fern, amber, mushroom grey — natural and warm',
     'fiesta palette: vermilion, cobalt, sunflower, emerald, hot pink — bold and festive',
+    'desert oasis palette: terracotta, palm green, lapis, gold, white — warm and grounded',
+    'monsoon palette: deep teal, marigold, ivory, copper, mahogany — moody and rich',
+    'spice-market palette: turmeric, saffron, paprika, mint, ivory — bold and warm',
+    'citrus-grove palette: lemon, leaf green, ivory, terracotta, sage — bright and cheerful',
+    'pomegranate palette: ruby, gold, leaf green, cream, plum — jewel-rich',
+    'lagoon palette: turquoise, coral, white, lemon, deep teal — bright tropical',
   ],
 
   camera: [
@@ -332,8 +392,66 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'intimate close framing filling most of the canvas',
     'diagonal composition with the subject on a leading line',
     'eye-level view with foreground and background layers',
+    'gentle aerial overhead with the subject centred',
+    'through-archway framing with the scene beyond',
+    'balcony perspective looking out across the scene',
+    'pavilion-arch framing of the subject',
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Diamond accent pool — atomic scene details that the rewriter weaves in
+// around the chosen Subject + Setting. Each diamond prompt pulls a small
+// bag of accents (DIAMOND_ACCENT_COUNT) at build time, and the rewriter is
+// instructed to drop any accent that doesn't fit the Subject. The point is
+// recombination: the same "village market square" can come with crowds and
+// bunting one day, baskets and cypress trees another day.
+// ---------------------------------------------------------------------------
+
+const DIAMOND_ACCENT_POOL: readonly string[] = [
+  // architecture & town
+  'tiled rooftops', 'whitewashed walls', 'shuttered windows',
+  'wrought-iron balconies', 'arched doorways', 'painted doors',
+  'mosaic floors', 'flagstone paths', 'cobblestone street',
+  'awnings', 'striped awnings', 'window boxes',
+  'climbing roses', 'climbing vines', 'bougainvillea',
+  'bell tower in the distance', 'chimneys', 'painted shutters',
+  // market & festival props
+  'market stalls', 'stall canopies', 'fruit piles', 'spice mounds',
+  'flower bouquets', 'baskets', 'crates', 'cafe tables',
+  'striped parasols', 'paper lanterns', 'fairy lights',
+  'bunting', 'flag-lined streets', 'garlands', 'banners',
+  // people
+  'shoppers', 'strollers', 'children playing', 'crowds',
+  'families gathered', 'food vendors', 'musicians', 'dancers',
+  'workers in the field', 'fishermen', 'a baker at a window',
+  // vegetation
+  'sunflowers', 'lavender rows', 'tulip rows', 'wildflowers',
+  'cypress trees', 'olive trees', 'palm trees', 'citrus trees',
+  'cherry blossoms', 'pine trees', 'ferns', 'reeds',
+  'fallen leaves', 'ivy on the wall', 'lilies', 'bamboo',
+  // food / still-life
+  'lemons', 'pomegranates', 'figs', 'painted plates',
+  'a teapot', 'cups', 'copper tray', 'bread loaves', 'a jug of oil',
+  // maritime
+  'fishing boats', 'sailboats', 'rowboats', 'nets drying',
+  'crab pots', 'buoys', 'gulls overhead', 'a distant lighthouse',
+  'painted boat hulls',
+  // landscape features
+  'rolling hills', 'distant hills', 'stone walls',
+  'terraced fields', 'winding paths', 'haystacks',
+  'a quiet stream', 'a lily pond', 'a footbridge',
+  // animals as accents
+  'a cat lounging', 'pigeons gathered', 'goats grazing',
+  'sheep grazing', 'a donkey cart', 'butterflies', 'dragonflies',
+  'doves', 'swallows', 'rabbits in the grass',
+  // atmosphere & sky
+  'puffy clouds', 'crescent moon', 'a rainbow arc',
+  'wisps of smoke', 'hot air balloons in the sky', 'kites in the sky',
+  'distant fireworks',
+]
+
+const DIAMOND_ACCENT_COUNT = 4
 
 // ---------------------------------------------------------------------------
 // Minimum pool size validation — checked per role at startup.
@@ -386,29 +504,15 @@ const CATEGORY_PROMPT_INTENTS: Record<
     title: 'Polygram',
     composition:
       'Craft a layered scene with strong perspective and depth — populate the foreground, middle ground, and background each with their own detail — using these elements:',
-    // Technical tail: polygram is a rotation puzzle, so EVERY fragment
-    // — including nominally-uniform regions like skies, walls, water —
-    // needs visible directional cues so the player can tell which way
-    // up a piece goes. Earlier wording focused on shape boundaries
-    // between forms ("every form bounded by a confident edge"), which
-    // the model satisfied by drawing strong outlines on objects but
-    // leaving the sky as a soft painterly gradient. Now naming the
-    // trouble regions explicitly and requiring line work inside them.
     qualityTarget:
-      'Heavy line work and visible directional cues throughout the ENTIRE image, with no exception for nominally-uniform regions: skies must be broken into visible cloud panels with clear edges or stained-glass-style leading; walls must show mortar lines, cracks, or vines; water must show ripple lines or reflective panels; foliage must show leaf and stem lines. Every fragment of the image must carry rotational orientation cues, since this is a rotation puzzle. Strong shape boundaries between forms, and every region filled with rich texture, fine surface detail, and tonal variation. Maintain natural colour variety throughout — secondary and environmental colours should remain visible beneath the dominant palette.',
+      'style: distinct subject. wide variety of colours, every shape should be defined by colour rather than outlines',
   },
   diamond: {
     title: 'Diamond Painting',
     composition:
-      'Craft a richly detailed scene packed with small named subjects throughout the frame, using these elements:',
-    // Technical tail appended verbatim after the LLM rewrite — kept
-    // deliberately terse after iterative testing. "Very low colour"
-    // is a hint to the image model that the medium has a tiny palette
-    // (16 colours), which biases generation toward medium-scale panels
-    // that quantize cleanly. "Distinct subject" carries the figure-
-    // ground contrast rule from earlier iterations.
+      'Craft a busy scene populated with multiple distinct subjects rendered in vivid focal colours, set against a softly muted, atmospheric background that retains gentle colour but recedes so the focus stays firmly on the subjects, using these elements:',
     qualityTarget:
-      'style: complex and busy, distinct subject. very low colour, every shape should be defined by colour rather than outlines',
+      'style: busy composition with distinct subjects in vivid colour against a softly muted, atmospheric background that retains gentle colour. Wide variety of colours, every shape should be defined by colour rather than outlines',
   },
 }
 
@@ -426,20 +530,10 @@ const PROMPT_OUTPUT_TEMPLATES = [
   'Single 4:3 landscape image, the scene extending to every edge so it fills the full frame. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
-// Polygram output templates reinforce orientation rather than edge-to-edge fill.
-// "Edge-to-edge" is correct for scene puzzles but actively harmful for polygram
-// because it encourages the model to crop the subject — removing the very
-// perspective lines and vertical extent that anchor piece orientation.
 const PROMPT_OUTPUT_TEMPLATES_DIAMOND = [
   'Output: one landscape 4:3 image that fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
   'Deliver a single landscape 4:3 image with the composition extending to every edge of the frame. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
   'Single 4:3 landscape image, the scene extending to every edge so it fills the full frame. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
-] as const
-
-const PROMPT_OUTPUT_TEMPLATES_POLYGRAM = [
-  'Output: one landscape 4:3 illustration (not a photograph) with directional lines, shadows, and tonal gradient reading clearly across the whole composition. The scene fills the full frame edge to edge. The image is free of text, titles, labels, watermarks, signatures, or lettering of any kind.',
-  'Deliver a single landscape 4:3 stylised illustration — not photographic — with strong, unambiguous perspective lines, cast shadows, and top-to-bottom tonal variation throughout the full frame. The scene fills the frame edge to edge. The image contains no text, titles, captions, watermarks, signatures, or writing of any kind.',
-  'Single 4:3 landscape illustration (rendered in the style above, not as a photograph) with orientation cues — converging lines, directional shadows, vertical gradient — vivid and consistent across the entire composition. The composition extends to every edge. The image is entirely free of text, titles, labels, watermarks, signatures, and lettering.',
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -499,7 +593,8 @@ export async function generateSingleCategoryPrompt(
   const history = await getPromptHistoryD1(db)
 
   const set = pickDescriptorSet(history, new Set(), category)
-  const details = buildCategoryPromptDetails(category, set)
+  const accents = pickAccents(history, new Set(Object.values(set)), category)
+  const details = buildCategoryPromptDetails(category, set, accents)
 
   let prompt = details.prompt
   if (rewriter) {
@@ -515,7 +610,7 @@ export async function generateSingleCategoryPrompt(
   }
 
   const item: PromptHistoryItem = {
-    descriptors: [...new Set(Object.values(set))],
+    descriptors: [...new Set([...Object.values(set), ...accents])],
     createdAt: new Date().toISOString(),
   }
   await appendPromptHistory(db, item)
@@ -569,6 +664,7 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   // We pick a fresh descriptor set per puzzle category to maximise variety.
   // Each category gets its own independent setting, mood, style, etc.
   const descriptorSetsByCategory = {} as Record<PuzzleCategory, DescriptorSet>
+  const accentsByCategory = {} as Record<PuzzleCategory, readonly string[]>
   const usedInPack = new Set<string>()
 
   for (const category of CATEGORIES) {
@@ -577,16 +673,22 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
     for (const value of Object.values(set)) {
       usedInPack.add(value)
     }
+
+    const accents = pickAccents(recent, usedInPack, category)
+    accentsByCategory[category] = accents
+    for (const accent of accents) {
+      usedInPack.add(accent)
+    }
   }
 
   const pack: PromptPack = {
     // Per-category details
     categories: {
-      jigsaw: buildCategoryPromptDetails('jigsaw', descriptorSetsByCategory.jigsaw),
-      slider: buildCategoryPromptDetails('slider', descriptorSetsByCategory.slider),
-      swap: buildCategoryPromptDetails('swap', descriptorSetsByCategory.swap),
-      polygram: buildCategoryPromptDetails('polygram', descriptorSetsByCategory.polygram),
-      diamond: buildCategoryPromptDetails('diamond', descriptorSetsByCategory.diamond),
+      jigsaw: buildCategoryPromptDetails('jigsaw', descriptorSetsByCategory.jigsaw, accentsByCategory.jigsaw),
+      slider: buildCategoryPromptDetails('slider', descriptorSetsByCategory.slider, accentsByCategory.slider),
+      swap: buildCategoryPromptDetails('swap', descriptorSetsByCategory.swap, accentsByCategory.swap),
+      polygram: buildCategoryPromptDetails('polygram', descriptorSetsByCategory.polygram, accentsByCategory.polygram),
+      diamond: buildCategoryPromptDetails('diamond', descriptorSetsByCategory.diamond, accentsByCategory.diamond),
     },
   }
 
@@ -598,14 +700,18 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   return pack
 }
 
-function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet) {
-  const parts = buildImagePromptParts(category, set)
+function buildCategoryPromptDetails(
+  category: PuzzleCategory,
+  set: DescriptorSet,
+  accents: readonly string[] = [],
+) {
+  const parts = buildImagePromptParts(category, set, accents)
   return {
     prompt: `${parts.descriptive}\n\n${parts.technical}`,
     descriptive: parts.descriptive,
     technical: parts.technical,
     theme: `${capitalizeWords(set.state)} ${capitalizeWords(set.concept)} ${capitalizeWords(set.location)} — ${capitalizeWords(set.mood)}`,
-    keywords: [...new Set(Object.values(set))].map(v => v.trim()).filter(Boolean).slice(0, 12),
+    keywords: [...new Set([...Object.values(set), ...accents])].map(v => v.trim()).filter(Boolean).slice(0, 12),
   }
 }
 
@@ -624,22 +730,18 @@ function buildCategoryPromptDetails(category: PuzzleCategory, set: DescriptorSet
 export function buildImagePromptParts(
   category: PuzzleCategory,
   set: DescriptorSet,
+  accents: readonly string[] = [],
 ): { descriptive: string; technical: string } {
   const intent = CATEGORY_PROMPT_INTENTS[category]
 
-  // Diamond concepts ("stag in a coastal meadow with boats in the bay",
-  // "lighthouse on a cliff") already embed their setting, so omitting a
-  // separate Setting line avoids redundant phrasing in the rewriter's
-  // output.
-  const includeSetting = category !== 'diamond'
-
   const keywordLines = [
     `Subject: ${set.state} ${set.concept}`,
-    includeSetting ? `Setting: ${set.location}` : null,
+    `Setting: ${set.location}`,
     `Lighting: ${set.lighting}`,
     `Mood: ${stripMoodSuffix(set.mood)}`,
     `Palette: ${set.palette}`,
     `Camera: ${set.camera}`,
+    accents.length > 0 ? `Details: ${accents.join(', ')}` : null,
   ].filter((line): line is string => line !== null)
 
   // Composition prose tells the LLM HOW to compose; keyword block tells
@@ -651,11 +753,9 @@ export function buildImagePromptParts(
 
   const qualityLine = intent.qualityTarget
 
-  const outputLine = category === 'polygram'
-    ? pickRandom(PROMPT_OUTPUT_TEMPLATES_POLYGRAM)
-    : category === 'diamond'
-      ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
-      : pickRandom(PROMPT_OUTPUT_TEMPLATES)
+  const outputLine = category === 'diamond'
+    ? pickRandom(PROMPT_OUTPUT_TEMPLATES_DIAMOND)
+    : pickRandom(PROMPT_OUTPUT_TEMPLATES)
 
   return {
     descriptive,
@@ -692,6 +792,26 @@ function pickDescriptorSet(
   }
 
   return set
+}
+
+// Pick a small bag of accent atoms for a category. Currently diamond-only;
+// other categories return an empty array (handled as "no Details line").
+// Accents share the LRU history so frequently-used atoms get cooled down.
+function pickAccents(
+  recent: PromptHistoryItem[],
+  excluded: Set<string>,
+  category: PuzzleCategory,
+): readonly string[] {
+  if (category !== 'diamond') return []
+  const counts = buildUsageCounts(recent)
+  const picks: string[] = []
+  let working = new Set(excluded)
+  for (let i = 0; i < DIAMOND_ACCENT_COUNT; i++) {
+    const pick = pickOneDescriptor(DIAMOND_ACCENT_POOL, counts, working)
+    picks.push(pick)
+    working = new Set([...working, pick])
+  }
+  return picks
 }
 
 function buildUsageCounts(recent: PromptHistoryItem[]): Map<string, number> {

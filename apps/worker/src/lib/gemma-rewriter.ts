@@ -44,6 +44,7 @@ const SYSTEM_MESSAGE = [
   'Your task is to transform the descriptive elements into a single, cohesive, and highly imaginative paragraph.',
   'Do not just reword the input; invent concrete sensory details, textures, and atmosphere that bring the scene to life.',
   'Use the provided Theme and Keywords as high-level creative direction to ensure the scene reflects the intended mood and subject.',
+  'Coherence rule: the Subject is non-negotiable; everything else (Setting, Lighting, Mood, Palette, Camera, Details) is creative direction. If a non-subject element clashes with the Subject (e.g. a tropical animal placed on a snowy peak, or a frost-covered hot-air balloon over a jungle, or market stalls listed next to a wild fox), silently reinterpret or omit those elements so the scene reads naturally. The Details list in particular is a buffet of optional accents — weave in whichever fit, drop the rest. Never force an implausible pairing for the sake of including every input.',
   'Return ONLY the rewritten descriptive paragraph. No technical instructions, no preamble, no explanation, no markdown.',
 ].join(' ')
 
