@@ -9,6 +9,9 @@ const CELL_SAMPLE_GRID = 3
 const DITHER_ENABLED = false
 const CLEANUP_ENABLED = true
 const CLEANUP_MIN_REGION = 2
+const CLEANUP_START_LEVEL = 1
+const CLEANUP_MAX_LEVEL = 3
+const CLEANUP_REGION_TARGET = 1200
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const MAX_CANVAS_DIMENSION = 4096
@@ -87,9 +90,19 @@ export class DiamondPaintingPuzzle {
     const palettePixels = samplePixelsForPalette(this.image, 20000)
     this.palette = createDistinctPalette(palettePixels, NUM_COLORS)
     sortPaletteDarkToLight(this.palette)
-    this.grid = assignCellColors(cellSamples, this.palette, this.cols)
+    const rawGrid = assignCellColors(cellSamples, this.palette, this.cols)
+    this.grid = rawGrid
     if (CLEANUP_ENABLED) {
-      this.grid = cleanupTinyRegions(this.grid, this.cols, this.rows)
+      // Adaptive cleanup: escalate the threshold if the cleaned grid still
+      // has too many regions (busy images project to ~5s/region completion
+      // time, so >800 regions blows past the daily target).
+      let level = CLEANUP_START_LEVEL
+      let cleaned = cleanupTinyRegions(rawGrid, this.cols, this.rows, level + 1)
+      while (level < CLEANUP_MAX_LEVEL && countDiamondRegions(cleaned, this.cols, this.rows) > CLEANUP_REGION_TARGET) {
+        level++
+        cleaned = cleanupTinyRegions(rawGrid, this.cols, this.rows, level + 1)
+      }
+      this.grid = cleaned
     }
     this.fills = new Int8Array(this.totalCells).fill(-1)
 
@@ -223,6 +236,7 @@ export class DiamondPaintingPuzzle {
     this.root.append(this.boardFrame, this.paletteBar)
     this.container.append(this.root)
 
+    this.updatePaletteLayout()
     this.bindEvents()
   }
 
@@ -319,6 +333,54 @@ export class DiamondPaintingPuzzle {
     }
 
     return bar
+  }
+
+  // Landscape only: grow the column count only when the previous one
+  // doesn't fit, and at each step use floor(N/cols)+1 per column with the
+  // last column absorbing the remainder. For N=24 that yields the
+  // designed 24 → 13-11 → 9-9-6 progression: first column(s) feel full,
+  // the tail column reads as intentional overflow.
+  //
+  // The remaining empty rows in the last column are split top/bottom so the
+  // rightmost column's first and last swatches are inset from the corner —
+  // some devices have physically curved screens that CSS still reports as
+  // rectangular, and those corners are hard to tap reliably.
+  updatePaletteLayout() {
+    if (!this.paletteBar || !this.swatches?.length) return
+    const isLandscape = !!(window.matchMedia && window.matchMedia('(orientation: landscape)').matches)
+    if (!isLandscape) {
+      this.paletteBar.style.removeProperty('--palette-rows')
+      this.paletteBar.style.removeProperty('--palette-cols')
+      this.swatches.forEach(s => s.style.removeProperty('grid-row'))
+      return
+    }
+    const cs = getComputedStyle(this.paletteBar)
+    const padTop = parseFloat(cs.paddingTop) || 0
+    const padBottom = parseFloat(cs.paddingBottom) || 0
+    const SWATCH = 34
+    const GAP = 6
+    const available = Math.max(SWATCH, window.innerHeight - padTop - padBottom)
+    const maxPerCol = Math.max(1, Math.floor((available + GAP) / (SWATCH + GAP)))
+    const n = this.swatches.length
+    let numCols = 1
+    let perCol = n
+    while (perCol > maxPerCol && numCols < n) {
+      numCols++
+      perCol = Math.floor(n / numCols) + 1
+    }
+    this.paletteBar.style.setProperty('--palette-rows', String(perCol))
+    this.paletteBar.style.setProperty('--palette-cols', String(numCols))
+
+    this.swatches.forEach(s => s.style.removeProperty('grid-row'))
+    if (numCols > 1) {
+      const lastColCount = n - (numCols - 1) * perCol
+      const emptyRows = perCol - lastColCount
+      const topEmpty = Math.floor(emptyRows / 2)
+      if (topEmpty > 0) {
+        const firstOfLastCol = this.swatches[(numCols - 1) * perCol]
+        if (firstOfLastCol) firstOfLastCol.style.gridRow = String(topEmpty + 1)
+      }
+    }
   }
 
   selectColor(index) {
@@ -807,6 +869,7 @@ export class DiamondPaintingPuzzle {
 
   onWindowResize() {
     if (!this.grid) return
+    this.updatePaletteLayout()
     this.clampPan()
     this.applyTransform()
     this.drawGrid()
@@ -1387,7 +1450,56 @@ export function splitLargeRegions(grid, cellSamples, palette, cols, rows, maxFra
 // Absorb connected regions smaller than `minRegion` (8-direction) into
 // the dominant colour among their external 8-neighbours. Targets the
 // "1-cell hide-and-seek" gameplay pain without touching larger regions.
+function countDiamondRegions(grid, cols, rows) {
+  const total = grid.length
+  const visited = new Uint8Array(total)
+  const stack = []
+  let count = 0
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const color = grid[start]
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === color) {
+            visited[n] = 1
+            stack.push(n)
+          }
+        }
+      }
+    }
+    count++
+  }
+  return count
+}
+
 export function cleanupTinyRegions(grid, cols, rows, minRegion = CLEANUP_MIN_REGION) {
+  const MAX_PASSES = 5
+  let current = grid
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    const next = cleanupTinyRegionsPass(current, cols, rows, minRegion)
+    let changed = false
+    for (let i = 0; i < current.length; i++) {
+      if (current[i] !== next[i]) { changed = true; break }
+    }
+    if (!changed) return next
+    current = next
+  }
+  return current
+}
+
+function cleanupTinyRegionsPass(grid, cols, rows, minRegion) {
   const total = grid.length
   const visited = new Uint8Array(total)
   const result = new Uint8Array(grid)
@@ -1432,7 +1544,7 @@ export function cleanupTinyRegions(grid, cols, rows, minRegion = CLEANUP_MIN_REG
           const nr = r + dr
           const nc = c + dc
           if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
-          const neighbourColor = grid[nr * cols + nc]
+          const neighbourColor = result[nr * cols + nc]
           if (neighbourColor === color) continue
           counts.set(neighbourColor, (counts.get(neighbourColor) || 0) + 1)
         }

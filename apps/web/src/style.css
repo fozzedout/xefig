@@ -6810,28 +6810,27 @@ canvas.slice-image {
    top-left, restart at 16/16 bottom-left so both float clear of the palette
    on the opposite side. */
 @media (orientation: landscape) {
+  /* Flow swatches top-to-bottom; columns build LEFT→RIGHT (swatch 1 at
+     top-left, highest number nearest the right edge). JS sets --palette-rows
+     and --palette-cols based on available viewport height so the wrap
+     stays balanced — e.g. 24 in one column on desktop, 12+12 on a medium
+     viewport, 8+8+8 on phone landscape — instead of dumping the overflow
+     into a near-empty straggler column. Vertical padding pulls the
+     top/bottom swatches inside any curved-corner dead zone on phones. */
   .diamond-palette-bar {
     left: auto;
     right: 0;
     top: 0;
     bottom: 0;
     display: grid;
-    grid-template-columns: auto auto;
-    grid-template-rows: repeat(9, auto);
+    grid-template-rows: repeat(var(--palette-rows, 24), auto);
+    grid-template-columns: repeat(var(--palette-cols, 1), auto);
     grid-auto-flow: column;
     gap: 6px;
-    padding: 8px 8px 8px 8px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    padding: calc(28px + var(--sai-top, 0px)) calc(8px + var(--sai-right, 0px)) calc(28px + var(--sai-bottom, 0px)) 8px;
+    overflow: hidden;
     align-content: center;
     justify-content: end;
-    flex-wrap: unset;
-  }
-  /* Right column only has 7 swatches (10–16). Start it at row 2 so it
-     sits centred against the 9-swatch inner column (rows 2–8) instead
-     of stacking to the top. */
-  .diamond-palette-bar .diamond-swatch:nth-child(10) {
-    grid-row: 2;
   }
   .diamond-floating-btn--back {
     top: 16px;

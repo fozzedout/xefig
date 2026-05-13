@@ -929,12 +929,12 @@ export function createApp() {
 
     let body:
       | {
-          category?: string
-          prompt?: string
-          theme?: string
-          tags?: string
-          model?: string
-        }
+        category?: string
+        prompt?: string
+        theme?: string
+        tags?: string
+        model?: string
+      }
       | null = null
 
     try {
@@ -1058,11 +1058,11 @@ export function createApp() {
   app.post('/api/leaderboard/submit', async (c) => {
     let body:
       | {
-          puzzleDate?: string
-          gameMode?: string
-          playerGuid?: string
-          elapsedMs?: number
-        }
+        puzzleDate?: string
+        gameMode?: string
+        playerGuid?: string
+        elapsedMs?: number
+      }
       | null = null
     try {
       body = (await c.req.json()) as {
@@ -1090,7 +1090,7 @@ export function createApp() {
       return c.json({ error: 'Invalid playerGuid.' }, 400)
     }
     // Per-mode minimum-time floors based on physical feasibility.
-    // diamond: ~7500-10000 cells × 16 colours — even at 5 cells/sec
+    // diamond: ~7500-10000 cells × 24 colours — even at 5 cells/sec
     // sustained you can't finish in under ~5 min. polygram is a
     // rotation puzzle that needs at least a minute of thinking time
     // per piece batch. jigsaw/sliding/swap can be very fast for
