@@ -431,16 +431,6 @@ export class JigsawPuzzle {
       for (let col = 0; col < this.cols; col += 1) {
         const edges = this.getPieceEdges(row, col)
         const pathData = this.buildPiecePathData(edges)
-        const clipId = `${this.instanceId}-piece-${row}-${col}`
-
-        const clipPath = document.createElementNS(SVG_NS, 'clipPath')
-        clipPath.setAttribute('id', clipId)
-        clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse')
-
-        const path = document.createElementNS(SVG_NS, 'path')
-        path.setAttribute('d', pathData)
-        clipPath.append(path)
-        this.defs.append(clipPath)
 
         const canvas = document.createElement('canvas')
         canvas.className = 'jigsaw-piece'
@@ -450,8 +440,10 @@ export class JigsawPuzzle {
           this.pieceCanvasHeight,
           this.renderScale,
         )
-        canvas.style.clipPath = `url(#${clipId})`
-        canvas.style.webkitClipPath = `url(#${clipId})`
+        // Hit area = full canvas bounding rect (incl. the bleed margin). Canvas
+        // drawing already clips visually via ctx.clip(piecePath) in paintPiece(),
+        // so we don't apply CSS clip-path — that would also clip pointer events
+        // to the irregular piece shape and make thin tabs/blanks brutal to grab.
 
         const carouselItem = document.createElement('div')
         carouselItem.className = 'jigsaw-carousel-item'
