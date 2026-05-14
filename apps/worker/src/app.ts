@@ -218,6 +218,36 @@ export function createApp() {
     return c.json({ ok: true, from, to, days, scheduled })
   })
 
+  app.get('/api/admin/completion-stats', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    const mode = (c.req.query('mode') || 'diamond').trim()
+    const date = (c.req.query('date') || '').trim()
+    if (!date || !isValidDateKey(date)) {
+      return c.json({ error: 'Invalid date. Use YYYY-MM-DD.' }, 400)
+    }
+
+    await ensureLeaderboardTable(c.env.DB)
+    const rows = await c.env.DB
+      .prepare(
+        `SELECT elapsed_ms
+         FROM puzzle_leaderboard
+         WHERE game_mode = ? AND puzzle_date = ?
+         ORDER BY elapsed_ms ASC`,
+      )
+      .bind(mode, date)
+      .all<{ elapsed_ms: number }>()
+
+    const samples = (rows.results || []).map((r) => ({
+      elapsedMs: Number(r.elapsed_ms) || 0,
+    }))
+
+    return c.json({ ok: true, mode, date, samples })
+  })
+
   app.get('/api/admin/session', async (c) => {
     const configuredPassword = c.env.ADMIN_PASSWORD
     if (!configuredPassword) {

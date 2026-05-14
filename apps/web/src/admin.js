@@ -915,8 +915,12 @@ async function checkDiamondComplexity() {
     if (cleanupMax > 0) grid = cleanupTinyRegions(grid, cols, rows, cleanupMax + 1)
 
     const adjDiff = computeAdjacencyDiffRate(grid, cols, rows)
-    const { regionCount, largestRegionFraction } = computeRegionStats(grid, cols, rows)
+    const { regionCount, largestRegionFraction, sizes } = computeRegionStats(grid, cols, rows)
     const isolatedCount = computeIsolatedCellCount(grid, cols, rows)
+    const activeIndices = collectActivePaletteIndices(grid)
+    const activePaletteCount = activeIndices.length
+    const meanRegionsPerColor = activePaletteCount > 0 ? regionCount / activePaletteCount : 0
+    const minPaletteDeltaE = computeMinPalettePairDistance(palette, activeIndices)
     const verdict = classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction)
 
     // Re-paint the on-page preview using the (possibly dithered) grid we
@@ -954,12 +958,49 @@ async function checkDiamondComplexity() {
     isolatedEl.innerHTML = `isolated <strong>${isolatedCount}</strong>`
     result.appendChild(isolatedEl)
 
+    const colorsEl = document.createElement('span')
+    colorsEl.className = 'complexity-metric'
+    colorsEl.title = `Distinct palette entries actually used in the grid (out of ${palette.length})`
+    colorsEl.innerHTML = `colors <strong>${activePaletteCount}</strong>`
+    result.appendChild(colorsEl)
+
+    const regPerColorEl = document.createElement('span')
+    regPerColorEl.className = 'complexity-metric'
+    regPerColorEl.title = 'Mean regions per active colour — proxy for how much same-colour hunting the player does per colour switch'
+    regPerColorEl.innerHTML = `reg/color <strong>${meanRegionsPerColor.toFixed(1)}</strong>`
+    result.appendChild(regPerColorEl)
+
+    const deltaEl = document.createElement('span')
+    deltaEl.className = 'complexity-metric'
+    deltaEl.title = 'Minimum perceptual distance between any two active palette colours (redmean approx, ~0-765). Lower = visually confusable pairs.'
+    deltaEl.innerHTML = `minΔ <strong>${minPaletteDeltaE != null ? minPaletteDeltaE.toFixed(0) : '–'}</strong>`
+    result.appendChild(deltaEl)
+
     const verdictEl = document.createElement('span')
     verdictEl.className = 'complexity-verdict'
     verdictEl.dataset.state = verdict.state
     verdictEl.title = 'Tentative — calibrate against your completed puzzles'
     verdictEl.textContent = verdict.label
     result.appendChild(verdictEl)
+
+    const timeStatsEl = document.createElement('span')
+    timeStatsEl.className = 'complexity-time-stats'
+    const puzzleDate = dateInput.value.trim()
+    if (puzzleDate) {
+      timeStatsEl.textContent = `loading times for ${puzzleDate}…`
+      result.appendChild(timeStatsEl)
+      fetchDiamondCompletionStats(puzzleDate)
+        .then((stats) => updateTimeStats(timeStatsEl, stats, puzzleDate))
+        .catch((err) => {
+          console.error('Completion stats fetch failed', err)
+          timeStatsEl.textContent = 'times: unavailable'
+        })
+    } else {
+      timeStatsEl.textContent = 'times: pick a date'
+      result.appendChild(timeStatsEl)
+    }
+
+    result.appendChild(renderRegionSizeChart(sizes, cols * rows))
   } catch (error) {
     result.dataset.state = 'error'
     result.textContent = `error: ${error?.message ?? 'failed'}`
@@ -1016,7 +1057,7 @@ function computeRegionStats(grid, cols, rows) {
   const total = grid.length
   const visited = new Uint8Array(total)
   const stack = []
-  let regionCount = 0
+  const sizes = []
   let largestSize = 0
 
   for (let start = 0; start < total; start++) {
@@ -1047,11 +1088,133 @@ function computeRegionStats(grid, cols, rows) {
       }
     }
 
-    regionCount++
+    sizes.push(size)
     if (size > largestSize) largestSize = size
   }
 
-  return { regionCount, largestRegionFraction: largestSize / total }
+  return { regionCount: sizes.length, largestRegionFraction: largestSize / total, sizes }
+}
+
+// Bucket region sizes for the histogram. Boundaries pick out the
+// gameplay-relevant tiers: 1-cell (forced single tap), 2-4 (precision
+// taps), 5-25 (normal fills), 26-100 (chunky), 101+ (mass fills).
+const REGION_SIZE_BUCKETS = [
+  { label: '1', min: 1, max: 1 },
+  { label: '2-4', min: 2, max: 4 },
+  { label: '5-10', min: 5, max: 10 },
+  { label: '11-25', min: 11, max: 25 },
+  { label: '26-100', min: 26, max: 100 },
+  { label: '101-500', min: 101, max: 500 },
+  { label: '501+', min: 501, max: Infinity },
+]
+
+function bucketRegionSizes(sizes) {
+  const buckets = REGION_SIZE_BUCKETS.map((b) => ({ ...b, count: 0, cells: 0 }))
+  for (const size of sizes) {
+    for (const b of buckets) {
+      if (size >= b.min && size <= b.max) {
+        b.count++
+        b.cells += size
+        break
+      }
+    }
+  }
+  return buckets
+}
+
+async function fetchDiamondCompletionStats(date) {
+  const url = `/api/admin/completion-stats?mode=diamond&date=${encodeURIComponent(date)}`
+  const { response, payload } = await adminFetch(url)
+  if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`)
+  return payload?.samples || []
+}
+
+function summariseTimes(samples) {
+  const valid = samples.map((s) => Number(s.elapsedMs)).filter((ms) => Number.isFinite(ms) && ms > 0)
+  if (!valid.length) return null
+  valid.sort((a, b) => a - b)
+  const sum = valid.reduce((a, b) => a + b, 0)
+  return {
+    count: valid.length,
+    min: valid[0],
+    max: valid[valid.length - 1],
+    mean: sum / valid.length,
+    median: valid[Math.floor(valid.length / 2)],
+  }
+}
+
+function formatDurationMs(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '–'
+  const totalSec = Math.round(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function updateTimeStats(el, samples, date) {
+  const stats = summariseTimes(samples)
+  if (!stats) {
+    el.textContent = `times: no completions yet for ${date}`
+    return
+  }
+  el.innerHTML = ''
+  el.title = `Across ${stats.count} diamond completion${stats.count === 1 ? '' : 's'} on ${date}`
+  const parts = stats.count === 1
+    ? [['time', stats.min]]
+    : [
+        ['min', stats.min],
+        ['mean', stats.mean],
+        ['median', stats.median],
+        ['max', stats.max],
+      ]
+  for (const [label, value] of parts) {
+    const span = document.createElement('span')
+    span.className = 'complexity-time-stat'
+    span.innerHTML = `${label} <strong>${formatDurationMs(value)}</strong>`
+    el.appendChild(span)
+  }
+  const nEl = document.createElement('span')
+  nEl.className = 'complexity-time-stat complexity-time-stat--n'
+  nEl.textContent = `n=${stats.count}`
+  el.appendChild(nEl)
+}
+
+function renderRegionSizeChart(sizes, totalCells) {
+  const buckets = bucketRegionSizes(sizes)
+  const maxCount = buckets.reduce((m, b) => Math.max(m, b.count), 0) || 1
+  const chart = document.createElement('div')
+  chart.className = 'region-size-chart'
+  chart.title = 'Distribution of region sizes (number of regions per size bucket). Cell share under each bar shows how much of the canvas that bucket covers.'
+
+  for (const b of buckets) {
+    const col = document.createElement('div')
+    col.className = 'region-size-bucket'
+    if (b.count === 0) col.dataset.empty = 'true'
+
+    const countEl = document.createElement('span')
+    countEl.className = 'region-size-count'
+    countEl.textContent = String(b.count)
+
+    const bar = document.createElement('div')
+    bar.className = 'region-size-bar'
+    // sqrt scale so a handful of large regions stays visible alongside
+    // hundreds of tiny ones (the bimodal case we're trying to spot).
+    const heightPct = b.count > 0 ? Math.sqrt(b.count / maxCount) * 100 : 0
+    bar.style.height = `${heightPct.toFixed(1)}%`
+
+    const labelEl = document.createElement('span')
+    labelEl.className = 'region-size-label'
+    labelEl.textContent = b.label
+
+    const cellShareEl = document.createElement('span')
+    cellShareEl.className = 'region-size-cells'
+    const sharePct = totalCells > 0 ? (b.cells / totalCells) * 100 : 0
+    cellShareEl.textContent = b.cells > 0 ? `${sharePct.toFixed(0)}%` : '·'
+
+    col.append(countEl, bar, labelEl, cellShareEl)
+    chart.appendChild(col)
+  }
+  return chart
 }
 
 // 8-direction adjacency to match diamond-painting-puzzle.js flood-fill —
@@ -1078,6 +1241,43 @@ function computeIsolatedCellCount(grid, cols, rows) {
     }
   }
   return count
+}
+
+function collectActivePaletteIndices(grid) {
+  const seen = new Set()
+  for (let i = 0; i < grid.length; i++) seen.add(grid[i])
+  return Array.from(seen)
+}
+
+// Redmean perceptual distance — cheaper than CIELAB and good enough to
+// flag visually-confusable palette pairs. Output range ≈ 0-765.
+// https://www.compuphase.com/cmetric.htm
+function redmeanDistance(a, b) {
+  const rMean = (a[0] + b[0]) / 2
+  const dr = a[0] - b[0]
+  const dg = a[1] - b[1]
+  const db = a[2] - b[2]
+  return Math.sqrt(
+    (2 + rMean / 256) * dr * dr +
+    4 * dg * dg +
+    (2 + (255 - rMean) / 256) * db * db,
+  )
+}
+
+function computeMinPalettePairDistance(palette, activeIndices) {
+  if (!palette || activeIndices.length < 2) return null
+  let min = Infinity
+  for (let i = 0; i < activeIndices.length; i++) {
+    const a = palette[activeIndices[i]]
+    if (!a) continue
+    for (let j = i + 1; j < activeIndices.length; j++) {
+      const b = palette[activeIndices[j]]
+      if (!b) continue
+      const d = redmeanDistance(a, b)
+      if (d < min) min = d
+    }
+  }
+  return Number.isFinite(min) ? min : null
 }
 
 // Calibrated 2026-05-04 against 10 completed puzzles. Two clean
@@ -1108,6 +1308,170 @@ function classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction) 
 document.getElementById('diamond-complexity-btn')?.addEventListener('click', () => {
   checkDiamondComplexity().catch((err) => console.error('Complexity check failed', err))
 })
+
+// ─── Diamond session log viewer ───
+
+const DIAMOND_LOG_PREFIX = 'xefig:diamond-log:'
+
+function listDiamondSessionLogKeys() {
+  const out = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith(DIAMOND_LOG_PREFIX)) out.push(key)
+  }
+  out.sort((a, b) => (a < b ? 1 : -1))
+  return out
+}
+
+function populateDiamondSessionLogDropdown() {
+  const select = document.getElementById('diamond-session-log-select')
+  if (!select) return
+  const keys = listDiamondSessionLogKeys()
+  const previous = select.value
+  select.innerHTML = ''
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  placeholder.textContent = keys.length === 0 ? '(no captured sessions yet)' : '— pick a date —'
+  select.appendChild(placeholder)
+  for (const key of keys) {
+    const date = key.slice(DIAMOND_LOG_PREFIX.length)
+    const opt = document.createElement('option')
+    opt.value = date
+    opt.textContent = date
+    select.appendChild(opt)
+  }
+  if (previous && keys.includes(`${DIAMOND_LOG_PREFIX}${previous}`)) select.value = previous
+}
+
+function loadDiamondSessionLog(date) {
+  if (!date) return null
+  try {
+    const raw = localStorage.getItem(`${DIAMOND_LOG_PREFIX}${date}`)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function summariseSessionLog(log) {
+  if (!log || !Array.isArray(log.events) || log.events.length === 0) return null
+  const events = log.events
+  const fills = events.filter((e) => e.k === 'f')
+  const wrong = events.filter((e) => e.k === 'w')
+  const selects = events.filter((e) => e.k === 's')
+
+  // Gaps between consecutive events (any kind) — proxy for "time spent
+  // thinking/scanning between actions."
+  const gaps = []
+  for (let i = 1; i < events.length; i++) {
+    gaps.push(events[i].t - events[i - 1].t)
+  }
+  const validGaps = gaps.filter((g) => g >= 0)
+  validGaps.sort((a, b) => a - b)
+  const sum = validGaps.reduce((a, b) => a + b, 0)
+  const mean = validGaps.length ? sum / validGaps.length : 0
+  const median = validGaps.length ? validGaps[Math.floor(validGaps.length / 2)] : 0
+  const max = validGaps.length ? validGaps[validGaps.length - 1] : 0
+
+  // Per-colour active time: sum of gaps where the prior event was a
+  // fill (or a select) of that colour. This attributes "scanning time"
+  // to whichever colour the player was actively trying to place.
+  const perColor = new Map()
+  let currentColor = null
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
+    if (e.k === 's' || e.k === 'f') currentColor = e.c
+    if (i === 0) continue
+    const gap = events[i].t - events[i - 1].t
+    if (currentColor != null && gap > 0) {
+      perColor.set(currentColor, (perColor.get(currentColor) || 0) + gap)
+    }
+  }
+  const perColorSorted = Array.from(perColor.entries()).sort((a, b) => b[1] - a[1])
+
+  // Largest 5 gaps for spotting "stuck" moments.
+  const topGaps = validGaps.slice(-5).reverse()
+
+  return {
+    fills: fills.length,
+    wrong: wrong.length,
+    selects: selects.length,
+    totalEvents: events.length,
+    activeMs: log.elapsedActiveMs || 0,
+    eventSpanMs: events[events.length - 1].t,
+    meanGapMs: mean,
+    medianGapMs: median,
+    maxGapMs: max,
+    topGaps,
+    perColor: perColorSorted,
+  }
+}
+
+function renderDiamondSessionLog(date) {
+  const result = document.getElementById('diamond-session-log-result')
+  if (!result) return
+  if (!date) {
+    result.hidden = true
+    result.innerHTML = ''
+    return
+  }
+  const log = loadDiamondSessionLog(date)
+  result.hidden = false
+  result.innerHTML = ''
+  if (!log) {
+    result.textContent = `no log for ${date}`
+    return
+  }
+  const stats = summariseSessionLog(log)
+  if (!stats) {
+    result.textContent = `empty log for ${date}`
+    return
+  }
+
+  const metrics = [
+    ['fills', stats.fills],
+    ['wrong', stats.wrong],
+    ['selects', stats.selects],
+    ['active', formatDurationMs(stats.activeMs || stats.eventSpanMs)],
+    ['mean gap', `${(stats.meanGapMs / 1000).toFixed(1)}s`],
+    ['median gap', `${(stats.medianGapMs / 1000).toFixed(1)}s`],
+    ['max gap', `${(stats.maxGapMs / 1000).toFixed(1)}s`],
+  ]
+  for (const [label, value] of metrics) {
+    const el = document.createElement('span')
+    el.className = 'complexity-metric'
+    el.innerHTML = `${label} <strong>${value}</strong>`
+    result.appendChild(el)
+  }
+
+  if (stats.topGaps.length) {
+    const gapsEl = document.createElement('span')
+    gapsEl.className = 'complexity-metric'
+    gapsEl.title = 'Five longest pauses between consecutive actions — where the player got "stuck."'
+    const list = stats.topGaps.map((g) => `${(g / 1000).toFixed(0)}s`).join(' · ')
+    gapsEl.innerHTML = `top gaps <strong>${list}</strong>`
+    result.appendChild(gapsEl)
+  }
+
+  if (stats.perColor.length) {
+    const palette = document.createElement('div')
+    palette.className = 'session-log-per-color'
+    palette.title = 'Active time attributed to each colour (sum of gaps after a select/fill of that colour).'
+    for (const [colorIdx, ms] of stats.perColor.slice(0, 8)) {
+      const chip = document.createElement('span')
+      chip.className = 'session-log-color-chip'
+      chip.innerHTML = `c${colorIdx} <strong>${formatDurationMs(ms)}</strong>`
+      palette.appendChild(chip)
+    }
+    result.appendChild(palette)
+  }
+}
+
+document.getElementById('diamond-session-log-select')?.addEventListener('change', (e) => {
+  renderDiamondSessionLog(e.target.value)
+})
+populateDiamondSessionLogDropdown()
 
 // ─── Image Processing ───
 

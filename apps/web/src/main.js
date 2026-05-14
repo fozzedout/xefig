@@ -76,6 +76,8 @@ const MUSIC_ENABLED_KEY = 'xefig:music-enabled:v1'
 const MUSIC_VOLUME_KEY = 'xefig:music-volume:v1'
 const MUSIC_DEFAULT_VOLUME = 0.35
 const DIAMOND_SFX_MUTED_KEY = 'xefig:diamond-sfx-muted:v1'
+const DIAMOND_LOG_PREFIX = 'xefig:diamond-log:'
+const DIAMOND_LOG_RETAIN = 30
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
 const PUZZLE_FETCH_TIMEOUT_MS = 8000
@@ -825,6 +827,35 @@ function removeStorage(key) {
   } catch {
     // Best effort local persistence.
   }
+}
+
+function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs) {
+  if (!puzzleDate || !puzzle || typeof puzzle.getSessionLog !== 'function') return
+  let log
+  try {
+    log = puzzle.getSessionLog()
+  } catch {
+    return
+  }
+  if (!log || !Array.isArray(log.events) || log.events.length === 0) return
+  log.puzzleDate = puzzleDate
+  log.elapsedActiveMs = Number(elapsedActiveMs) || 0
+  log.savedAt = new Date().toISOString()
+  writeJsonStorage(`${DIAMOND_LOG_PREFIX}${puzzleDate}`, log)
+  pruneDiamondSessionLogs(DIAMOND_LOG_RETAIN)
+}
+
+function pruneDiamondSessionLogs(retain) {
+  let keys
+  try {
+    keys = Object.keys(localStorage).filter((k) => k.startsWith(DIAMOND_LOG_PREFIX))
+  } catch {
+    return
+  }
+  if (keys.length <= retain) return
+  // Trailing portion of each key is the puzzle date (YYYY-MM-DD) — sortable.
+  keys.sort()
+  for (const key of keys.slice(0, keys.length - retain)) removeStorage(key)
 }
 
 function getCompletedRunsByDate() {
@@ -4996,6 +5027,9 @@ function renderGame({ resumeRun = null } = {}) {
             currentRun.completed = true
             currentRun.updatedAt = new Date().toISOString()
             recordCompletedRun(currentRun)
+            if (gameMode === GAME_MODE_DIAMOND) {
+              persistDiamondSessionLog(currentRun.puzzleDate, puzzle, currentRun.elapsedActiveMs)
+            }
             const completedRun = currentRun
 
             // Celebration confetti

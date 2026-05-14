@@ -63,8 +63,38 @@ export class DiamondPaintingPuzzle {
     this.pinchStartZoom = 1
     this.didDrag = false
 
+    // Session log: replayable record of every state-changing action,
+    // with timestamps relative to the first event. Used for diagnostics
+    // (where does the time go?), demo replays, and as the substrate for
+    // server-side replay-validation anti-cheat down the line.
+    this.sessionLog = []
+    this.sessionStartTs = null
+    this.sessionLogCap = 20000
+
     this.handleWindowResize = () => this.onWindowResize()
     this.handleWindowResume = () => this.onWindowResume()
+  }
+
+  recordSessionEvent(event) {
+    if (this.completed) return
+    if (this.sessionLog.length >= this.sessionLogCap) return
+    const now = performance.now()
+    if (this.sessionStartTs == null) this.sessionStartTs = now
+    event.t = Math.round(now - this.sessionStartTs)
+    this.sessionLog.push(event)
+  }
+
+  getSessionLog() {
+    return {
+      version: 1,
+      cols: this.cols,
+      rows: this.rows,
+      paletteSize: this.palette?.length || 0,
+      startedAt: this.sessionStartTs != null
+        ? new Date(Date.now() - (performance.now() - this.sessionStartTs)).toISOString()
+        : null,
+      events: this.sessionLog.slice(),
+    }
   }
 
   async init() {
@@ -389,7 +419,10 @@ export class DiamondPaintingPuzzle {
     for (let i = 0; i < this.swatches.length; i++) {
       this.swatches[i].classList.toggle('selected', i === index)
     }
-    if (changed && !this.muted) playClick()
+    if (changed) {
+      this.recordSessionEvent({ k: 's', c: index })
+      if (!this.muted) playClick()
+    }
   }
 
   // ─── Events ───
@@ -529,6 +562,7 @@ export class DiamondPaintingPuzzle {
     // (correct or wrong) until the restore completes so rapid taps can't
     // stack mismatched fills on top of an in-flight restore.
     if (this.selectedColor !== targetGridColor) {
+      this.recordSessionEvent({ k: 'w', c: this.selectedColor, i: index })
       this.filling = true
       const allIdx = this.collectFloodIndices(col, row, targetGridColor, currentFill)
       for (const idx of allIdx) {
@@ -551,6 +585,12 @@ export class DiamondPaintingPuzzle {
     const waves = this.collectFloodWaves(col, row, targetGridColor, currentFill)
 
     if (waves.length === 0) return
+
+    // Record before the visual fill so the timestamp matches the tap
+    // (animation duration scales with region size and would smear the
+    // gap distribution downstream).
+    const filledCount = waves.reduce((sum, w) => sum + w.length, 0)
+    this.recordSessionEvent({ k: 'f', c: this.selectedColor, i: index, n: filledCount })
 
     if (waves.length === 1) {
       // Single cell — fill instantly
