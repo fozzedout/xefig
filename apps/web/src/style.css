@@ -6818,8 +6818,7 @@ canvas.slice-image {
      and --palette-cols based on available viewport height so the wrap
      stays balanced — e.g. 24 in one column on desktop, 12+12 on a medium
      viewport, 8+8+8 on phone landscape — instead of dumping the overflow
-     into a near-empty straggler column. Vertical padding pulls the
-     top/bottom swatches inside any curved-corner dead zone on phones. */
+     into a near-empty straggler column. */
   .diamond-palette-bar {
     left: auto;
     right: 0;
@@ -6830,7 +6829,7 @@ canvas.slice-image {
     grid-template-columns: repeat(var(--palette-cols, 1), auto);
     grid-auto-flow: column;
     gap: 6px;
-    padding: calc(28px + var(--sai-top, 0px)) calc(8px + var(--sai-right, 0px)) calc(28px + var(--sai-bottom, 0px)) 8px;
+    padding: 0 8px;
     overflow: hidden;
     align-content: center;
     justify-content: end;
