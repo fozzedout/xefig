@@ -7,6 +7,15 @@ import {
   ensureSubmissionsTable,
   isLeaderboardGameMode,
 } from './lib/leaderboard'
+import {
+  ensureDiamondSessionLogTable,
+  MAX_LOG_JSON_BYTES,
+} from './lib/diamond-session-log'
+import {
+  ensureDiamondTestSessionLogTable,
+  isValidTestId,
+  TEST_LOG_MAX_JSON_BYTES,
+} from './lib/diamond-test-session-log'
 import { ensureContactTable, validateContact as validateContactForm, storeContactMessage } from './lib/contact'
 import { registerProfile, linkProfile, pushProfile, pullProfile, type PushInput } from './lib/sync'
 import {
@@ -1277,6 +1286,322 @@ export function createApp() {
     } catch (error) {
       console.error('Leaderboard submit failed', error)
       return c.json({ error: 'Unable to submit leaderboard entry.' }, 500)
+    }
+  })
+
+  // ─── Diamond session logs ───
+  // Client uploads its in-memory event log on completion so the run can
+  // be reviewed in admin from any device (the local copy alone wasn't
+  // useful — playing on phone, reviewing on laptop = empty list).
+
+  app.post('/api/diamond/session-log', async (c) => {
+    let body:
+      | {
+        puzzleDate?: string
+        playerGuid?: string
+        elapsedActiveMs?: number
+        log?: unknown
+      }
+      | null = null
+    try {
+      body = (await c.req.json()) as typeof body
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const puzzleDate = (body?.puzzleDate || '').trim()
+    const playerGuid = (body?.playerGuid || '').trim()
+    const elapsedActiveMs = Number(body?.elapsedActiveMs)
+
+    if (!isValidDateKey(puzzleDate)) {
+      return c.json({ error: 'Invalid puzzleDate. Use YYYY-MM-DD.' }, 400)
+    }
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+      return c.json({ error: 'Invalid playerGuid.' }, 400)
+    }
+    if (!Number.isFinite(elapsedActiveMs) || elapsedActiveMs < 0 || elapsedActiveMs > 24 * 60 * 60 * 1000) {
+      return c.json({ error: 'Invalid elapsedActiveMs.' }, 400)
+    }
+    const log = body?.log as { events?: unknown } | undefined
+    if (!log || !Array.isArray(log.events) || log.events.length === 0) {
+      return c.json({ error: 'Empty log.' }, 400)
+    }
+    const eventCount = log.events.length
+    const logJson = JSON.stringify(log)
+    if (logJson.length > MAX_LOG_JSON_BYTES) {
+      return c.json({ error: 'Log too large.' }, 413)
+    }
+
+    try {
+      await ensureDiamondSessionLogTable(c.env.DB)
+      await c.env.DB
+        .prepare(
+          `INSERT INTO diamond_session_logs (puzzle_date, player_guid, elapsed_active_ms, event_count, log_json, uploaded_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(puzzle_date, player_guid) DO UPDATE SET
+             elapsed_active_ms = excluded.elapsed_active_ms,
+             event_count = excluded.event_count,
+             log_json = excluded.log_json,
+             uploaded_at = excluded.uploaded_at`,
+        )
+        .bind(puzzleDate, playerGuid, Math.round(elapsedActiveMs), eventCount, logJson)
+        .run()
+      return c.json({ ok: true })
+    } catch (error) {
+      console.error('Diamond session log upload failed', error)
+      return c.json({ error: 'Unable to store session log.' }, 500)
+    }
+  })
+
+  // ─── Diamond TEST session logs ───
+  // Calibration runs against the bundled hero image. Stored in their
+  // own table, exposed via their own admin endpoints, never touch the
+  // production logs / leaderboard / completion stats.
+
+  app.post('/api/diamond/test-session-log', async (c) => {
+    let body:
+      | {
+        testId?: string
+        playerGuid?: string
+        elapsedActiveMs?: number
+        log?: unknown
+      }
+      | null = null
+    try {
+      body = (await c.req.json()) as typeof body
+    } catch {
+      return c.json({ error: 'Invalid JSON body.' }, 400)
+    }
+
+    const testId = (body?.testId || '').trim()
+    const playerGuid = (body?.playerGuid || '').trim()
+    const elapsedActiveMs = Number(body?.elapsedActiveMs)
+
+    if (!isValidTestId(testId)) {
+      return c.json({ error: 'Invalid testId.' }, 400)
+    }
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerGuid)) {
+      return c.json({ error: 'Invalid playerGuid.' }, 400)
+    }
+    if (!Number.isFinite(elapsedActiveMs) || elapsedActiveMs < 0 || elapsedActiveMs > 24 * 60 * 60 * 1000) {
+      return c.json({ error: 'Invalid elapsedActiveMs.' }, 400)
+    }
+    const log = body?.log as { events?: unknown } | undefined
+    if (!log || !Array.isArray(log.events) || log.events.length === 0) {
+      return c.json({ error: 'Empty log.' }, 400)
+    }
+    const eventCount = log.events.length
+    const logJson = JSON.stringify(log)
+    if (logJson.length > TEST_LOG_MAX_JSON_BYTES) {
+      return c.json({ error: 'Log too large.' }, 413)
+    }
+
+    try {
+      await ensureDiamondTestSessionLogTable(c.env.DB)
+      await c.env.DB
+        .prepare(
+          `INSERT INTO diamond_test_session_logs (test_id, player_guid, elapsed_active_ms, event_count, log_json, uploaded_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(test_id, player_guid) DO UPDATE SET
+             elapsed_active_ms = excluded.elapsed_active_ms,
+             event_count = excluded.event_count,
+             log_json = excluded.log_json,
+             uploaded_at = excluded.uploaded_at`,
+        )
+        .bind(testId, playerGuid, Math.round(elapsedActiveMs), eventCount, logJson)
+        .run()
+      return c.json({ ok: true })
+    } catch (error) {
+      console.error('Diamond test session log upload failed', error)
+      return c.json({ error: 'Unable to store test session log.' }, 500)
+    }
+  })
+
+  app.get('/api/admin/diamond/test-session-logs', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    try {
+      await ensureDiamondTestSessionLogTable(c.env.DB)
+      const rows = await c.env.DB
+        .prepare(
+          `SELECT test_id, player_guid, elapsed_active_ms, event_count, uploaded_at
+           FROM diamond_test_session_logs
+           ORDER BY uploaded_at DESC
+           LIMIT 500`,
+        )
+        .all<{
+          test_id: string
+          player_guid: string
+          elapsed_active_ms: number
+          event_count: number
+          uploaded_at: string
+        }>()
+      const entries = (rows.results || []).map((row) => ({
+        testId: row.test_id,
+        playerGuid: row.player_guid,
+        elapsedActiveMs: Number(row.elapsed_active_ms) || 0,
+        eventCount: Number(row.event_count) || 0,
+        uploadedAt: row.uploaded_at,
+      }))
+      return c.json({ ok: true, entries })
+    } catch (error) {
+      console.error('Diamond test session log list failed', error)
+      return c.json({ error: 'Unable to list test session logs.' }, 500)
+    }
+  })
+
+  app.get('/api/admin/diamond/test-session-logs/:testId', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    const testId = c.req.param('testId')
+    if (!isValidTestId(testId)) {
+      return c.json({ error: 'Invalid testId.' }, 400)
+    }
+    const requestedPlayer = (c.req.query('player') || '').trim()
+    try {
+      await ensureDiamondTestSessionLogTable(c.env.DB)
+      let row:
+        | { player_guid: string; elapsed_active_ms: number; log_json: string; uploaded_at: string }
+        | null = null
+      if (requestedPlayer) {
+        row = await c.env.DB
+          .prepare(
+            `SELECT player_guid, elapsed_active_ms, log_json, uploaded_at
+             FROM diamond_test_session_logs
+             WHERE test_id = ? AND player_guid = ?
+             LIMIT 1`,
+          )
+          .bind(testId, requestedPlayer)
+          .first()
+      } else {
+        row = await c.env.DB
+          .prepare(
+            `SELECT player_guid, elapsed_active_ms, log_json, uploaded_at
+             FROM diamond_test_session_logs
+             WHERE test_id = ?
+             ORDER BY uploaded_at DESC
+             LIMIT 1`,
+          )
+          .bind(testId)
+          .first()
+      }
+      if (!row) return c.json({ error: 'No test log for that id.' }, 404)
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(row.log_json)
+      } catch {
+        return c.json({ error: 'Stored log is malformed.' }, 500)
+      }
+      return c.json({
+        ok: true,
+        testId,
+        playerGuid: row.player_guid,
+        elapsedActiveMs: Number(row.elapsed_active_ms) || 0,
+        uploadedAt: row.uploaded_at,
+        log: parsed,
+      })
+    } catch (error) {
+      console.error('Diamond test session log fetch failed', error)
+      return c.json({ error: 'Unable to load test session log.' }, 500)
+    }
+  })
+
+  app.get('/api/admin/diamond/session-logs', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    try {
+      await ensureDiamondSessionLogTable(c.env.DB)
+      const rows = await c.env.DB
+        .prepare(
+          `SELECT puzzle_date, player_guid, elapsed_active_ms, event_count, uploaded_at
+           FROM diamond_session_logs
+           ORDER BY puzzle_date DESC, uploaded_at DESC
+           LIMIT 500`,
+        )
+        .all<{
+          puzzle_date: string
+          player_guid: string
+          elapsed_active_ms: number
+          event_count: number
+          uploaded_at: string
+        }>()
+      const entries = (rows.results || []).map((row) => ({
+        puzzleDate: row.puzzle_date,
+        playerGuid: row.player_guid,
+        elapsedActiveMs: Number(row.elapsed_active_ms) || 0,
+        eventCount: Number(row.event_count) || 0,
+        uploadedAt: row.uploaded_at,
+      }))
+      return c.json({ ok: true, entries })
+    } catch (error) {
+      console.error('Diamond session log list failed', error)
+      return c.json({ error: 'Unable to list session logs.' }, 500)
+    }
+  })
+
+  app.get('/api/admin/diamond/session-logs/:date', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+    const date = c.req.param('date')
+    if (!isValidDateKey(date)) {
+      return c.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, 400)
+    }
+    const requestedPlayer = (c.req.query('player') || '').trim()
+    try {
+      await ensureDiamondSessionLogTable(c.env.DB)
+      let row: { player_guid: string; elapsed_active_ms: number; log_json: string; uploaded_at: string } | null = null
+      if (requestedPlayer) {
+        row = await c.env.DB
+          .prepare(
+            `SELECT player_guid, elapsed_active_ms, log_json, uploaded_at
+             FROM diamond_session_logs
+             WHERE puzzle_date = ? AND player_guid = ?
+             LIMIT 1`,
+          )
+          .bind(date, requestedPlayer)
+          .first()
+      } else {
+        row = await c.env.DB
+          .prepare(
+            `SELECT player_guid, elapsed_active_ms, log_json, uploaded_at
+             FROM diamond_session_logs
+             WHERE puzzle_date = ?
+             ORDER BY uploaded_at DESC
+             LIMIT 1`,
+          )
+          .bind(date)
+          .first()
+      }
+      if (!row) return c.json({ error: 'No log for that date.' }, 404)
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(row.log_json)
+      } catch {
+        return c.json({ error: 'Stored log is malformed.' }, 500)
+      }
+      return c.json({
+        ok: true,
+        puzzleDate: date,
+        playerGuid: row.player_guid,
+        elapsedActiveMs: Number(row.elapsed_active_ms) || 0,
+        uploadedAt: row.uploaded_at,
+        log: parsed,
+      })
+    } catch (error) {
+      console.error('Diamond session log fetch failed', error)
+      return c.json({ error: 'Unable to load session log.' }, 500)
     }
   })
 

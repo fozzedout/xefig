@@ -889,6 +889,34 @@ h1 {
   background: rgba(80, 232, 160, 0.22);
 }
 
+.settings-testing-description {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.4;
+  margin: 0 0 0.6rem;
+}
+.settings-testing-description code {
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 0 0.25rem;
+}
+.settings-test-btn {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e8e6e0;
+  background: rgba(224, 112, 160, 0.18);
+  border: 1px solid rgba(224, 112, 160, 0.45);
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.settings-test-btn:hover {
+  background: rgba(224, 112, 160, 0.28);
+}
+
 .sync-now-btn:disabled {
   opacity: 0.55;
   cursor: wait;
@@ -3679,6 +3707,169 @@ canvas.slice-image {
 .more-sheet-overlay.is-visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+.unfinished-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 1010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  padding: max(1rem, var(--sai-top)) max(1rem, var(--sai-right)) max(1rem, var(--sai-bottom)) max(1rem, var(--sai-left));
+}
+.unfinished-overlay.is-visible { opacity: 1; pointer-events: auto; }
+.unfinished-panel {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #1a1a2a, #0f0f1a);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.4rem 1rem 1rem;
+  color: #e8e6e0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.unfinished-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.unfinished-close:hover { background: rgba(255, 255, 255, 0.12); }
+.unfinished-header { text-align: center; margin: 0 0 0.9rem; }
+.unfinished-title { margin: 0 0 0.25rem; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; }
+.unfinished-sub { margin: 0; font-size: 0.78rem; color: rgba(255, 255, 255, 0.62); }
+
+.unfinished-struck {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(80, 232, 160, 0.08);
+  border: 1px solid rgba(80, 232, 160, 0.24);
+  border-radius: 10px;
+}
+.unfinished-struck-row { display: flex; align-items: center; gap: 0.55rem; }
+.unfinished-struck-label {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.85rem;
+  position: relative;
+  transition: color 0.5s ease 0.1s;
+}
+.unfinished-struck-label::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 100%;
+  top: 50%;
+  height: 2px;
+  background: rgba(80, 232, 160, 0.85);
+  transition: right 0.55s cubic-bezier(0.34, 1.2, 0.6, 1);
+}
+.unfinished-struck.is-struck .unfinished-struck-label { color: rgba(232, 230, 224, 0.55); }
+.unfinished-struck.is-struck .unfinished-struck-label::after { right: 0; }
+.unfinished-struck-stamp {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #50e8a0;
+  padding: 0.18rem 0.45rem;
+  border: 1px solid rgba(80, 232, 160, 0.45);
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.4s ease 0.45s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.45s;
+}
+.unfinished-struck.is-struck .unfinished-struck-stamp { opacity: 1; transform: scale(1); }
+
+.unfinished-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.unfinished-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.7rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+  font: inherit;
+}
+.unfinished-row:hover, .unfinished-row:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+  outline: none;
+}
+.unfinished-mode-icon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #888;
+}
+.unfinished-mode-icon[data-mode="jigsaw"] { background: #f0c040; }
+.unfinished-mode-icon[data-mode="sliding"] { background: #40d0f0; }
+.unfinished-mode-icon[data-mode="swap"] { background: #50d070; }
+.unfinished-mode-icon[data-mode="polygram"] { background: #a060f0; }
+.unfinished-mode-icon[data-mode="diamond"] { background: #e070a0; }
+.unfinished-row-body { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.unfinished-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+.unfinished-row-mode { font-weight: 600; font-size: 0.86rem; }
+.unfinished-row-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.86);
+}
+.unfinished-row-bar {
+  display: block;
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.unfinished-row-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f0c040, #e070a0);
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.34, 1.2, 0.6, 1);
+}
+.unfinished-row-meta {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+.unfinished-row-goad {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-style: italic;
+}
+.unfinished-empty {
+  margin: 0.5rem 0;
+  padding: 0.8rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .more-sheet {
@@ -7245,7 +7436,15 @@ canvas.slice-image {
    travelling bouncer used during "How to play" / hint sequences.
 */
 .gt-icon-btn--assistant {
-  padding: 4px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.gt-icon-btn--assistant:hover {
+  background: transparent;
 }
 .gt-icon-btn--assistant .assistant-logo {
   width: 100%;

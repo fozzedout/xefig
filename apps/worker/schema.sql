@@ -89,3 +89,35 @@ ON puzzle_submissions (player_guid, submitted_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_puzzle_submissions_puzzle
 ON puzzle_submissions (puzzle_date, game_mode, difficulty, submitted_at DESC);
+
+-- Diamond (paint) session logs uploaded from the client on completion.
+-- Lets admin review timings from any device, not just the one that
+-- played the run.
+CREATE TABLE IF NOT EXISTS diamond_session_logs (
+    puzzle_date TEXT NOT NULL,
+    player_guid TEXT NOT NULL,
+    elapsed_active_ms INTEGER NOT NULL,
+    event_count INTEGER NOT NULL,
+    log_json TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (puzzle_date, player_guid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_diamond_session_logs_date
+ON diamond_session_logs (puzzle_date, uploaded_at DESC);
+
+-- Diamond TEST session logs. Calibration runs against the bundled hero
+-- image — kept in their own table so they never pollute production
+-- analytics, leaderboards, or completion stats.
+CREATE TABLE IF NOT EXISTS diamond_test_session_logs (
+    test_id TEXT NOT NULL,
+    player_guid TEXT NOT NULL,
+    elapsed_active_ms INTEGER NOT NULL,
+    event_count INTEGER NOT NULL,
+    log_json TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (test_id, player_guid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_diamond_test_session_logs_uploaded
+ON diamond_test_session_logs (uploaded_at DESC);

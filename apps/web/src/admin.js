@@ -1323,27 +1323,77 @@ function listDiamondSessionLogKeys() {
   return out
 }
 
-function populateDiamondSessionLogDropdown() {
+async function fetchRemoteSessionLogIndex() {
+  try {
+    const res = await fetch('/api/admin/diamond/session-logs', { credentials: 'include' })
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data?.entries) ? data.entries : []
+  } catch {
+    return []
+  }
+}
+
+function formatRemoteOptionLabel(entry) {
+  const elapsed = Number(entry.elapsedActiveMs) || 0
+  const mins = Math.floor(elapsed / 60000)
+  const secs = Math.floor((elapsed % 60000) / 1000)
+  const time = `${mins}m${String(secs).padStart(2, '0')}s`
+  const player = String(entry.playerGuid || '').slice(0, 8)
+  return `${entry.puzzleDate} · remote · ${time} · ${entry.eventCount || 0} ev · ${player}`
+}
+
+async function populateDiamondSessionLogDropdown() {
   const select = document.getElementById('diamond-session-log-select')
   if (!select) return
-  const keys = listDiamondSessionLogKeys()
   const previous = select.value
+  select.innerHTML = ''
+  const loading = document.createElement('option')
+  loading.value = ''
+  loading.textContent = 'loading…'
+  select.appendChild(loading)
+
+  const [remoteEntries, localKeys] = await Promise.all([
+    fetchRemoteSessionLogIndex(),
+    Promise.resolve(listDiamondSessionLogKeys()),
+  ])
+
   select.innerHTML = ''
   const placeholder = document.createElement('option')
   placeholder.value = ''
-  placeholder.textContent = keys.length === 0 ? '(no captured sessions yet)' : '— pick a date —'
+  const hasAny = remoteEntries.length > 0 || localKeys.length > 0
+  placeholder.textContent = hasAny ? '— pick a session —' : '(no captured sessions yet)'
   select.appendChild(placeholder)
-  for (const key of keys) {
-    const date = key.slice(DIAMOND_LOG_PREFIX.length)
+
+  // Remote entries first, already sorted by date desc + upload time desc.
+  for (const entry of remoteEntries) {
+    if (!entry?.puzzleDate || !entry?.playerGuid) continue
     const opt = document.createElement('option')
-    opt.value = date
-    opt.textContent = date
+    opt.value = `remote:${entry.puzzleDate}:${entry.playerGuid}`
+    opt.textContent = formatRemoteOptionLabel(entry)
     select.appendChild(opt)
   }
-  if (previous && keys.includes(`${DIAMOND_LOG_PREFIX}${previous}`)) select.value = previous
+
+  // Local-only entries (date not also present in remote — surface them
+  // so we still see runs from devices that uploaded before this code
+  // shipped, or runs that uploaded under a different guid).
+  const remoteDates = new Set(remoteEntries.map((e) => e?.puzzleDate))
+  for (const key of localKeys) {
+    const date = key.slice(DIAMOND_LOG_PREFIX.length)
+    if (remoteDates.has(date)) continue
+    const opt = document.createElement('option')
+    opt.value = `local:${date}`
+    opt.textContent = `${date} · local only`
+    select.appendChild(opt)
+  }
+
+  if (previous) {
+    const match = Array.from(select.options).find((o) => o.value === previous)
+    if (match) select.value = previous
+  }
 }
 
-function loadDiamondSessionLog(date) {
+function loadDiamondSessionLogLocal(date) {
   if (!date) return null
   try {
     const raw = localStorage.getItem(`${DIAMOND_LOG_PREFIX}${date}`)
@@ -1352,6 +1402,47 @@ function loadDiamondSessionLog(date) {
   } catch {
     return null
   }
+}
+
+async function loadDiamondSessionLogRemote(date, playerGuid) {
+  if (!date) return null
+  try {
+    const url = playerGuid
+      ? `/api/admin/diamond/session-logs/${encodeURIComponent(date)}?player=${encodeURIComponent(playerGuid)}`
+      : `/api/admin/diamond/session-logs/${encodeURIComponent(date)}`
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data?.log) return null
+    const log = data.log
+    log.puzzleDate = data.puzzleDate
+    log.elapsedActiveMs = Number(data.elapsedActiveMs) || log.elapsedActiveMs || 0
+    log.remotePlayerGuid = data.playerGuid
+    log.remoteUploadedAt = data.uploadedAt
+    return log
+  } catch {
+    return null
+  }
+}
+
+async function loadDiamondSessionLogByValue(value) {
+  if (!value) return null
+  if (value.startsWith('remote:')) {
+    const rest = value.slice('remote:'.length)
+    const sep = rest.indexOf(':')
+    const date = sep === -1 ? rest : rest.slice(0, sep)
+    const guid = sep === -1 ? '' : rest.slice(sep + 1)
+    const remote = await loadDiamondSessionLogRemote(date, guid)
+    if (remote) return remote
+    return loadDiamondSessionLogLocal(date)
+  }
+  if (value.startsWith('local:')) {
+    return loadDiamondSessionLogLocal(value.slice('local:'.length))
+  }
+  // Legacy bare-date selector value — try remote, then local.
+  const remote = await loadDiamondSessionLogRemote(value)
+  if (remote) return remote
+  return loadDiamondSessionLogLocal(value)
 }
 
 function summariseSessionLog(log) {
@@ -1408,19 +1499,92 @@ function summariseSessionLog(log) {
   }
 }
 
-function renderDiamondSessionLog(date) {
+// Reconstruction sanity-check on the raw events. If the recording is
+// clean, every cell index should appear in exactly one 'f' event and
+// the sum of 'n' across all 'f' events should equal cols*rows. Anything
+// else is evidence the recording itself is corrupted (or that regions
+// were tapped in pieces, which the code path supposedly prevents).
+function reconstructSessionLog(log) {
+  if (!log || !Array.isArray(log.events)) return null
+  const cols = Number(log.cols) || 0
+  const rows = Number(log.rows) || 0
+  const totalCells = cols * rows
+  const events = log.events
+
+  const tapCells = new Map()
+  let sumN = 0
+  let fCount = 0
+  let minN = Infinity
+  let maxN = -Infinity
+  let nMissing = 0
+  for (const e of events) {
+    if (e.k !== 'f') continue
+    fCount++
+    const n = Number(e.n)
+    if (!Number.isFinite(n)) {
+      nMissing++
+      continue
+    }
+    sumN += n
+    if (n < minN) minN = n
+    if (n > maxN) maxN = n
+    const i = Number(e.i)
+    if (Number.isFinite(i)) {
+      tapCells.set(i, (tapCells.get(i) || 0) + 1)
+    }
+  }
+  if (!Number.isFinite(minN)) minN = 0
+  if (!Number.isFinite(maxN)) maxN = 0
+
+  let duplicateTapCells = 0
+  let duplicateTapTotal = 0
+  const exampleDuplicates = []
+  for (const [i, count] of tapCells) {
+    if (count > 1) {
+      duplicateTapCells++
+      duplicateTapTotal += count - 1
+      if (exampleDuplicates.length < 5) exampleDuplicates.push({ i, count })
+    }
+  }
+
+  const cellsAccountedFor = sumN
+  const cellsExpected = totalCells
+  const cellShortfall = cellsExpected - cellsAccountedFor
+  const meanCellsPerFill = fCount > 0 ? sumN / fCount : 0
+
+  return {
+    cols,
+    rows,
+    totalCells,
+    fCount,
+    sumN,
+    cellShortfall,
+    meanCellsPerFill,
+    minN,
+    maxN,
+    nMissing,
+    uniqueTapCells: tapCells.size,
+    duplicateTapCells,
+    duplicateTapTotal,
+    exampleDuplicates,
+    consistent: nMissing === 0 && duplicateTapCells === 0 && cellShortfall === 0 && tapCells.size === fCount,
+  }
+}
+
+async function renderDiamondSessionLog(value) {
   const result = document.getElementById('diamond-session-log-result')
   if (!result) return
-  if (!date) {
+  if (!value) {
     result.hidden = true
     result.innerHTML = ''
     return
   }
-  const log = loadDiamondSessionLog(date)
   result.hidden = false
+  result.innerHTML = 'loading…'
+  const log = await loadDiamondSessionLogByValue(value)
   result.innerHTML = ''
   if (!log) {
-    result.textContent = `no log for ${date}`
+    result.textContent = `no log for ${value}`
     return
   }
   const stats = summariseSessionLog(log)
@@ -1429,11 +1593,20 @@ function renderDiamondSessionLog(date) {
     return
   }
 
+  // Event span = time covered by THIS instance's recorded events.
+  // Active = total play time (cumulative across instances). When they
+  // diverge, the puzzle was reloaded mid-play (e.g. iOS discarded the
+  // tab) and events from earlier instances are lost.
+  const eventSpanMs = stats.eventSpanMs || 0
+  const activeMs = stats.activeMs || 0
+  const spanGapMs = Math.max(0, activeMs - eventSpanMs)
   const metrics = [
     ['fills', stats.fills],
     ['wrong', stats.wrong],
     ['selects', stats.selects],
-    ['active', formatDurationMs(stats.activeMs || stats.eventSpanMs)],
+    ['active', formatDurationMs(activeMs || eventSpanMs)],
+    ['event span', formatDurationMs(eventSpanMs)],
+    ['unlogged time', formatDurationMs(spanGapMs)],
     ['mean gap', `${(stats.meanGapMs / 1000).toFixed(1)}s`],
     ['median gap', `${(stats.medianGapMs / 1000).toFixed(1)}s`],
     ['max gap', `${(stats.maxGapMs / 1000).toFixed(1)}s`],
@@ -1454,6 +1627,54 @@ function renderDiamondSessionLog(date) {
     result.appendChild(gapsEl)
   }
 
+  const recon = reconstructSessionLog(log)
+  if (recon) {
+    const reconRow = document.createElement('div')
+    reconRow.className = 'session-log-recon'
+    const header = document.createElement('div')
+    header.className = 'session-log-recon-header'
+    header.textContent = recon.consistent
+      ? 'reconstruction: recording is internally consistent'
+      : 'reconstruction: anomalies detected'
+    header.dataset.state = recon.consistent ? 'ok' : 'warn'
+    reconRow.appendChild(header)
+
+    const reconMetrics = [
+      ['grid', `${recon.cols}×${recon.rows} = ${recon.totalCells} cells`],
+      ['f events', recon.fCount],
+      ['unique tap cells', recon.uniqueTapCells],
+      ['sum n', recon.sumN],
+      ['cells unaccounted', recon.cellShortfall],
+      ['mean cells/fill', recon.meanCellsPerFill.toFixed(2)],
+      ['min/max n', `${recon.minN} / ${recon.maxN}`],
+    ]
+    if (recon.duplicateTapCells > 0) {
+      reconMetrics.push(['duplicate-tap cells', recon.duplicateTapCells])
+      reconMetrics.push(['extra duplicate taps', recon.duplicateTapTotal])
+    }
+    if (recon.nMissing > 0) {
+      reconMetrics.push(['events missing n', recon.nMissing])
+    }
+    for (const [label, value] of reconMetrics) {
+      const el = document.createElement('span')
+      el.className = 'complexity-metric'
+      el.innerHTML = `${label} <strong>${value}</strong>`
+      reconRow.appendChild(el)
+    }
+
+    if (recon.exampleDuplicates.length > 0) {
+      const dupEl = document.createElement('span')
+      dupEl.className = 'complexity-metric'
+      const list = recon.exampleDuplicates.map((d) => `${d.i}×${d.count}`).join(' · ')
+      dupEl.innerHTML = `duplicate cells <strong>${list}</strong>`
+      reconRow.appendChild(dupEl)
+    }
+
+    result.appendChild(reconRow)
+  }
+
+  renderGridStatsPanel(result, log.gridStats, stats.perColor)
+
   if (stats.perColor.length) {
     const palette = document.createElement('div')
     palette.className = 'session-log-per-color'
@@ -1468,10 +1689,327 @@ function renderDiamondSessionLog(date) {
   }
 }
 
+// Render the stamped static-grid features and join them with the
+// per-colour active times so calibration patterns are visible at a
+// glance: e.g. a colour with many regions per cell tends to eat
+// disproportionate active time.
+function renderGridStatsPanel(result, gridStats, perColor) {
+  if (!gridStats) return
+  const row = document.createElement('div')
+  row.className = 'session-log-recon'
+  const header = document.createElement('div')
+  header.className = 'session-log-recon-header'
+  header.textContent = 'grid features (stamped at init)'
+  row.appendChild(header)
+
+  const histo = gridStats.regionSizeHistogram || {}
+  const items = [
+    ['cleanup', `level ${gridStats.cleanupLevelUsed}`],
+    ['regions', gridStats.regionCount],
+    ['largest', gridStats.largestRegionSize],
+    ['n=1', histo['1'] || 0],
+    ['n=2-4', histo['2-4'] || 0],
+    ['n=5-16', histo['5-16'] || 0],
+    ['n=17-64', histo['17-64'] || 0],
+    ['n=65+', histo['65+'] || 0],
+  ]
+  for (const [label, val] of items) {
+    const el = document.createElement('span')
+    el.className = 'complexity-metric'
+    el.innerHTML = `${label} <strong>${val}</strong>`
+    row.appendChild(el)
+  }
+
+  // Per-colour join: cells × regions × active-time. Sort by active-time
+  // desc so the slow colours surface first; mean cells/region is the
+  // headline fragmentation metric (low = clumpy, high = fragmented).
+  const activeByColor = new Map(perColor || [])
+  const cellsPerColor = gridStats.cellsPerColor || []
+  const regionsPerColor = gridStats.regionsPerColor || []
+  const colorRows = []
+  for (let i = 0; i < cellsPerColor.length; i++) {
+    const cells = cellsPerColor[i] || 0
+    if (cells === 0) continue
+    const regions = regionsPerColor[i] || 0
+    const meanRegionSize = regions ? cells / regions : 0
+    colorRows.push({
+      idx: i,
+      cells,
+      regions,
+      meanRegionSize,
+      activeMs: activeByColor.get(i) || 0,
+    })
+  }
+  colorRows.sort((a, b) => b.activeMs - a.activeMs)
+
+  if (colorRows.length) {
+    const tbl = document.createElement('div')
+    tbl.className = 'session-log-per-color'
+    for (const r of colorRows.slice(0, 12)) {
+      const chip = document.createElement('span')
+      chip.className = 'session-log-color-chip'
+      const swatch = (gridStats.paletteRgb || [])[r.idx]
+      const rgb = swatch ? `rgb(${swatch[0]},${swatch[1]},${swatch[2]})` : '#888'
+      chip.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${rgb};vertical-align:middle;margin-right:4px"></span>c${r.idx} <strong>${formatDurationMs(r.activeMs)}</strong> · ${r.cells}c/${r.regions}r · μ${r.meanRegionSize.toFixed(1)}`
+      tbl.appendChild(chip)
+    }
+    result.appendChild(tbl)
+  }
+}
+
 document.getElementById('diamond-session-log-select')?.addEventListener('change', (e) => {
   renderDiamondSessionLog(e.target.value)
 })
 populateDiamondSessionLogDropdown()
+
+// ─── Diamond TEST session log viewer ───
+// Mirrors the regular viewer but reads from a separate localStorage
+// namespace and a separate worker endpoint, so test/calibration runs
+// stay completely segregated from real plays.
+
+const DIAMOND_TEST_LOG_PREFIX = 'xefig:diamond-test-log:'
+
+function listDiamondTestLogKeys() {
+  const out = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith(DIAMOND_TEST_LOG_PREFIX)) out.push(key)
+  }
+  out.sort((a, b) => (a < b ? 1 : -1))
+  return out
+}
+
+async function fetchRemoteTestLogIndex() {
+  try {
+    const res = await fetch('/api/admin/diamond/test-session-logs', { credentials: 'include' })
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data?.entries) ? data.entries : []
+  } catch {
+    return []
+  }
+}
+
+function formatTestRemoteLabel(entry) {
+  const elapsed = Number(entry.elapsedActiveMs) || 0
+  const mins = Math.floor(elapsed / 60000)
+  const secs = Math.floor((elapsed % 60000) / 1000)
+  const time = `${mins}m${String(secs).padStart(2, '0')}s`
+  const player = String(entry.playerGuid || '').slice(0, 8)
+  return `${entry.testId} · remote · ${time} · ${entry.eventCount || 0} ev · ${player}`
+}
+
+async function populateDiamondTestLogDropdown() {
+  const select = document.getElementById('diamond-test-log-select')
+  if (!select) return
+  const previous = select.value
+  select.innerHTML = ''
+  const loading = document.createElement('option')
+  loading.value = ''
+  loading.textContent = 'loading…'
+  select.appendChild(loading)
+
+  const [remoteEntries, localKeys] = await Promise.all([
+    fetchRemoteTestLogIndex(),
+    Promise.resolve(listDiamondTestLogKeys()),
+  ])
+
+  select.innerHTML = ''
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  const hasAny = remoteEntries.length > 0 || localKeys.length > 0
+  placeholder.textContent = hasAny ? '— pick a test run —' : '(no captured test runs yet)'
+  select.appendChild(placeholder)
+
+  for (const entry of remoteEntries) {
+    if (!entry?.testId || !entry?.playerGuid) continue
+    const opt = document.createElement('option')
+    opt.value = `remote:${entry.testId}:${entry.playerGuid}`
+    opt.textContent = formatTestRemoteLabel(entry)
+    select.appendChild(opt)
+  }
+
+  const remoteIds = new Set(remoteEntries.map((e) => e?.testId))
+  for (const key of localKeys) {
+    const id = key.slice(DIAMOND_TEST_LOG_PREFIX.length)
+    if (remoteIds.has(id)) continue
+    const opt = document.createElement('option')
+    opt.value = `local:${id}`
+    opt.textContent = `${id} · local only`
+    select.appendChild(opt)
+  }
+
+  if (previous) {
+    const match = Array.from(select.options).find((o) => o.value === previous)
+    if (match) select.value = previous
+  }
+}
+
+function loadDiamondTestLogLocal(id) {
+  if (!id) return null
+  try {
+    const raw = localStorage.getItem(`${DIAMOND_TEST_LOG_PREFIX}${id}`)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+async function loadDiamondTestLogRemote(id, playerGuid) {
+  if (!id) return null
+  try {
+    const url = playerGuid
+      ? `/api/admin/diamond/test-session-logs/${encodeURIComponent(id)}?player=${encodeURIComponent(playerGuid)}`
+      : `/api/admin/diamond/test-session-logs/${encodeURIComponent(id)}`
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data?.log) return null
+    const log = data.log
+    log.testId = data.testId
+    log.elapsedActiveMs = Number(data.elapsedActiveMs) || log.elapsedActiveMs || 0
+    log.remotePlayerGuid = data.playerGuid
+    log.remoteUploadedAt = data.uploadedAt
+    return log
+  } catch {
+    return null
+  }
+}
+
+async function loadDiamondTestLogByValue(value) {
+  if (!value) return null
+  if (value.startsWith('remote:')) {
+    const rest = value.slice('remote:'.length)
+    const sep = rest.indexOf(':')
+    const id = sep === -1 ? rest : rest.slice(0, sep)
+    const guid = sep === -1 ? '' : rest.slice(sep + 1)
+    const remote = await loadDiamondTestLogRemote(id, guid)
+    if (remote) return remote
+    return loadDiamondTestLogLocal(id)
+  }
+  if (value.startsWith('local:')) {
+    return loadDiamondTestLogLocal(value.slice('local:'.length))
+  }
+  return null
+}
+
+async function renderDiamondTestLog(value) {
+  const result = document.getElementById('diamond-test-log-result')
+  if (!result) return
+  if (!value) {
+    result.hidden = true
+    result.innerHTML = ''
+    return
+  }
+  result.hidden = false
+  result.innerHTML = 'loading…'
+  const log = await loadDiamondTestLogByValue(value)
+  result.innerHTML = ''
+  if (!log) {
+    result.textContent = `no test log for ${value}`
+    return
+  }
+  // Reuse the same summary + reconstruction renderers — the log shape
+  // is identical, only the namespace differs.
+  const stats = summariseSessionLog(log)
+  if (!stats) {
+    result.textContent = `empty test log for ${value}`
+    return
+  }
+
+  const eventSpanMs = stats.eventSpanMs || 0
+  const activeMs = stats.activeMs || 0
+  const spanGapMs = Math.max(0, activeMs - eventSpanMs)
+  const metrics = [
+    ['fills', stats.fills],
+    ['wrong', stats.wrong],
+    ['selects', stats.selects],
+    ['active', formatDurationMs(activeMs || eventSpanMs)],
+    ['event span', formatDurationMs(eventSpanMs)],
+    ['unlogged time', formatDurationMs(spanGapMs)],
+    ['mean gap', `${(stats.meanGapMs / 1000).toFixed(1)}s`],
+    ['median gap', `${(stats.medianGapMs / 1000).toFixed(1)}s`],
+    ['max gap', `${(stats.maxGapMs / 1000).toFixed(1)}s`],
+  ]
+  for (const [label, val] of metrics) {
+    const el = document.createElement('span')
+    el.className = 'complexity-metric'
+    el.innerHTML = `${label} <strong>${val}</strong>`
+    result.appendChild(el)
+  }
+
+  if (stats.topGaps.length) {
+    const gapsEl = document.createElement('span')
+    gapsEl.className = 'complexity-metric'
+    const list = stats.topGaps.map((g) => `${(g / 1000).toFixed(0)}s`).join(' · ')
+    gapsEl.innerHTML = `top gaps <strong>${list}</strong>`
+    result.appendChild(gapsEl)
+  }
+
+  const recon = reconstructSessionLog(log)
+  if (recon) {
+    const reconRow = document.createElement('div')
+    reconRow.className = 'session-log-recon'
+    const header = document.createElement('div')
+    header.className = 'session-log-recon-header'
+    header.textContent = recon.consistent
+      ? 'reconstruction: recording is internally consistent'
+      : 'reconstruction: anomalies detected'
+    header.dataset.state = recon.consistent ? 'ok' : 'warn'
+    reconRow.appendChild(header)
+
+    const reconMetrics = [
+      ['grid', `${recon.cols}×${recon.rows} = ${recon.totalCells} cells`],
+      ['f events', recon.fCount],
+      ['unique tap cells', recon.uniqueTapCells],
+      ['sum n', recon.sumN],
+      ['cells unaccounted', recon.cellShortfall],
+      ['mean cells/fill', recon.meanCellsPerFill.toFixed(2)],
+      ['min/max n', `${recon.minN} / ${recon.maxN}`],
+    ]
+    if (recon.duplicateTapCells > 0) {
+      reconMetrics.push(['duplicate-tap cells', recon.duplicateTapCells])
+      reconMetrics.push(['extra duplicate taps', recon.duplicateTapTotal])
+    }
+    if (recon.nMissing > 0) {
+      reconMetrics.push(['events missing n', recon.nMissing])
+    }
+    for (const [label, val] of reconMetrics) {
+      const el = document.createElement('span')
+      el.className = 'complexity-metric'
+      el.innerHTML = `${label} <strong>${val}</strong>`
+      reconRow.appendChild(el)
+    }
+    if (recon.exampleDuplicates.length > 0) {
+      const dupEl = document.createElement('span')
+      dupEl.className = 'complexity-metric'
+      const list = recon.exampleDuplicates.map((d) => `${d.i}×${d.count}`).join(' · ')
+      dupEl.innerHTML = `duplicate cells <strong>${list}</strong>`
+      reconRow.appendChild(dupEl)
+    }
+    result.appendChild(reconRow)
+  }
+
+  renderGridStatsPanel(result, log.gridStats, stats.perColor)
+
+  if (stats.perColor.length) {
+    const palette = document.createElement('div')
+    palette.className = 'session-log-per-color'
+    for (const [colorIdx, ms] of stats.perColor.slice(0, 8)) {
+      const chip = document.createElement('span')
+      chip.className = 'session-log-color-chip'
+      chip.innerHTML = `c${colorIdx} <strong>${formatDurationMs(ms)}</strong>`
+      palette.appendChild(chip)
+    }
+    result.appendChild(palette)
+  }
+}
+
+document.getElementById('diamond-test-log-select')?.addEventListener('change', (e) => {
+  renderDiamondTestLog(e.target.value)
+})
+populateDiamondTestLogDropdown()
 
 // ─── Image Processing ───
 

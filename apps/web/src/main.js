@@ -64,7 +64,6 @@ if (BETA && typeof document !== 'undefined') {
 }
 const API_BASE = ''
 const PLAYER_GUID_KEY = 'xefig:player-guid:v1'
-const ACTIVE_RUN_KEY = 'xefig:jigsaw:active-run:v1'
 const COMPLETED_RUNS_KEY = 'xefig:puzzles:completed:v1'
 const LAUNCHER_FOCUS_KEY = 'xefig:launcher:focus:v1'
 // Lower bound on what a legit puzzle run looks like: nothing in the app
@@ -78,6 +77,13 @@ const MUSIC_DEFAULT_VOLUME = 0.35
 const DIAMOND_SFX_MUTED_KEY = 'xefig:diamond-sfx-muted:v1'
 const DIAMOND_LOG_PREFIX = 'xefig:diamond-log:'
 const DIAMOND_LOG_RETAIN = 30
+const DIAMOND_TEST_LOG_PREFIX = 'xefig:diamond-test-log:'
+const DIAMOND_TEST_LOG_RETAIN = 30
+// Single-slot test active-run state. Kept under its own key so the
+// launcher's "Resume" pill never picks it up and the production
+// active-run path stays clean. Test runs are inherently single-slot
+// — there's only ever one calibration run in flight at a time.
+const TEST_ACTIVE_RUN_KEY = 'xefig:test-run:active'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
 const PUZZLE_FETCH_TIMEOUT_MS = 8000
@@ -829,7 +835,7 @@ function removeStorage(key) {
   }
 }
 
-function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs) {
+function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs, { testMode = false } = {}) {
   if (!puzzleDate || !puzzle || typeof puzzle.getSessionLog !== 'function') return
   let log
   try {
@@ -838,11 +844,121 @@ function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs) {
     return
   }
   if (!log || !Array.isArray(log.events) || log.events.length === 0) return
-  log.puzzleDate = puzzleDate
   log.elapsedActiveMs = Number(elapsedActiveMs) || 0
   log.savedAt = new Date().toISOString()
+  if (testMode) {
+    // Test runs live in their own localStorage namespace AND their own
+    // worker table — they never share storage, retention, or uploads
+    // with real plays.
+    log.testId = puzzleDate
+    log.testMode = true
+    writeJsonStorage(`${DIAMOND_TEST_LOG_PREFIX}${puzzleDate}`, log)
+    pruneDiamondTestSessionLogs(DIAMOND_TEST_LOG_RETAIN)
+    uploadDiamondTestSessionLog(puzzleDate, log, log.elapsedActiveMs)
+    return
+  }
+  log.puzzleDate = puzzleDate
   writeJsonStorage(`${DIAMOND_LOG_PREFIX}${puzzleDate}`, log)
   pruneDiamondSessionLogs(DIAMOND_LOG_RETAIN)
+  uploadDiamondSessionLog(puzzleDate, log, log.elapsedActiveMs)
+}
+
+function uploadDiamondTestSessionLog(testId, log, elapsedActiveMs) {
+  if (!navigator.onLine) return
+  postDiamondTestSessionLog(testId, log, elapsedActiveMs, { keepalive: true }).catch(() => {})
+}
+
+async function postDiamondTestSessionLog(testId, log, elapsedActiveMs, { keepalive = false } = {}) {
+  const payload = JSON.stringify({
+    testId,
+    playerGuid,
+    elapsedActiveMs: Number(elapsedActiveMs) || 0,
+    log,
+  })
+  const res = await fetch('/api/diamond/test-session-log', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: payload,
+    keepalive,
+  })
+  if (!res.ok) throw new Error(`upload failed ${res.status}`)
+  return res
+}
+
+function pruneDiamondTestSessionLogs(retain) {
+  let keys
+  try {
+    keys = Object.keys(localStorage).filter((k) => k.startsWith(DIAMOND_TEST_LOG_PREFIX))
+  } catch {
+    return
+  }
+  if (keys.length <= retain) return
+  keys.sort()
+  for (const key of keys.slice(0, keys.length - retain)) removeStorage(key)
+}
+
+// Fire-and-forget upload so the run can be reviewed in admin from any
+// device. Failures are silent — the localStorage copy is the source of
+// truth on the play device and Sync Now re-uploads anything stranded
+// (uploadLocalDiamondSessionLogs).
+function uploadDiamondSessionLog(puzzleDate, log, elapsedActiveMs) {
+  if (!navigator.onLine) return
+  postDiamondSessionLog(puzzleDate, log, elapsedActiveMs, { keepalive: true }).catch(() => {})
+}
+
+async function postDiamondSessionLog(puzzleDate, log, elapsedActiveMs, { keepalive = false } = {}) {
+  const payload = JSON.stringify({
+    puzzleDate,
+    playerGuid,
+    elapsedActiveMs: Number(elapsedActiveMs) || 0,
+    log,
+  })
+  const res = await fetch('/api/diamond/session-log', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: payload,
+    keepalive,
+  })
+  if (!res.ok) throw new Error(`upload failed ${res.status}`)
+  return res
+}
+
+// Replay every locally-stashed diamond log to the worker. The server
+// upsert keeps this idempotent, so we don't need to track which dates
+// have already been uploaded. Returns a count of successes/failures so
+// the Sync Now status can surface it.
+async function uploadLocalDiamondSessionLogs() {
+  if (!navigator.onLine) return { uploaded: 0, failed: 0, total: 0 }
+  let keys
+  try {
+    keys = Object.keys(localStorage).filter((k) => k.startsWith(DIAMOND_LOG_PREFIX))
+  } catch {
+    return { uploaded: 0, failed: 0, total: 0 }
+  }
+  if (keys.length === 0) return { uploaded: 0, failed: 0, total: 0 }
+  const results = await Promise.allSettled(
+    keys.map(async (key) => {
+      const puzzleDate = key.slice(DIAMOND_LOG_PREFIX.length)
+      // Stray legacy keys (e.g. "test-..." from before test logs got
+      // their own namespace) — the worker will reject them. Skip
+      // proactively so the count reads cleanly.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(puzzleDate)) {
+        throw new Error('non-date key')
+      }
+      const log = readJsonStorage(key)
+      if (!log || !Array.isArray(log.events) || log.events.length === 0) {
+        throw new Error('empty')
+      }
+      await postDiamondSessionLog(puzzleDate, log, log.elapsedActiveMs || 0)
+    }),
+  )
+  let uploaded = 0
+  let failed = 0
+  for (const r of results) {
+    if (r.status === 'fulfilled') uploaded++
+    else failed++
+  }
+  return { uploaded, failed, total: keys.length }
 }
 
 function pruneDiamondSessionLogs(retain) {
@@ -896,6 +1012,9 @@ function getCompletionEntry(puzzleDate, gameMode) {
 
 function recordCompletedRun(run) {
   if (!run?.puzzleDate) {
+    return
+  }
+  if (run.testMode) {
     return
   }
 
@@ -999,23 +1118,6 @@ function activeRunKey(puzzleDate, gameMode) {
   return `xefig:run:${puzzleDate}:${normalizeGameMode(gameMode)}`
 }
 
-function getResumableRun() {
-  const run = readJsonStorage(ACTIVE_RUN_KEY)
-  if (!run || typeof run !== 'object') {
-    return null
-  }
-  if (run.completed) {
-    return null
-  }
-  if (!run.puzzleDate || !run.imageUrl || !run.difficulty) {
-    return null
-  }
-  return {
-    ...run,
-    gameMode: normalizeGameMode(run.gameMode),
-  }
-}
-
 function getRunForMode(puzzleDate, gameMode) {
   const key = activeRunKey(puzzleDate, gameMode)
   const run = readJsonStorage(key)
@@ -1037,6 +1139,236 @@ function getRunForMode(puzzleDate, gameMode) {
 
 function hasActiveRun(puzzleDate, gameMode) {
   return getRunForMode(puzzleDate, gameMode) !== null
+}
+
+// Compute (lockedCount, totalCount) directly from a saved puzzleState
+// for runs that pre-date when those fields started being persisted on
+// the run object itself. Falls back to (0, 0) for shapes we can't
+// recognise — caller treats the row as 0%.
+function deriveProgressFromState(gameMode, puzzleState) {
+  if (!puzzleState || typeof puzzleState !== 'object') return null
+  if (gameMode === GAME_MODE_DIAMOND) {
+    if (!Array.isArray(puzzleState.grid) || !Array.isArray(puzzleState.fills)) return null
+    const grid = puzzleState.grid
+    const fills = puzzleState.fills
+    if (grid.length !== fills.length) return null
+    let count = 0
+    for (let i = 0; i < grid.length; i++) {
+      if (fills[i] === grid[i]) count++
+    }
+    return { lockedCount: count, totalCount: grid.length }
+  }
+  if (gameMode === GAME_MODE_JIGSAW || gameMode === GAME_MODE_POLYGRAM) {
+    if (!Array.isArray(puzzleState.pieces)) return null
+    const total = puzzleState.pieces.length
+    const count = puzzleState.pieces.filter((p) => p && p.locked).length
+    return { lockedCount: count, totalCount: total }
+  }
+  if (gameMode === GAME_MODE_SLIDING) {
+    if (!Array.isArray(puzzleState.slots) || !Array.isArray(puzzleState.homes)) return null
+    const slots = puzzleState.slots
+    const homes = puzzleState.homes
+    const empty = Number(puzzleState.emptyIndex)
+    let count = 0
+    let total = 0
+    for (let i = 0; i < slots.length; i++) {
+      if (i === empty) continue
+      total++
+      const tileId = slots[i]
+      if (homes[tileId] === i) count++
+    }
+    return { lockedCount: count, totalCount: total }
+  }
+  if (gameMode === GAME_MODE_SWAP) {
+    if (!Array.isArray(puzzleState.slots) || !Array.isArray(puzzleState.homes)) return null
+    const slots = puzzleState.slots
+    const homes = puzzleState.homes
+    let count = 0
+    for (let i = 0; i < slots.length; i++) {
+      const tileId = slots[i]
+      if (homes[tileId] === i) count++
+    }
+    return { lockedCount: count, totalCount: slots.length }
+  }
+  return null
+}
+
+// Returns every uncompleted archive run (per-mode keyed) on this
+// device, sorted by progress fraction descending — so the closest-to-
+// done puzzles surface first. Used by the Unfinished modal to taunt
+// the user into closing them out.
+function getAllIncompleteArchiveRuns(todayDate = getIsoDate(new Date())) {
+  const out = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (!key || !key.startsWith('xefig:run:')) continue
+    const run = readJsonStorage(key)
+    if (!run || typeof run !== 'object') continue
+    if (run.completed) continue
+    if (!run.puzzleDate || !run.imageUrl) continue
+    if (run.puzzleDate === todayDate) continue
+    let locked = Number(run.lockedCount) || 0
+    let total = Number(run.totalCount) || 0
+    // Backfill: runs saved before lockedCount/totalCount were stamped
+    // on the run object only have puzzleState. Derive on read so old
+    // runs surface real progress instead of all reading 0%.
+    if (total <= 0 && run.puzzleState) {
+      const derived = deriveProgressFromState(normalizeGameMode(run.gameMode), run.puzzleState)
+      if (derived) {
+        locked = derived.lockedCount
+        total = derived.totalCount
+      }
+    }
+    const fraction = total > 0 ? locked / total : 0
+    const updatedAt = Date.parse(run.updatedAt || run.startedAt || '')
+    out.push({
+      ...run,
+      gameMode: normalizeGameMode(run.gameMode),
+      _progressFraction: fraction,
+      _lockedCount: locked,
+      _totalCount: total,
+      _updatedAtMs: Number.isFinite(updatedAt) ? updatedAt : 0,
+    })
+  }
+  out.sort((a, b) => {
+    if (b._progressFraction !== a._progressFraction) return b._progressFraction - a._progressFraction
+    return b._updatedAtMs - a._updatedAtMs
+  })
+  return out
+}
+
+function formatRelativeAge(timestampMs) {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return ''
+  const ageMs = Date.now() - timestampMs
+  if (ageMs < 0) return 'just now'
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (ageMs < hour) return `${Math.max(1, Math.round(ageMs / minute))}m ago`
+  if (ageMs < day) return `${Math.round(ageMs / hour)}h ago`
+  if (ageMs < 14 * day) return `${Math.round(ageMs / day)} days ago`
+  if (ageMs < 60 * day) return `${Math.round(ageMs / (7 * day))} weeks ago`
+  return `${Math.round(ageMs / (30 * day))} months ago`
+}
+
+// Mixed-tone goading copy. Warm for high progress, cheekier for stale
+// or barely-started runs. Picks deterministically from the run's seed
+// so the line is stable across re-renders, but varied across rows in
+// the list. Each bucket has enough lines that adjacent rows in the
+// same bucket should rarely share copy.
+function getGoadingCopy(run) {
+  const fraction = run._progressFraction || 0
+  const pct = Math.round(fraction * 100)
+  const elapsed = Number(run.elapsedActiveMs) || 0
+  const minutes = Math.round(elapsed / 60000)
+  const ageMs = run._updatedAtMs ? Date.now() - run._updatedAtMs : 0
+  const ageDays = Math.round(ageMs / (24 * 60 * 60 * 1000))
+  // Stable but varied — combine multiple identifying fields so adjacent
+  // rows with similar dates pick different lines.
+  const idStr = `${run.runId || ''}${run.puzzleDate || ''}${run.gameMode || ''}${run.startedAt || ''}`
+  const seed = idStr.split('').reduce((s, c) => ((s * 31) + c.charCodeAt(0)) >>> 0, 5381)
+  const pick = (lines) => lines[seed % lines.length]
+
+  if (fraction >= 0.95) {
+    return pick([
+      `${pct}% there. Don't blink now.`,
+      `${100 - pct}% from done. Seriously.`,
+      `One more sitting. That's it.`,
+      `So close it hurts to look.`,
+      `${pct}% — leaving it here would be cruel.`,
+      `The last few cells are the easy ones.`,
+    ])
+  }
+  if (fraction >= 0.8) {
+    return pick([
+      `${pct}% done. The hard part is behind you.`,
+      `Coast home from ${pct}%.`,
+      `One last push from ${pct}%.`,
+      `${minutes}m down, a few more to go.`,
+      `${pct}% — finish it before you forget what it is.`,
+      `The ending is the best bit.`,
+    ])
+  }
+  if (fraction >= 0.6) {
+    return pick([
+      `Past halfway. ${pct}% done.`,
+      `${pct}% — momentum is on your side.`,
+      `${minutes}m invested. Don't waste it.`,
+      `${pct}% says you can finish this one.`,
+      `The middle is always the hardest. You're through it.`,
+      `${pct}% done. Imagine that satisfying click.`,
+    ])
+  }
+  if (fraction >= 0.4) {
+    if (ageDays >= 21) return pick([
+      `${pct}% done since ${ageDays} days ago. Awkward.`,
+      `Half-done and forgotten. Pick it back up.`,
+      `${ageDays} days, ${pct}%, and counting.`,
+    ])
+    return pick([
+      `${pct}% done · ${minutes}m so far. Keep rolling.`,
+      `Halfway-ish. The view from the top is better.`,
+      `${pct}% — too far in to bail.`,
+      `${pct}% done. Sunk cost is real, you know.`,
+      `${minutes}m in. Don't make it for nothing.`,
+    ])
+  }
+  if (fraction >= 0.15) {
+    if (ageDays >= 21) return pick([
+      `${ageDays} days old and only ${pct}% in. Either commit or admit defeat.`,
+      `${pct}% done. ${ageDays} days ago. Awkward, isn't it?`,
+      `It's been ${ageDays} days. The puzzle remembers.`,
+    ])
+    return pick([
+      `${pct}% in. The hard part is starting — and you've already done that.`,
+      `${pct}% done. Don't make it ${pct + 5}% next week. Finish it.`,
+      `Barely scratched it (${pct}%). One sitting and it's gone.`,
+      `${minutes}m and ${pct}%. Either invest or walk away.`,
+    ])
+  }
+  // Sub-15% — barely-anything bucket. The richest bucket because most
+  // unfinished archive runs end up here.
+  if (ageDays >= 60) return pick([
+    `${ageDays} days untouched. It's started seeing other players.`,
+    `Two months gone. Show some commitment.`,
+    `Older than some news cycles. Finish or forget.`,
+    `${ageDays} days. The puzzle is older than the urge to play it.`,
+    `Still here after ${ageDays} days. Imagine the loyalty.`,
+  ])
+  if (ageDays >= 30) return pick([
+    `Untouched for ${ageDays} days. Lonely puzzle.`,
+    `${ageDays} days of nothing. Throw it a bone.`,
+    `A month of silence. Even a tap would do.`,
+    `${ageDays} days old. Either play it or put it out of its misery.`,
+    `Started ${ageDays} days ago. Has anything else lasted that long?`,
+  ])
+  if (ageDays >= 14) return pick([
+    `${ageDays} days. Maybe today's the day.`,
+    `${ageDays} days old, ${pct}% done. The maths isn't kind.`,
+    `Two weeks in storage. Dust it off.`,
+    `${ageDays} days idle. Surely you've got 5 minutes.`,
+  ])
+  if (ageDays >= 7) return pick([
+    `${ageDays} days old. Don't let it grow legs.`,
+    `A week stale. Refresh the streak.`,
+    `${ageDays} days untouched — give it some love.`,
+  ])
+  if (minutes >= 10) return pick([
+    `${minutes}m in and ${pct}% done. Either it's hard or you're stalling.`,
+    `${minutes}m of effort to show ${pct}%. Push through.`,
+    `${minutes}m down with ${pct}% to show. Don't write it off now.`,
+  ])
+  if (minutes >= 3) return pick([
+    `${minutes}m in. Get back to it.`,
+    `Just getting started — keep going.`,
+    `${minutes}m so far. Pace yourself.`,
+  ])
+  return pick([
+    `Just started. Don't ghost it.`,
+    `Fresh start. Make it count.`,
+    `Newly opened. The clock is ticking.`,
+    `Brand-new. Don't let it become another stale entry.`,
+  ])
 }
 
 // Returns the most-recently-updated uncompleted run from an archived
@@ -1065,16 +1397,30 @@ function saveRunForMode(run) {
   if (!run?.puzzleDate || !run?.gameMode) return
   const key = activeRunKey(run.puzzleDate, run.gameMode)
   writeJsonStorage(key, run)
-  // Also write to legacy key for backward compat
-  writeJsonStorage(ACTIVE_RUN_KEY, run)
 }
 
 function clearRunForMode(run) {
   if (!run?.puzzleDate || !run?.gameMode) return
   const key = activeRunKey(run.puzzleDate, run.gameMode)
   removeStorage(key)
-  removeStorage(ACTIVE_RUN_KEY)
   markActiveRunDeleted(run)
+}
+
+function loadTestActiveRun() {
+  const run = readJsonStorage(TEST_ACTIVE_RUN_KEY)
+  if (!run || typeof run !== 'object') return null
+  if (run.completed) return null
+  if (!run.testMode) return null
+  return run
+}
+
+function saveTestActiveRun(run) {
+  if (!run?.testMode) return
+  writeJsonStorage(TEST_ACTIVE_RUN_KEY, run)
+}
+
+function clearTestActiveRun() {
+  removeStorage(TEST_ACTIVE_RUN_KEY)
 }
 
 function getNowMs() {
@@ -1202,6 +1548,23 @@ function unbindGameActivity() {
 
 function persistActiveRun(progressState) {
   if (!currentRun) {
+    return
+  }
+  if (currentRun.testMode) {
+    // Test runs save to a dedicated single-slot key so they survive
+    // back-navigation and tab discards (the whole point of the test
+    // area), but never appear in the launcher's Resume pill, never
+    // sync, and never compete with real per-mode active runs.
+    const elapsed = getActiveElapsedMs()
+    if (elapsed === 0 && !progressState) return
+    const nextPuzzleState = progressState || (puzzle ? puzzle.getProgressState() : currentRun.puzzleState)
+    currentRun = {
+      ...currentRun,
+      elapsedActiveMs: elapsed,
+      updatedAt: new Date().toISOString(),
+      puzzleState: nextPuzzleState,
+    }
+    saveTestActiveRun(currentRun)
     return
   }
 
@@ -1870,13 +2233,6 @@ function renderLauncher() {
         handleSliceClick(slice.dataset.mode, puzzleDate)
       })
     })
-  }
-
-  // Migrate legacy single-key save to per-mode storage
-  const legacyRun = getResumableRun()
-  if (legacyRun) {
-    saveRunForMode(legacyRun)
-    removeStorage(ACTIVE_RUN_KEY)
   }
 
   ; (async () => {
@@ -2966,6 +3322,7 @@ function showCompletionOverlay({
   completedRun,
   showRankPill,
   onShowSource,
+  onAfterDismiss,
 }) {
   const overlay = document.createElement('div')
   overlay.className = 'completion-overlay'
@@ -2976,7 +3333,12 @@ function showCompletionOverlay({
     if (completedRun) clearRunForMode(completedRun)
     overlay.classList.remove('is-visible')
     overlay.style.pointerEvents = 'none'
-    setTimeout(() => overlay.remove(), 200)
+    setTimeout(() => {
+      overlay.remove()
+      if (typeof onAfterDismiss === 'function') {
+        try { onAfterDismiss() } catch (err) { console.error(err) }
+      }
+    }, 200)
   }
 
   const pbStatValue = formatDuration(submissionElapsedMs)
@@ -3495,6 +3857,140 @@ function closeMoreSheet() {
   setTimeout(() => overlay.remove(), 200)
 }
 
+function closeUnfinishedModal() {
+  const overlay = document.querySelector('.unfinished-overlay')
+  if (!overlay) return
+  overlay.classList.remove('is-visible')
+  setTimeout(() => overlay.remove(), 200)
+}
+
+// Replays handleSliceClick's archive-resume path from anywhere outside
+// the renderHome closure. Fetches the puzzle payload for the date,
+// resolves the image URL against any saved run, and routes through
+// renderGame so resume restores fills + sessionLog correctly.
+async function resumeArchiveRunFromList(mode, date) {
+  const normalized = normalizeGameMode(mode)
+  state.gameMode = normalized
+  try {
+    const payload = await fetchPuzzlePayload({ date })
+    state.puzzle = payload
+  } catch { }
+  state.imageUrl = resolvePuzzleImageUrl(state.puzzle, state.gameMode)
+  const savedRun = getRunForMode(date, state.gameMode)
+  if (savedRun) {
+    state.imageUrl = resolveResumeImageUrl(savedRun, state.puzzle)
+    renderGame({ resumeRun: savedRun })
+    return
+  }
+  // Fall-through: no saved run (the user might have just completed it
+  // from a different device via sync, or it expired). Fresh start.
+  renderGame()
+}
+
+// Surface every uncompleted archive run so the user can pick the one
+// they're closest to finishing — sorted by completion fraction desc to
+// bait OCD. If `struckRun` is provided, it's rendered first with a
+// strike-through animation: the user just finished it, the modal nods
+// to that win before pivoting to "and here are the rest."
+function openUnfinishedModal({ struckRun = null, todayDate = getIsoDate(new Date()), onResume } = {}) {
+  closeUnfinishedModal()
+  const overlay = document.createElement('div')
+  overlay.className = 'unfinished-overlay'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-modal', 'true')
+  overlay.setAttribute('aria-label', 'Unfinished puzzles')
+
+  const remaining = getAllIncompleteArchiveRuns(todayDate)
+
+  const struckHtml = struckRun
+    ? `
+      <div class="unfinished-struck">
+        <div class="unfinished-struck-row">
+          <span class="unfinished-mode-icon" data-mode="${struckRun.gameMode}"></span>
+          <span class="unfinished-struck-label">${MODE_LABELS[struckRun.gameMode] || struckRun.gameMode}</span>
+          <span class="unfinished-struck-stamp">DONE</span>
+        </div>
+      </div>
+    `
+    : ''
+
+  const headerTitle = struckRun
+    ? 'Nice. One down.'
+    : (remaining.length === 0 ? 'All caught up' : 'Unfinished business')
+  const headerSub = struckRun
+    ? (remaining.length === 0
+      ? 'Nothing else hanging.'
+      : `${remaining.length} more waiting on you.`)
+    : (remaining.length === 0
+      ? 'Nothing waiting in the archive.'
+      : `${remaining.length} archive ${remaining.length === 1 ? 'run' : 'runs'} you haven't closed out.`)
+
+  const rowsHtml = remaining.map((run) => {
+    const pct = Math.round((run._progressFraction || 0) * 100)
+    const minutes = Math.round((Number(run.elapsedActiveMs) || 0) / 60000)
+    const ageLabel = formatRelativeAge(run._updatedAtMs)
+    const goading = getGoadingCopy(run)
+    const modeLabel = MODE_LABELS[run.gameMode] || run.gameMode
+    return `
+      <button class="unfinished-row" type="button" data-mode="${run.gameMode}" data-date="${run.puzzleDate}">
+        <span class="unfinished-mode-icon" data-mode="${run.gameMode}"></span>
+        <span class="unfinished-row-body">
+          <span class="unfinished-row-head">
+            <span class="unfinished-row-mode">${modeLabel}</span>
+            <span class="unfinished-row-pct">${pct}%</span>
+          </span>
+          <span class="unfinished-row-bar"><span class="unfinished-row-bar-fill" style="width:${pct}%"></span></span>
+          <span class="unfinished-row-meta">${minutes}m played${ageLabel ? ` · ${ageLabel}` : ''}</span>
+          <span class="unfinished-row-goad">${goading}</span>
+        </span>
+      </button>
+    `
+  }).join('')
+
+  overlay.innerHTML = `
+    <div class="unfinished-panel" role="document">
+      <button type="button" class="unfinished-close" aria-label="Close">×</button>
+      <div class="unfinished-header">
+        <h2 class="unfinished-title">${headerTitle}</h2>
+        <p class="unfinished-sub">${headerSub}</p>
+      </div>
+      ${struckHtml}
+      <div class="unfinished-list">${rowsHtml || '<p class="unfinished-empty">Nothing here. Start one from the archive.</p>'}</div>
+    </div>
+  `
+
+  document.body.appendChild(overlay)
+  requestAnimationFrame(() => overlay.classList.add('is-visible'))
+
+  // Animate the strike-through on the just-completed row a tick after
+  // the panel has settled so the user perceives it as a deliberate
+  // "✓ checking it off the list" moment, not a static label.
+  if (struckRun) {
+    const struckEl = overlay.querySelector('.unfinished-struck')
+    if (struckEl) setTimeout(() => struckEl.classList.add('is-struck'), 220)
+  }
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeUnfinishedModal()
+  })
+  overlay.querySelector('.unfinished-close')?.addEventListener('click', closeUnfinishedModal)
+  overlay.querySelectorAll('.unfinished-row').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const mode = btn.dataset.mode
+      const date = btn.dataset.date
+      closeUnfinishedModal()
+      if (!mode || !date || typeof onResume !== 'function') return
+      try {
+        await onResume({ mode, date })
+      } catch (err) {
+        console.error('Resume from Unfinished failed', err)
+      }
+    })
+  })
+
+  return overlay
+}
+
 function openMoreSheet({ puzzleDate, handleSliceClick }) {
   const existing = document.querySelector('.more-sheet-overlay')
   if (existing) existing.remove()
@@ -3509,19 +4005,17 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
   const renderCards = () => {
     const cards = []
 
-    const resume = getLatestActiveArchiveRun(puzzleDate)
-    if (resume) {
-      const d = new Date(Date.parse(`${resume.puzzleDate}T00:00:00Z`))
-      const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
-      const modeLabel = SPINE_LABELS[resume.gameMode] || resume.gameMode
+    const incompletes = getAllIncompleteArchiveRuns(puzzleDate)
+    if (incompletes.length > 0) {
+      const count = incompletes.length
       cards.push(`
-        <button class="more-sheet-card more-sheet-card--continue" data-action="continue" data-mode="${resume.gameMode}" data-date="${resume.puzzleDate}">
+        <button class="more-sheet-card more-sheet-card--continue" data-action="continue">
           <span class="more-sheet-card-icon">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
           </span>
           <span class="more-sheet-card-text">
             <span class="more-sheet-card-title">Continue</span>
-            <span class="more-sheet-card-sub">${modeLabel} · ${dateLabel}</span>
+            <span class="more-sheet-card-sub">${count} unfinished — pick one</span>
           </span>
         </button>`)
     }
@@ -3687,16 +4181,17 @@ function openMoreSheet({ puzzleDate, handleSliceClick }) {
         }
 
         if (btn.dataset.action === 'continue') {
-          const resumeMode = btn.dataset.mode
-          const resumeDate = btn.dataset.date
-          if (resumeMode && resumeDate && typeof handleSliceClick === 'function') {
-            closeMoreSheet()
-            try {
-              const payload = await fetchPuzzlePayload({ date: resumeDate })
-              state.puzzle = payload
-            } catch { }
-            handleSliceClick(resumeMode, resumeDate)
-          }
+          // Continue card now opens the Unfinished list rather than
+          // resuming the most-recent run blindly. Lets the user pick
+          // the puzzle they're closest to finishing — and bait that
+          // OCD itch with progress bars + goading copy.
+          closeMoreSheet()
+          openUnfinishedModal({
+            todayDate: puzzleDate,
+            onResume: async ({ mode, date }) => {
+              await resumeArchiveRunFromList(mode, date)
+            },
+          })
           return
         }
 
@@ -4203,9 +4698,24 @@ function renderPuzzleLoadError(overlay, { onRetry }) {
   }
 }
 
-function renderGame({ resumeRun = null } = {}) {
+function renderGame({ resumeRun = null, testMode = false } = {}) {
   const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
   state.gameMode = gameMode
+
+  // Test mode overrides image source and date with the bundled hero so
+  // the run doesn't depend on the live puzzle pipeline. Persistence
+  // routes through the test-mode-only active-run slot (see
+  // persistActiveRun) so back-and-return preserves canvas + sessionLog,
+  // but production data stays untouched.
+  if (testMode) {
+    state.imageUrl = sampleImage
+    if (resumeRun) {
+      state.puzzle = { date: resumeRun.puzzleDate }
+    } else {
+      const testDate = `test-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+      state.puzzle = { date: testDate }
+    }
+  }
 
   showGamePage()
   const gameEl = document.querySelector('#page-game')
@@ -4809,7 +5319,11 @@ function renderGame({ resumeRun = null } = {}) {
     if (!confirm('Restart this puzzle? Your current progress will be lost.')) return
     clearImmersiveControlsTimer()
     stopTimerDisplay()
-    clearRunForMode(currentRun)
+    if (currentRun?.testMode) {
+      clearTestActiveRun()
+    } else {
+      clearRunForMode(currentRun)
+    }
     currentRun = null
     // Re-resolve the image URL from the current puzzle payload so a regenerated
     // image is picked up instead of reusing the stale URL captured when the run began.
@@ -4957,6 +5471,7 @@ function renderGame({ resumeRun = null } = {}) {
             elapsedActiveMs: 0,
             completed: false,
             puzzleState: null,
+            testMode,
           }
         }
 
@@ -4983,9 +5498,11 @@ function renderGame({ resumeRun = null } = {}) {
           boardColorIndex: getGlobalBoardColorIndex(),
           muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
           onLoadProgress: (progress) => updatePuzzleLoadingOverlay(loadingOverlay, progress),
-          onProgress: ({ completed, state: progressState }) => {
+          onProgress: ({ completed, lockedCount, totalCount, state: progressState }) => {
             if (currentRun) {
               currentRun.completed = Boolean(completed)
+              if (Number.isFinite(lockedCount)) currentRun.lockedCount = lockedCount
+              if (Number.isFinite(totalCount)) currentRun.totalCount = totalCount
             }
             // Start timer on first piece interaction (not on puzzle load / init)
             if (!timerState.started && initDone) {
@@ -5028,7 +5545,10 @@ function renderGame({ resumeRun = null } = {}) {
             currentRun.updatedAt = new Date().toISOString()
             recordCompletedRun(currentRun)
             if (gameMode === GAME_MODE_DIAMOND) {
-              persistDiamondSessionLog(currentRun.puzzleDate, puzzle, currentRun.elapsedActiveMs)
+              persistDiamondSessionLog(currentRun.puzzleDate, puzzle, currentRun.elapsedActiveMs, { testMode: currentRun.testMode })
+            }
+            if (currentRun.testMode) {
+              clearTestActiveRun()
             }
             const completedRun = currentRun
 
@@ -5049,7 +5569,7 @@ function renderGame({ resumeRun = null } = {}) {
             // tapped elsewhere). Fill in the rank + leaderboard section as
             // soon as the network resolves.
             const presentOverlay = () => {
-              const syncActive = isSyncEnabled() && navigator.onLine
+              const syncActive = isSyncEnabled() && navigator.onLine && !currentRun.testMode
               // Diamond gets a "Show source image" action on the overlay
               // so first-time finishers discover the toggle without
               // hunting for it in the menu. Clicking reveals the source
@@ -5063,6 +5583,31 @@ function renderGame({ resumeRun = null } = {}) {
                   syncSourceButtons(active)
                 }
                 : undefined
+              // After completing an archive run, present the Unfinished
+              // modal with a strike-through animation on the just-finished
+              // puzzle — the OCD nudge lands while the win is still warm.
+              // Skipped for today's puzzle (the launcher is the natural
+              // next stop) and for test mode (no production list).
+              const todayKey = getIsoDate(new Date())
+              const wasArchive = !currentRun.testMode
+                && completedRun?.puzzleDate
+                && completedRun.puzzleDate !== todayKey
+              const onAfterDismiss = wasArchive
+                ? () => {
+                  const struck = {
+                    gameMode: completedRun.gameMode,
+                    puzzleDate: completedRun.puzzleDate,
+                  }
+                  openUnfinishedModal({
+                    struckRun: struck,
+                    todayDate: todayKey,
+                    onResume: async ({ mode, date }) => {
+                      await resumeArchiveRunFromList(mode, date)
+                    },
+                  })
+                }
+                : undefined
+
               const overlay = showCompletionOverlay({
                 gameMode,
                 duration: durationLabel,
@@ -5072,6 +5617,7 @@ function renderGame({ resumeRun = null } = {}) {
                 completedRun,
                 showRankPill: syncActive,
                 onShowSource,
+                onAfterDismiss,
               })
 
               if (!syncActive) return
@@ -5529,6 +6075,7 @@ function renderSettingsPage() {
     { id: 'display', title: 'Display', desc: 'Board background' },
     { id: 'audio', title: 'Audio', desc: 'Music' },
     { id: 'sync', title: 'Sync & Devices', desc: 'Enable, link, and manage sync' },
+    { id: 'testing', title: 'Testing', desc: 'Run the diamond pipeline against the bundled hero image' },
     { id: 'about', title: 'About', desc: 'AI-generated content notice' },
     { id: 'contact', title: 'Contact', desc: 'Send a message' },
   ]
@@ -5603,6 +6150,14 @@ function renderSettingsPage() {
               <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
             </summary>
             <div class="settings-section-body" id="settings-sync-content"></div>
+          </details>
+
+          <details class="settings-section" id="settings-section-testing" data-section="testing"${sectionOpen('testing')}>
+            <summary class="settings-section-summary">
+              <span class="settings-section-title">Testing</span>
+              <span class="settings-section-chevron" aria-hidden="true">\u25b8</span>
+            </summary>
+            <div class="settings-section-body" id="settings-testing-content"></div>
           </details>
 
           <details class="settings-section" id="settings-section-about" data-section="about"${sectionOpen('about')}>
@@ -5720,6 +6275,7 @@ function renderSettingsPage() {
   renderProfileSettings()
   renderAudioSettings()
   renderSyncSettings()
+  renderTestingSettings()
 
   // Contact form handler
   const form = container.querySelector('#contact-form')
@@ -5885,6 +6441,33 @@ function renderAudioSettings() {
   })
 }
 
+function renderTestingSettings() {
+  const el = document.querySelector('#settings-testing-content')
+  if (!el) return
+  el.innerHTML = `
+    <p class="settings-testing-description">
+      Launch the diamond paint pipeline against the bundled hero image to validate
+      calibration metrics. Test runs skip leaderboard submission, completion
+      tracking, active-run persistence, and remote session-log upload — the log
+      is stored locally only, under a <code>test-</code> date prefix, and is
+      visible in the admin session-log viewer on the same device.
+    </p>
+    <button type="button" id="test-play-diamond" class="settings-test-btn">
+      Play hero (diamond / paint)
+    </button>
+  `
+  const btn = el.querySelector('#test-play-diamond')
+  btn?.addEventListener('click', () => {
+    state.gameMode = GAME_MODE_DIAMOND
+    const existing = loadTestActiveRun()
+    if (existing) {
+      renderGame({ resumeRun: existing, testMode: true })
+    } else {
+      renderGame({ testMode: true })
+    }
+  })
+}
+
 function renderSyncSettings() {
   const syncEl = document.querySelector('#settings-sync-content')
   if (!syncEl) return
@@ -5910,14 +6493,24 @@ function renderSyncSettings() {
       syncStatusEl.textContent = ''
       syncStatusEl.className = 'sync-status'
       try {
-        const result = await forcePush()
+        const [result, logUpload] = await Promise.all([
+          forcePush(),
+          uploadLocalDiamondSessionLogs(),
+        ])
+        let msg
         if (result && result.pulledChanges) {
-          syncStatusEl.textContent = `Synced. Pulled changes (rev ${result.revAfter}).`
+          msg = `Synced. Pulled changes (rev ${result.revAfter}).`
         } else if (result && result.ran) {
-          syncStatusEl.textContent = `Synced. No new remote changes (rev ${result.revAfter}).`
+          msg = `Synced. No new remote changes (rev ${result.revAfter}).`
         } else {
-          syncStatusEl.textContent = 'Synced.'
+          msg = 'Synced.'
         }
+        if (logUpload && logUpload.total > 0) {
+          msg += ` Diamond logs: ${logUpload.uploaded}/${logUpload.total}`
+          if (logUpload.failed > 0) msg += ` (${logUpload.failed} failed)`
+          msg += '.'
+        }
+        syncStatusEl.textContent = msg
         syncStatusEl.className = 'sync-status sync-status-ok'
         renderLauncher()
       } catch (err) {

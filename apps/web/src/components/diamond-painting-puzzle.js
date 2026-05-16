@@ -94,6 +94,11 @@ export class DiamondPaintingPuzzle {
         ? new Date(Date.now() - (performance.now() - this.sessionStartTs)).toISOString()
         : null,
       events: this.sessionLog.slice(),
+      // Static features of the played grid, computed once at init.
+      // Lets admin correlate completion-time data against the actual
+      // grid that was painted (rather than recomputing from the image,
+      // which can differ subtly across devices).
+      gridStats: this.gridStats || null,
     }
   }
 
@@ -122,6 +127,7 @@ export class DiamondPaintingPuzzle {
     sortPaletteDarkToLight(this.palette)
     const rawGrid = assignCellColors(cellSamples, this.palette, this.cols)
     this.grid = rawGrid
+    let cleanupLevelUsed = 0
     if (CLEANUP_ENABLED) {
       // Adaptive cleanup: escalate the threshold if the cleaned grid still
       // has too many regions (busy images project to ~5s/region completion
@@ -133,8 +139,14 @@ export class DiamondPaintingPuzzle {
         cleaned = cleanupTinyRegions(rawGrid, this.cols, this.rows, level + 1)
       }
       this.grid = cleaned
+      cleanupLevelUsed = level
     }
     this.fills = new Int8Array(this.totalCells).fill(-1)
+    // Stamp the played grid's static features so admin doesn't have to
+    // recompute (and risk diverging from what was actually played).
+    // These travel with the session log so per-colour active-time can be
+    // correlated against per-colour fragmentation post-hoc.
+    this.gridStats = computeGridStats(this.grid, this.cols, this.rows, this.palette, cleanupLevelUsed)
 
     this.createLayout()
     this.fitZoom()
@@ -827,6 +839,11 @@ export class DiamondPaintingPuzzle {
       zoom: this.zoom,
       panX: this.panX,
       panY: this.panY,
+      // Persist the session log so a tab discard / navigation away and
+      // back doesn't reset it. Without this, sessionLog only captures
+      // events from the current in-memory instance, losing prior taps.
+      sessionLog: this.sessionLog.slice(),
+      gridStats: this.gridStats || null,
     }
   }
 
@@ -878,6 +895,22 @@ export class DiamondPaintingPuzzle {
       this.paletteBar.remove()
       this.paletteBar = this.createPaletteBar()
       this.root.append(this.paletteBar)
+    }
+
+    if (state.gridStats) {
+      this.gridStats = state.gridStats
+    }
+
+    // Restore session log so prior taps survive a tab discard / reload.
+    // Anchor sessionStartTs at performance.now() − last event's t so the
+    // next recorded event continues the timeline rather than restarting
+    // at 0 (which would silently drop t-coherence with prior events).
+    if (Array.isArray(state.sessionLog) && state.sessionLog.length > 0) {
+      const cap = this.sessionLogCap
+      this.sessionLog = state.sessionLog.slice(0, cap)
+      const last = this.sessionLog[this.sessionLog.length - 1]
+      const lastT = Number(last?.t) || 0
+      this.sessionStartTs = performance.now() - lastT
     }
 
     this.applyTransform()
@@ -1485,6 +1518,83 @@ export function splitLargeRegions(grid, cellSamples, palette, cols, rows, maxFra
   }
 
   return result
+}
+
+// Static features of the played grid, computed once at init so the
+// session log carries the predictors alongside the timing data. Admin
+// can correlate per-colour active time against per-colour fragmentation
+// without recomputing (which would diverge from the actual played grid
+// when re-decoding the image on a different device).
+function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
+  const total = grid.length
+  const numColors = palette?.length || 0
+  const cellsPerColor = new Array(numColors).fill(0)
+  const regionsPerColor = new Array(numColors).fill(0)
+  for (let i = 0; i < total; i++) cellsPerColor[grid[i]] = (cellsPerColor[grid[i]] || 0) + 1
+
+  // Single-pass 8-connected region scan: per region, increment its
+  // colour bucket and append its size to the size list (used for the
+  // histogram below).
+  const visited = new Uint8Array(total)
+  const stack = []
+  const sizes = []
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const color = grid[start]
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+    let size = 0
+    while (stack.length > 0) {
+      const idx = stack.pop()
+      size++
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === color) {
+            visited[n] = 1
+            stack.push(n)
+          }
+        }
+      }
+    }
+    regionsPerColor[color] = (regionsPerColor[color] || 0) + 1
+    sizes.push(size)
+  }
+
+  // Buckets chosen for gameplay relevance, not even spacing:
+  //   1: forced single tap
+  //   2-4: precision taps
+  //   5-16: small clusters
+  //   17-64: medium blobs
+  //   65+: dominant regions (background-tier)
+  const histogram = { '1': 0, '2-4': 0, '5-16': 0, '17-64': 0, '65+': 0 }
+  for (const sz of sizes) {
+    if (sz === 1) histogram['1']++
+    else if (sz <= 4) histogram['2-4']++
+    else if (sz <= 16) histogram['5-16']++
+    else if (sz <= 64) histogram['17-64']++
+    else histogram['65+']++
+  }
+
+  return {
+    cols,
+    rows,
+    totalCells: total,
+    cleanupLevelUsed: cleanupLevelUsed | 0,
+    regionCount: sizes.length,
+    largestRegionSize: sizes.length ? Math.max(...sizes) : 0,
+    cellsPerColor,
+    regionsPerColor,
+    regionSizeHistogram: histogram,
+    paletteRgb: (palette || []).map((c) => [c[0], c[1], c[2]]),
+  }
 }
 
 // Absorb connected regions smaller than `minRegion` (8-direction) into
