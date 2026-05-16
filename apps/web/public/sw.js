@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v9'
+const CACHE_NAME = 'xefig-v10'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
@@ -31,14 +31,31 @@ self.addEventListener('message', (event) => {
   if (!data || data.type !== 'evict-cached') return
   const urls = Array.isArray(data.urls) ? data.urls : []
   if (urls.length === 0) return
+  // Hard-match on pathname: ignoreSearch on cache.delete has been
+  // observed (iOS Safari especially) to over-match in ways that
+  // include sibling URLs we never named. Iterate the cache, compare
+  // pathnames exactly, delete by the original Request object so the
+  // query string is preserved during deletion.
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME)
-    await Promise.all(urls.map((url) => {
+    const targetPaths = new Set()
+    for (const raw of urls) {
       try {
-        return cache.delete(url, { ignoreSearch: true })
+        targetPaths.add(new URL(raw, self.location.origin).pathname)
       } catch {
-        return null
+        // Ignore unparseable entries.
       }
+    }
+    if (targetPaths.size === 0) return
+    const keys = await cache.keys()
+    await Promise.all(keys.map((req) => {
+      try {
+        const path = new URL(req.url).pathname
+        if (targetPaths.has(path)) return cache.delete(req)
+      } catch {
+        // Skip unparseable cache keys.
+      }
+      return null
     }))
   })())
 })

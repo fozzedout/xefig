@@ -307,7 +307,16 @@ async function apiPost(path, body, timeoutMs = 15000) {
       body: JSON.stringify(body),
       signal: controller.signal,
     })
-    return res.json()
+    // res.json() is not bounded by the abort signal — once headers
+    // arrive, fetch resolves and the body read becomes its own
+    // operation. A stalled / partially-sent body would hang this
+    // promise forever. Race against the same timeout to keep the
+    // total operation bounded.
+    const bodyPromise = res.json()
+    const bodyTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('apiPost body read timeout')), timeoutMs)
+    })
+    return await Promise.race([bodyPromise, bodyTimeout])
   } finally {
     clearTimeout(timer)
   }
@@ -750,6 +759,14 @@ async function syncNow() {
 
   syncInFlight = (async () => {
     setSyncStatus('syncing')
+    // Watchdog: if anything we await silently hangs (e.g. a stalled
+    // res.json() — apiPost's AbortController times out the fetch but
+    // NOT the JSON read past it), force-resolve after 45s so the UI
+    // doesn't pulse forever. The actual operation can still complete
+    // later; the post-await setSyncStatus will correct the state.
+    const watchdog = setTimeout(() => {
+      setSyncStatus('error')
+    }, 45000)
     try {
       await pushPendingBatches()
       await pullAllRemoteChanges()
@@ -757,6 +774,7 @@ async function syncNow() {
     } catch {
       setSyncStatus('error')
     } finally {
+      clearTimeout(watchdog)
       syncInFlight = null
     }
   })()

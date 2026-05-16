@@ -662,10 +662,14 @@ async function prefetchPlayableImages(puzzlePayload) {
   }
 
   if (puzzlePayload?.categories && puzzlePayload?.date) {
-    const completedToday = getCompletedModesForDate(puzzlePayload.date)
+    // Prefetch every today-mode (completed included). Completed modes
+    // used to be skipped under the old evict-on-completion policy;
+    // now we keep today's completed full images cached so the menu
+    // upgrade-to-full path can use them. After a cache wipe (e.g.
+    // SW version bump) the completed modes would otherwise stay on
+    // thumbnails until the user replays them.
     const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
     for (const mode of modes) {
-      if (completedToday.has(mode)) continue
       const url = resolvePuzzleImageUrl(puzzlePayload, mode)
       if (url && url !== sampleImage && !seen.has(url)) {
         seen.add(url)
@@ -1061,13 +1065,43 @@ function recordCompletedRun(run) {
     gameMode: mode,
   })
 
-  // Mark the full image for eviction from the SW cache. Images are
-  // validated before going live, so until a puzzle is completed the
-  // cached copy is still working capital — we keep it around. After
-  // completion, the heavy bytes are dead weight: the user has finished,
-  // the archive / completion screen can use the thumbnail, and a replay
-  // can re-fetch on demand. Frees cache budget for unplayed puzzles.
-  evictCompletedImageFromCache(run)
+  // Evict the full image from the SW cache, but only for puzzles
+  // whose date isn't today — the launcher reuses the cached full
+  // image to upgrade the slice preview, and we want today's preview
+  // sharp. Past completions (archive replays) evict immediately
+  // because they're not on the menu. The next-day sweep in
+  // renderLauncher handles today's completions once the date rolls.
+  const todayKey = getIsoDate(new Date())
+  if (run.puzzleDate !== todayKey) {
+    evictCompletedImageFromCache(run)
+  }
+}
+
+// On launcher render, sweep the SW cache for full images of completed
+// puzzles whose date is before today. They were kept around for the
+// launcher's upgrade-to-full while their date was current; now they
+// are no longer on the menu and we can reclaim the bytes. Uses a
+// predictable URL pattern (the worker serves /cdn/puzzles/YYYY-MM-DD/
+// <category>.webp) so we don't need the exact ?v= cache-bust — the
+// SW evict handler runs with ignoreSearch.
+function evictPastCompletedImages(todayDate) {
+  if (typeof navigator === 'undefined') return
+  const sw = navigator.serviceWorker
+  if (!sw || !sw.controller) return
+  const completedRunsByDate = getCompletedRunsByDate()
+  const urls = []
+  for (const [date, dateRuns] of Object.entries(completedRunsByDate)) {
+    if (!date || date >= todayDate) continue
+    if (!dateRuns || typeof dateRuns !== 'object') continue
+    for (const mode of Object.keys(dateRuns)) {
+      const categoryKey = GAME_MODE_TO_PUZZLE_CATEGORY[normalizeGameMode(mode)] || 'jigsaw'
+      urls.push(`/cdn/puzzles/${date}/${categoryKey}.webp`)
+    }
+  }
+  if (urls.length === 0) return
+  try {
+    sw.controller.postMessage({ type: 'evict-cached', urls })
+  } catch {}
 }
 
 // One-time migration: drop completion records stuck below the plausible
@@ -2039,11 +2073,45 @@ function renderLauncher() {
   state.gameMode = getGameModeOfDay(todayDate)
   state.difficulty = state.difficulty || 'medium'
 
+  // Reclaim cache bytes for completions that are no longer on the
+  // menu. Today's completed full images stay (they upgrade the slice
+  // preview); anything before today is fair game.
+  evictPastCompletedImages(todayDate)
+
   const ACTIVE_FLEX = 3
   const INACTIVE_FLEX = 0.8
   const MORE_INACTIVE_FLEX = 0.6
   const pickMode = getGameModeOfDay(todayDate)
   const modes = [GAME_MODE_JIGSAW, GAME_MODE_SLIDING, GAME_MODE_SWAP, GAME_MODE_POLYGRAM, GAME_MODE_DIAMOND]
+
+  // Swap the launcher's slice images from thumbnail → full only if
+  // the full image is ALREADY in the browser/SW cache (downloaded
+  // previously by playing the puzzle or by a background prefetch).
+  // Never initiates a fresh fetch: the menu's job is to render fast
+  // and stay usable on a bad line. Thumbnails are the priority — they
+  // are sufficient for the slice preview and the gameplay path will
+  // upgrade on its own. The /api/* cache lookup goes through all
+  // active caches (HTTP + service worker), so a one-time check is
+  // enough; no need to know which named cache holds the asset.
+  async function upgradeSliceImagesToFull(scope) {
+    if (typeof caches === 'undefined') return
+    const imgs = scope.querySelectorAll('img.slice-image[data-full-url]')
+    for (const img of imgs) {
+      const fullUrl = img.dataset.fullUrl
+      if (!fullUrl || img.src === fullUrl) continue
+      try {
+        // ignoreSearch: defensive — the /cdn SW handler keys by full
+        // URL (including ?v=…), so an exact match works for normal
+        // play. ignoreSearch covers the case where a regenerated
+        // puzzle's ?v= changes between caching and lookup, so we can
+        // still surface the older cached copy on the menu.
+        const hit = await caches.match(fullUrl) || await caches.match(fullUrl, { ignoreSearch: true })
+        if (hit) img.src = fullUrl
+      } catch {
+        // Cache lookup unavailable — leave the thumbnail.
+      }
+    }
+  }
 
   const renderSlices = (puzzlePayload) => {
     const puzzleDate = puzzlePayload?.date || todayDate
@@ -2067,7 +2135,7 @@ function renderLauncher() {
         const isDiamond = mode === GAME_MODE_DIAMOND
         const sliceImageHtml = isDiamond
           ? `<canvas class="slice-image diamond-grid-canvas" data-image-url="${fullImageUrl}" data-date="${puzzleDate}"></canvas>`
-          : `<img class="slice-image" src="${imageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />`
+          : `<img class="slice-image" src="${imageUrl}" data-full-url="${fullImageUrl}" alt="${title}" decoding="async" loading="${isLCP ? 'eager' : 'lazy'}"${isLCP ? ' fetchpriority="high"' : ''} />`
 
         return `
           <div class="slice${isActive ? ' active' : ''}" data-mode="${mode}" style="--flex: ${flex};">
@@ -2242,6 +2310,7 @@ function renderLauncher() {
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
       computeSliceCenter(container)
+      upgradeSliceImagesToFull(container)
 
       // Recompute on any container resize so --slice-center / --slice-middle /
       // --info-width track the live geometry (window resize, devtools dock,
@@ -2263,10 +2332,11 @@ function renderLauncher() {
       // Prefetch full-resolution images in priority order — active
       // resume runs first, then today's unplayed modes. Throttled,
       // gated on healthy network, deferred to idle so it never fights
-      // user interaction. Completed puzzles are NOT prefetched: their
-      // images get evicted from cache on completion (see
-      // evictCompletedImageFromCache) and we don't want to re-pull
-      // them just to evict again.
+      // user interaction. Completed puzzles are NOT prefetched: today's
+      // completed images are already in cache (we keep them so the
+      // launcher can upgrade the slice preview), and past-day
+      // completions are evicted on launcher render so re-pulling them
+      // here would just defeat that sweep.
       const triggerPrefetch = () => {
         prefetchPlayableImages(payload).catch(() => { })
       }
@@ -4842,8 +4912,14 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           </button>
           <div class="floating-game-controls">
             <div class="gt-menu-wrap gt-menu-wrap--floating">
-              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome ? 'Helper menu' : 'Puzzle menu'}">
-                ${useImmersiveJigsawChrome ? `
+              <span class="gt-sync-disk" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6-1.5A4.5 4.5 0 0 0 6.5 19Z"/>
+                  <path d="M12 17 V11 M9 14 L12 11 L15 14"/>
+                </svg>
+              </span>
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome ? 'Helper menu' : 'Puzzle menu'}">
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome ? `
                 <svg class="assistant-logo" viewBox="0 0 200 200" aria-hidden="true">
                   <g transform="translate(100 100) rotate(-20)">
                     <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#e070a0"/>
@@ -4856,7 +4932,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                 ` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`}
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
-                ${useImmersiveJigsawChrome ? `
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome ? `
                 <button id="how-to-play-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.6 15h-1.3v-1.3h1.3Zm1.7-5.4-.6.6c-.5.5-.7.9-.7 1.8h-1.3v-.3c0-.7.3-1.3.8-1.8l.8-.8a1.5 1.5 0 1 0-2.6-1H8.7a3 3 0 1 1 5.6 1.5Z"/></svg>
                   How to play
@@ -4865,6 +4941,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21h6v-1H9Zm3-19a7 7 0 0 0-4 12.7c.6.4.9 1 .9 1.7v1.1c0 .3.2.5.5.5h5.2c.3 0 .5-.2.5-.5v-1.1c0-.7.3-1.3.9-1.7A7 7 0 0 0 12 2Z"/></svg>
                   I need a hint!
                 </button>
+                ${useImmersiveJigsawChrome ? `
                 <div class="gt-menu-divider" aria-hidden="true"></div>
                 <button id="highlight-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
@@ -4874,6 +4951,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
                   Edges only
                 </button>
+                ` : ''}
                 ` : ''}
                 ${viewButtonMarkup}
                 ${muteSfxButtonMarkup}
@@ -5029,11 +5107,11 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   document.addEventListener('click', closeMenu)
   if (menuPanel) menuPanel.addEventListener('click', closeMenu)
 
-  // ─── In-game helper (jigsaw v1; will expand to every mode) ───
+  // ─── In-game helper (jigsaw + polygram; expanding to every mode) ───
   // Loaded lazily so the homepage bundle isn't dragged into the puzzle path.
   const howToPlayBtn = gameEl.querySelector('#how-to-play-btn')
   const hintBtn = gameEl.querySelector('#hint-btn')
-  const useAssistant = useImmersiveJigsawChrome && menuBtn && menuPanel && workspaceEl
+  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome) && menuBtn && menuPanel && workspaceEl
   let assistantPuzzleReady = false
   let assistantNudgeFn = null
   const tryAssistantNudge = () => {
@@ -5125,12 +5203,15 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         ;(async () => {
           // Small delay so the bubble appears first, then the demo plays.
           await new Promise((r) => { rafId = requestAnimationFrame(() => setTimeout(r, 250)) })
-          if (aborted) return
-          await tween(origin, forward, 700)
-          if (aborted) return
-          await tween(carousel[prop], backward, 900)
-          if (aborted) return
-          await tween(carousel[prop], origin, 600)
+          // Two full back-and-forth cycles — one pass is over too fast
+          // for the player to register that the tray is scrollable.
+          for (let cycle = 0; cycle < 2 && !aborted; cycle++) {
+            await tween(carousel[prop], forward, 700)
+            if (aborted) return
+            await tween(carousel[prop], backward, 900)
+            if (aborted) return
+            await tween(carousel[prop], origin, 600)
+          }
         })()
         return () => {
           aborted = true
@@ -5198,17 +5279,252 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         return steps
       }
 
+      // Polygram has the same helper button shape as jigsaw but a
+      // different verb set: pick a shard from the tray, rotate it to
+      // align with its target outline, then drop it on the board. The
+      // hint surfaces the next unplaced shard + the rough drop area so
+      // the player knows where to focus instead of scanning the whole
+      // tray.
+      const pickPolygramHintTarget = () => {
+        if (!puzzle || !Array.isArray(puzzle.pieces)) return { trayEl: null, dropRect: null }
+        // Skip locked + currently-held; prefer "still in tray" over
+        // "already on the board but not snapped" so the hint points at
+        // a clear next step rather than a half-fixed mistake.
+        const trayPiece = puzzle.pieces.find((p) => p && p.state === 'tray')
+          || puzzle.pieces.find((p) => p && p.state === 'placed')
+          || null
+        if (!trayPiece) return { trayEl: null, dropRect: null }
+        const trayEl = trayPiece.element || null
+        // Drop target = the shard's blueprint bbox centre, projected
+        // through the live board rect. bbox.x/y/w/h are 0..1 fractions
+        // of the board (see polygram-puzzle.js placePieceOnBoard), not
+        // pixels, so they multiply by the board's current bounding
+        // rect to land at the right screen coords.
+        const board = puzzle.boardContent || document.querySelector('.polygram-board-content')
+        let dropRect = null
+        const bbox = trayPiece.blueprint && trayPiece.blueprint.bbox
+        if (board && bbox && Number.isFinite(bbox.x) && Number.isFinite(bbox.y)) {
+          const rect = board.getBoundingClientRect()
+          const cxFrac = bbox.x + (bbox.w || 0) / 2
+          const cyFrac = bbox.y + (bbox.h || 0) / 2
+          const px = rect.left + cxFrac * rect.width
+          const py = rect.top + cyFrac * rect.height
+          dropRect = { left: px - 14, top: py - 14, width: 28, height: 28 }
+        }
+        return { trayEl, dropRect }
+      }
+
+      // Tray scroll demo, polygram flavour. Polygram's tray scrolls on
+      // a different axis per orientation: portrait = horizontal strip
+      // at top, landscape = vertical column on the right. Pick the
+      // axis from window orientation (not from auto-detection on the
+      // element — `.polygram-tray` has `overflow: hidden` which still
+      // reports a scrollWidth > clientWidth, so axis detection there
+      // would falsely flag horizontal scroll in landscape).
+      const demoPolygramTrayScroll = () => {
+        const scroller = puzzle?.trayGrid
+          || document.querySelector('.polygram-tray-grid')
+        if (!scroller) return undefined
+        const isLandscape = window.matchMedia('(orientation: landscape)').matches
+        const prop = isLandscape ? 'scrollTop' : 'scrollLeft'
+        const range = isLandscape
+          ? (scroller.scrollHeight - scroller.clientHeight)
+          : (scroller.scrollWidth - scroller.clientWidth)
+        if (range <= 4) return undefined
+        const origin = scroller[prop]
+        const amplitude = Math.min(range * 0.55, 220)
+        const forward = Math.min(origin + amplitude, range)
+        const backward = Math.max(origin - amplitude, 0)
+        let aborted = false
+        let rafId = 0
+        const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - ((1 - t) * (1 - t) * 2))
+        const tween = (from, to, ms) => new Promise((resolve) => {
+          const start = performance.now()
+          const tick = (now) => {
+            if (aborted) return resolve()
+            const k = Math.min(1, (now - start) / ms)
+            scroller[prop] = from + (to - from) * ease(k)
+            if (k < 1) rafId = requestAnimationFrame(tick)
+            else resolve()
+          }
+          rafId = requestAnimationFrame(tick)
+        })
+        ;(async () => {
+          await new Promise((r) => { rafId = requestAnimationFrame(() => setTimeout(r, 250)) })
+          // Two cycles — matches the jigsaw demo cadence so the player
+          // has time to register that the tray is scrollable.
+          for (let cycle = 0; cycle < 2 && !aborted; cycle++) {
+            await tween(scroller[prop], forward, 700)
+            if (aborted) return
+            await tween(scroller[prop], backward, 900)
+            if (aborted) return
+            await tween(scroller[prop], origin, 600)
+          }
+        })()
+        return () => {
+          aborted = true
+          cancelAnimationFrame(rafId)
+        }
+      }
+
+      const buildPolygramTutorialSteps = () => {
+        const { trayEl, dropRect } = pickPolygramHintTarget()
+        const steps = [
+          { target: null, message: "Welcome! Polygram is rotate-and-place." },
+          {
+            target: '.polygram-tray',
+            message: 'These are the shards. Scroll the tray to see more.',
+            onShow: demoPolygramTrayScroll,
+          },
+        ]
+        if (trayEl) {
+          steps.push({
+            target: trayEl,
+            message: 'Tap this shard to pick it up.',
+            advanceOn: [{ element: trayEl, event: 'pointerdown' }],
+          })
+          if (dropRect) {
+            // First drop is deliberately off-target so the shard lands
+            // in the "placed but not snapped" state — that's what
+            // surfaces the rotation ring, which the next step explains.
+            // Push the off-target a meaningful distance so the two
+            // drops read as clearly distinct events; small offsets put
+            // the practice drop on top of the real target and the
+            // tutorial loses its "move it again" payoff.
+            const boardEl = puzzle?.board || document.querySelector('.polygram-board')
+            const boardRect = boardEl ? boardEl.getBoundingClientRect() : null
+            const offsetX = boardRect ? Math.min(boardRect.width * 0.38, 240) : 180
+            const offsetY = boardRect ? Math.min(boardRect.height * 0.38, 240) : 180
+            // Direction: bias toward the board centre so we don't
+            // overshoot the edge.
+            const boardCx = boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2
+            const boardCy = boardRect ? boardRect.top + boardRect.height / 2 : window.innerHeight / 2
+            const dropCx = dropRect.left + dropRect.width / 2
+            const dropCy = dropRect.top + dropRect.height / 2
+            const sgnX = dropCx < boardCx ? 1 : -1
+            const sgnY = dropCy < boardCy ? 1 : -1
+            let offLeft = dropRect.left + sgnX * offsetX
+            let offTop = dropRect.top + sgnY * offsetY
+            // Hard clamp to the board's safe area so we don't park the
+            // bouncer (and ask the player to drop) outside the canvas.
+            if (boardRect) {
+              const pad = 40
+              offLeft = Math.max(boardRect.left + pad, Math.min(boardRect.right - pad, offLeft))
+              offTop = Math.max(boardRect.top + pad, Math.min(boardRect.bottom - pad, offTop))
+            }
+            const offRect = { left: offLeft, top: offTop, width: 28, height: 28 }
+            steps.push({
+              target: offRect,
+              message: 'Drop it about here — NOT on the outline. We\'ll rotate it next.',
+              advanceOn: [{ element: document, event: 'pointerup' }],
+            })
+          }
+        }
+        // After the off-target drop, the rotation ring auto-appears
+        // around the placed shard. ONE combined step explains both
+        // verbs (rotate + dismiss) and auto-advances the moment the
+        // ring goes away. Splitting these into two steps meant the
+        // player often dismissed the ring while still on the "drag
+        // the ring" step (no advance criteria) and nothing happened.
+        steps.push({
+          target: '.polygram-board',
+          message: 'A ring appeared — that\'s rotate mode. Drag the ring to spin the shard, then tap anywhere off the ring to switch back to drag mode.',
+          // Block tap-to-advance on the bubble: the next step asks the
+          // user to pick the shard up again, which only works once
+          // they\'re in drag mode (ring dismissed). Letting them tap
+          // past lands them on a step they can\'t actually do.
+          noManualAdvance: true,
+          onShow: (assistant) => {
+            // Watch for the user tapping off the ring. Any pointerdown
+            // outside .polygram-rotate-ring dismisses it (per polygram
+            // pointer handlers). Listen at the document level so we
+            // catch the tap regardless of where it lands. Defer the
+            // advance past the in-flight gesture: the next step's
+            // advanceOn is `pointerup`, and if we advance synchronously
+            // here that listener gets installed in time to catch the
+            // same gesture's pointerup and skips the step.
+            let deferredAdvance = null
+            let pollTimer = null
+            const ring = document.querySelector('.polygram-rotate-ring')
+            const tryAdvance = () => {
+              if (deferredAdvance) return
+              if (!assistant.sequenceAdvanceResolve) return
+              if (ring && ring.classList.contains('is-visible')) return
+              deferredAdvance = setTimeout(() => {
+                deferredAdvance = null
+                if (assistant.sequenceAdvanceResolve) {
+                  assistant.sequenceAdvanceResolve(true)
+                }
+              }, 300)
+            }
+            const onPointerDown = (event) => {
+              if (event.target && event.target.closest && event.target.closest('.polygram-rotate-ring')) return
+              requestAnimationFrame(tryAdvance)
+            }
+            document.addEventListener('pointerdown', onPointerDown, true)
+            pollTimer = setInterval(tryAdvance, 150)
+            const initialCheck = setTimeout(tryAdvance, 80)
+            return () => {
+              clearTimeout(initialCheck)
+              if (deferredAdvance) clearTimeout(deferredAdvance)
+              if (pollTimer) clearInterval(pollTimer)
+              document.removeEventListener('pointerdown', onPointerDown, true)
+            }
+          },
+        })
+        if (trayEl && dropRect) {
+          // Second drop = the real target. By this point the shard is
+          // un-ringed, the user has done the rotate, and they need to
+          // pick the shard back up and drop it on the actual outline.
+          steps.push({
+            target: dropRect,
+            message: 'Pick the shard up again and drop it about here — on the real outline this time.',
+            advanceOn: [{ element: document, event: 'pointerup' }],
+          })
+        }
+        steps.push({ target: null, message: 'When edges line up, it snaps.' })
+        steps.push({
+          target: '.polygram-board',
+          message: 'Rule of thumb: drag = move. Tap a placed shard = rotate.',
+        })
+        steps.push({ target: null, message: "That's it!" })
+        return steps
+      }
+
+      const buildPolygramHintSteps = () => {
+        const { trayEl, dropRect } = pickPolygramHintTarget()
+        if (!trayEl) {
+          return [{ target: null, message: 'Every shard is placed — nudge them into alignment to finish.' }]
+        }
+        const steps = [{
+          target: trayEl,
+          message: 'Pick up this shard.',
+          advanceOn: [{ element: trayEl, event: 'pointerdown' }],
+        }]
+        if (dropRect) {
+          steps.push({
+            target: dropRect,
+            message: 'It belongs about here — rotate until it snaps.',
+            advanceOn: [{ element: document, event: 'pointerup' }],
+          })
+        }
+        return steps
+      }
+
+      const tutorialBuilder = useImmersivePolygramChrome ? buildPolygramTutorialSteps : buildJigsawTutorialSteps
+      const hintBuilder = useImmersivePolygramChrome ? buildPolygramHintSteps : buildJigsawHintSteps
+
       if (howToPlayBtn) {
         howToPlayBtn.addEventListener('click', () => {
           if (!activeAssistant) return
-          activeAssistant.runSequence(buildJigsawTutorialSteps())
+          activeAssistant.runSequence(tutorialBuilder())
         })
       }
 
       if (hintBtn) {
         hintBtn.addEventListener('click', () => {
           if (!activeAssistant) return
-          const steps = buildJigsawHintSteps()
+          const steps = hintBuilder()
           if (!steps.length) return
           // Silent +30s clock penalty. We bump the base directly so the
           // timer keeps running normally afterwards — the user only ever
@@ -5434,6 +5750,14 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
     ; (async () => {
       try {
         destroyPuzzle()
+        // destroyPuzzle calls onStatusChange(null) (via unbindGameActivity)
+        // to detach the previous game's callback. Re-register the
+        // current game's updateSaveIndicator AFTER, otherwise the
+        // earlier-set callback (line 4937) gets nullified here and
+        // post-sync status transitions never reach the menu button —
+        // the disk icon ends up pulsing forever even when sync has
+        // long finished.
+        onStatusChange(updateSaveIndicator)
 
         if (resumeRun) {
           state.gameMode = normalizeGameMode(resumeRun.gameMode || state.gameMode)

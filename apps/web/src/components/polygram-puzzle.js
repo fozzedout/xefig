@@ -104,6 +104,13 @@ export class PolygramPuzzle {
         // paintAllPieces re-applies background-image (with the new URL)
         // and re-computes cover metrics from this.image's natural dims.
         this.paintAllPieces()
+        // The ghost image and reference image also need their src
+        // swapped, otherwise the board background and the eye-toggle
+        // preview stay on the upscaled thumbnail (visible as a heavily
+        // pixellated background behind the placed shards).
+        if (this.ghostImage) {
+          this.ghostImage.src = this.displayImageUrl
+        }
         if (this.referenceImage) {
           this.referenceImage.src = this.displayImageUrl
         }

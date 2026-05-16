@@ -3678,13 +3678,34 @@ canvas.slice-image {
   50% { opacity: 1; }
 }
 
-/* In-game: tint the dropdown menu button amber while a cloud sync is
-   running, so the status is visible in immersive chrome too. */
-.gt-icon-btn[data-sync="syncing"] {
+/* In-game sync indicator: a small floppy-disk icon sits behind the
+   rosette menu button. While a sync is in flight it fades in and
+   pulses; otherwise it's invisible. Decoupling it from the rosette
+   means the bouncing-nudge animation and the syncing animation can
+   coexist without one fighting the other for the button's transform/
+   filter properties. The disk sits in the empty centre of the
+   rosette so it peeks through the petal gaps. */
+.gt-menu-wrap--floating { position: relative; }
+.gt-sync-disk {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 220ms ease;
   color: #fbbf24;
-  background: rgba(251, 191, 36, 0.18);
-  border-color: rgba(251, 191, 36, 0.35);
-  animation: pulse-save 1s ease-in-out infinite;
+}
+.gt-sync-disk svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.gt-menu-wrap--floating:has(.gt-icon-btn[data-sync="syncing"]) .gt-sync-disk {
+  opacity: 1;
+  animation: pulse-save 1.2s ease-in-out infinite;
 }
 
 /* ─── More sheet (modal) ─────────────────────────────────────────────────
@@ -5511,6 +5532,33 @@ canvas.slice-image {
     grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr) 88px;
     gap: 0;
+  }
+  /* Match jigsaw landscape: rosette floats bottom-left so the back
+     button (top-left), tray column (right), and helper (bottom-left)
+     each own a clear corner. Override the polygram-default top-right
+     positioning from earlier in this file. */
+  .game-shell--polygram .floating-game-controls {
+    top: auto;
+    right: auto;
+    bottom: calc(16px + var(--sai-bottom));
+    left: calc(16px + var(--sai-left));
+  }
+  .game-shell--polygram .floating-game-controls .gt-menu--floating {
+    top: auto;
+    bottom: calc(100% + 0.55rem);
+    left: 0;
+    right: auto;
+  }
+  /* No svg size override: the .gt-icon-btn--assistant .assistant-logo
+     rule (width/height 100%) lets the rosette fill the full 42px
+     button, matching jigsaw landscape. The earlier polygram override
+     forced svg to 16px, leaving the rosette tiny inside the circle. */
+  /* Hide the timer numerals — they used to sit next to the menu in
+     the top-right; with the rosette now bottom-left there's no menu
+     there to anchor the timer to. Elapsed time still shows on the
+     completion screen. */
+  .game-shell--polygram .floating-timer {
+    display: none;
   }
 
   .game-shell--immersive .polygram-tray {
@@ -7451,6 +7499,16 @@ canvas.slice-image {
   height: 100%;
   display: block;
 }
+/* During a guided sequence the bouncer (a moving copy of the rosette)
+   parks on top of the menu button for the first step. Two stacked
+   rosettes look broken; hide the static menu button while the
+   sequence bouncer is in the DOM. visibility: hidden keeps the
+   button's layout slot (so neighbouring chrome doesn't reflow) but
+   makes it invisible and non-interactive. */
+.workspace:has(.assistant-bouncer) .gt-icon-btn--assistant {
+  visibility: hidden;
+  pointer-events: none;
+}
 /* Classic squash-and-stretch bounce cycle, anchored at the bottom so the
    mark feels grounded:
      - 0/100%: rest pose
@@ -7534,6 +7592,21 @@ canvas.slice-image {
 }
 .assistant-bouncer--instant { transition: none; }
 .assistant-bouncer--leaving { opacity: 0; transition: opacity 240ms ease-out; }
+/* Final-step send-off: the bouncer flies back to the menu button
+   (positioned via placeBouncerOver in JS, animated by the existing
+   transform transition) and then shrinks-and-fades in place so the
+   static menu button can take back over without a visible "drop off
+   the screen then reappear" seam. The shrink targets the inner mark
+   so it overrides the bouncing keyframes cleanly (single `animation`
+   slot); both scale and opacity animate together. */
+.assistant-bouncer--shrinking .assistant-bouncer-mark {
+  animation: assistant-bouncer-shrink 320ms cubic-bezier(0.55, 0, 0.55, 1) forwards;
+}
+@keyframes assistant-bouncer-shrink {
+  0%   { transform: scale(1); opacity: 1; }
+  20%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(0.15); opacity: 0; }
+}
 .assistant-bouncer-mark {
   position: absolute;
   top: 50%;

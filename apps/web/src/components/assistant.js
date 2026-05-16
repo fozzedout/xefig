@@ -139,14 +139,34 @@ export class GameAssistant {
       const btnRect = this.button.getBoundingClientRect()
       const wsRect = this.workspace.getBoundingClientRect()
       const bubbleRect = this.bubble.getBoundingClientRect()
-      // Place to the left of the button, vertically aligned with its centre.
-      // Clamp to the workspace so we never paint outside the visible area.
-      let left = (btnRect.left - wsRect.left) - bubbleRect.width - 12
-      if (left < 8) left = 8
-      let top = (btnRect.top - wsRect.top) + (btnRect.height / 2) - (bubbleRect.height / 2)
-      if (top < 8) top = 8
-      const maxTop = wsRect.height - bubbleRect.height - 8
-      if (top > maxTop) top = maxTop
+      // Preferred placement: to the left of the button, vertically
+      // centred on it. If the button is hard against the left edge of
+      // the workspace (e.g. polygram landscape, jigsaw landscape) the
+      // bubble would have to clamp into the button's footprint and
+      // its opaque background would hide the rosette. In that case,
+      // flip above the button instead. Falls back to below if even
+      // that doesn't fit (very short workspaces).
+      const leftPlacement = (btnRect.left - wsRect.left) - bubbleRect.width - 12
+      let left
+      let top
+      if (leftPlacement >= 8) {
+        left = leftPlacement
+        top = (btnRect.top - wsRect.top) + (btnRect.height / 2) - (bubbleRect.height / 2)
+        if (top < 8) top = 8
+        const maxTop = wsRect.height - bubbleRect.height - 8
+        if (top > maxTop) top = maxTop
+      } else {
+        // Horizontally centre on the button, vertically place above.
+        left = (btnRect.left - wsRect.left) + (btnRect.width / 2) - (bubbleRect.width / 2)
+        if (left < 8) left = 8
+        const maxLeft = wsRect.width - bubbleRect.width - 8
+        if (left > maxLeft) left = maxLeft
+        top = (btnRect.top - wsRect.top) - bubbleRect.height - 12
+        if (top < 8) {
+          // No room above either — fall through to below the button.
+          top = (btnRect.bottom - wsRect.top) + 12
+        }
+      }
       this.bubble.style.transform = `translate(${left}px, ${top}px)`
     })
   }
@@ -215,6 +235,11 @@ export class GameAssistant {
         this.cancelSequence()
         return
       }
+      // Some steps wait for a specific gesture (e.g. dismissing the
+      // polygram rotation ring) and shouldn't be tap-past-able from
+      // the bubble — otherwise the user can skip the hands-on bit
+      // by tapping the bubble before doing the actual action.
+      if (this.currentStep?.noManualAdvance) return
       if (this.sequenceAdvanceResolve) this.sequenceAdvanceResolve(true)
     })
 
@@ -223,6 +248,10 @@ export class GameAssistant {
     for (let i = 0; i < steps.length; i += 1) {
       if (this.sequenceCancelled || !this.bouncer) break
       const step = steps[i]
+      // Exposed so the bubble click handler can check per-step flags
+      // (currently: noManualAdvance — blocks tap-to-advance when the
+      // sequence is waiting on a specific in-game gesture).
+      this.currentStep = step
       textEl.textContent = step.message || ''
       if (step.target) this.placeBouncerOver(step.target)
       this.positionTutorialBubble()
@@ -239,6 +268,26 @@ export class GameAssistant {
       if (!advanced) break
     }
 
+    // Send-off animation: only when the sequence ran to completion (not
+    // when the user cancelled mid-stream — in that case snap dismiss
+    // is fine). Dismiss the tutorial bubble first so it doesn't sit
+    // there while the rosette flies; then move the bouncer back over
+    // the menu button (uses the existing 620ms transform transition);
+    // then shrink the inner mark in place; then tear everything down.
+    if (!this.sequenceCancelled && this.bouncer && this.button) {
+      if (this.tutorialBubble) {
+        this.tutorialBubble.classList.add('assistant-tutorial-bubble--leaving')
+        const removing = this.tutorialBubble
+        this.tutorialBubble = null
+        setTimeout(() => removing.remove(), 220)
+      }
+      this.placeBouncerOver(this.button)
+      await this.wait(560)
+      if (this.bouncer) this.bouncer.classList.add('assistant-bouncer--shrinking')
+      await this.wait(320)
+    }
+
+    this.currentStep = null
     this.cancelSequence()
   }
 
@@ -293,9 +342,21 @@ export class GameAssistant {
       this.sequenceAdvanceReject = null
     }
     if (this.bouncer) {
-      this.bouncer.classList.add('assistant-bouncer--leaving')
-      const removingBouncer = this.bouncer
-      setTimeout(() => removingBouncer.remove(), 280)
+      // The send-off (runSequence's natural end) shrinks-and-fades
+      // the inner mark to scale 0 + opacity 0 first, then calls into
+      // cancelSequence. In that case the bouncer is already invisible
+      // — running the --leaving opacity fade on top would leave the
+      // menu button hidden for an extra 280ms, which reads as the
+      // helper "dropping off the screen then reappearing as the
+      // button." Detect the shrunk state and remove immediately so
+      // the static menu button takes over instantly.
+      if (this.bouncer.classList.contains('assistant-bouncer--shrinking')) {
+        this.bouncer.remove()
+      } else {
+        this.bouncer.classList.add('assistant-bouncer--leaving')
+        const removingBouncer = this.bouncer
+        setTimeout(() => removingBouncer.remove(), 280)
+      }
       this.bouncer = null
     }
     if (this.tutorialBubble) {
@@ -313,6 +374,7 @@ export class GameAssistant {
       this.pointedEl = null
     }
     this.lastBouncerCentre = null
+    this.currentStep = null
     this._syncHelperActive()
   }
 
