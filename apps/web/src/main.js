@@ -5136,10 +5136,21 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         if (!puzzle || !puzzle.pieces) return { carouselItem: null, targetRect: null }
         const carouselEl = puzzle.carousel || document.querySelector('.jigsaw-carousel')
         const carouselRect = carouselEl?.getBoundingClientRect?.() || null
+        // Tray scrolls horizontally in portrait, vertically in landscape
+        // (sidebar). Check whichever axis is the scroll axis — otherwise
+        // landscape passes every piece (all horizontally centred in the
+        // column) and we pick a piece scrolled out of view at the top.
+        const usesSidebar = typeof puzzle.usesSidebarTray === 'function'
+          ? puzzle.usesSidebarTray()
+          : window.innerWidth > window.innerHeight
         const isVisibleInTray = (piece) => {
           if (!piece.inCarousel || piece.locked) return false
           if (!piece.carouselItem || !carouselRect) return false
           const r = piece.carouselItem.getBoundingClientRect()
+          if (usesSidebar) {
+            const cy = r.top + r.height / 2
+            return cy >= carouselRect.top + 8 && cy <= carouselRect.bottom - 8
+          }
           const cx = r.left + r.width / 2
           return cx >= carouselRect.left + 8 && cx <= carouselRect.right - 8
         }
@@ -5173,13 +5184,18 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
       const demoTrayScroll = () => {
         const carousel = puzzle?.carousel || document.querySelector('.jigsaw-carousel')
         if (!carousel) return undefined
-        const horizontalRange = carousel.scrollWidth - carousel.clientWidth
-        const verticalRange = carousel.scrollHeight - carousel.clientHeight
-        const horizontal = horizontalRange > 4
-        const vertical = !horizontal && verticalRange > 4
-        if (!horizontal && !vertical) return undefined
-        const prop = horizontal ? 'scrollLeft' : 'scrollTop'
-        const range = horizontal ? horizontalRange : verticalRange
+        // Axis from orientation, not scrollWidth/Height: in landscape the
+        // tray sets overflow-x: hidden but browsers can still report
+        // scrollWidth > clientWidth, which misdirected the demo to drive
+        // scrollLeft (a no-op there) instead of scrollTop.
+        const usesSidebar = typeof puzzle.usesSidebarTray === 'function'
+          ? puzzle.usesSidebarTray()
+          : window.innerWidth > window.innerHeight
+        const prop = usesSidebar ? 'scrollTop' : 'scrollLeft'
+        const range = usesSidebar
+          ? (carousel.scrollHeight - carousel.clientHeight)
+          : (carousel.scrollWidth - carousel.clientWidth)
+        if (range <= 4) return undefined
         const origin = carousel[prop]
         // Visible swing without dumping every piece off-screen.
         const amplitude = Math.min(range * 0.55, 220)
@@ -5221,11 +5237,19 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
 
       const buildJigsawTutorialSteps = () => {
         // Targets resolved at run-time because they're inside the puzzle's
-        // root (which init() rebuilds). Anchoring to selectors keeps the
-        // tutorial robust to puzzle re-init mid-session. The trailing drag
-        // demo uses a live piece + computed slot so the player sees the
-        // verb, not just the controls.
+        // root (which init() rebuilds). The trailing drag demo uses a
+        // live piece + computed slot so the player sees the verb, not
+        // just the controls.
         const { carouselItem, targetRect } = pickDemoPieceAndTarget()
+        // Direct element refs (not nth-child selectors): the edges filter
+        // auto-hides once every edge piece is placed (checkEdgesComplete
+        // in jigsaw-puzzle.js sets display:none), and a hidden element
+        // still matches nth-child but returns a 0×0 bounding rect —
+        // parking the bouncer in the top-left corner.
+        const edgesBtn = puzzle?.edgesTrayBtn
+        const highlightBtn = puzzle?.highlightTrayBtn
+        const revealBtn = puzzle?.revealTrayBtn
+        const isShown = (el) => el && el.offsetParent !== null
         const steps = [
           { target: null, message: "Welcome! Let's run through how Jigsaw works." },
           {
@@ -5233,10 +5257,16 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             message: 'These are your pieces. Scroll the tray to see more, then drag one onto the board.',
             onShow: demoTrayScroll,
           },
-          { target: '#jigsaw-reveal-btn', message: 'Tap the eye anytime to peek at the finished picture.' },
-          { target: '.jigsaw-tray-tools .jigsaw-tray-tool:nth-child(2)', message: 'Filter the tray to just the edge pieces — most people start with the frame.' },
-          { target: '.jigsaw-tray-tools .jigsaw-tray-tool:nth-child(1)', message: 'Lost a piece on the board? Tap the sparkle to flash all loose pieces.' },
         ]
+        if (isShown(revealBtn)) {
+          steps.push({ target: revealBtn, message: 'Tap the eye anytime to peek at the finished picture.' })
+        }
+        if (isShown(edgesBtn)) {
+          steps.push({ target: edgesBtn, message: 'Filter the tray to just the edge pieces — most people start with the frame.' })
+        }
+        if (isShown(highlightBtn)) {
+          steps.push({ target: highlightBtn, message: 'Lost a piece on the board? Tap the sparkle to flash all loose pieces.' })
+        }
         if (carouselItem && targetRect) {
           // Auto-advance when the player presses on the carousel piece —
           // the natural next gesture after the helper highlights it.
@@ -5252,7 +5282,13 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           steps.push({
             target: targetRect,
             message: 'Drag it to about here on the board — pieces snap when they get close.',
-            advanceOn: [{ element: document, event: 'pointerup' }],
+            // Wait for the actual snap (jigsaw:piece-snapped), not just any
+            // pointerup: dropping the piece in the wrong spot used to
+            // advance the tutorial to "That's it" even though nothing
+            // locked. noManualAdvance blocks tap-to-skip past for the
+            // same reason.
+            advanceOn: [{ element: document, event: 'jigsaw:piece-snapped' }],
+            noManualAdvance: true,
           })
         }
         steps.push({ target: null, message: "That's it. Have fun!" })
@@ -5273,7 +5309,8 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           steps.push({
             target: targetRect,
             message: 'It goes about here on the board.',
-            advanceOn: [{ element: document, event: 'pointerup' }],
+            advanceOn: [{ element: document, event: 'jigsaw:piece-snapped' }],
+            noManualAdvance: true,
           })
         }
         return steps

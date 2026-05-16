@@ -1043,6 +1043,9 @@ export class JigsawPuzzle {
       this.playSnapSound()
       this.checkEdgesComplete()
       this.checkCompletion()
+      this.container.dispatchEvent(
+        new CustomEvent('jigsaw:piece-snapped', { detail: { piece }, bubbles: true }),
+      )
     } else {
       piece.x = clamped.x
       piece.y = clamped.y
