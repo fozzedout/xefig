@@ -293,7 +293,16 @@ export class GameAssistant {
       const t = event.target
       if (t && t.closest && t.closest('.assistant-tutorial-bubble, .assistant-bouncer')) return
       const stepAtSchedule = this.currentStep
-      setTimeout(() => {
+      // Track the pending collapse so we can cancel it on step
+      // transition. Without this, the slider's "Nice work" pep-talk
+      // (which immediately follows a collapseOnInteraction placement
+      // step) could be silently collapsed by a stale timer firing
+      // moments after the step changed — the bail check inside the
+      // timer doesn't reliably win every race, and the user perceives
+      // the final bubble as auto-closing.
+      if (this._pendingCollapseTimer) clearTimeout(this._pendingCollapseTimer)
+      this._pendingCollapseTimer = setTimeout(() => {
+        this._pendingCollapseTimer = null
         if (this.currentStep !== stepAtSchedule) return
         if (!this.tutorialBubble) return
         if (this.tutorialBubble.classList.contains('assistant-tutorial-bubble--collapsed')) return
@@ -311,6 +320,14 @@ export class GameAssistant {
       // Exposed so the bubble click handler can check per-step flags
       // (currently: noManualAdvance — blocks tap-to-advance when the
       // sequence is waiting on a specific in-game gesture).
+      // Cancel any deferred collapse from the previous step before
+      // installing the new one — otherwise a still-pending timer from
+      // a collapseOnInteraction step (e.g. slider placement) could
+      // fire after this point and quietly hide the new step's bubble.
+      if (this._pendingCollapseTimer) {
+        clearTimeout(this._pendingCollapseTimer)
+        this._pendingCollapseTimer = null
+      }
       this.currentStep = step
       textEl.textContent = step.message || ''
       this._updateAdvanceAffordance(step)
@@ -479,6 +496,10 @@ export class GameAssistant {
   cancelSequence() {
     this.sequenceCancelled = true
     this._runStepCleanup()
+    if (this._pendingCollapseTimer) {
+      clearTimeout(this._pendingCollapseTimer)
+      this._pendingCollapseTimer = null
+    }
     if (this._sequenceWorkspaceListener) {
       this.workspace.removeEventListener('pointerdown', this._sequenceWorkspaceListener, true)
       this._sequenceWorkspaceListener = null

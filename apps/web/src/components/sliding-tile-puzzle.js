@@ -131,9 +131,10 @@ export class SlidingTilePuzzle {
         if (this.victoryTile) {
           this.victoryTile.style.backgroundImage = `url("${this.displayImageUrl}")`
         }
-        if (this.referenceImage) {
-          this.referenceImage.src = this.displayImageUrl
-        }
+        // Reference is a tile-grid div with photo-slice backgrounds —
+        // rebuild it so each cell picks up the full-resolution URL the
+        // live tiles just got.
+        this.paintReferenceGrid()
       })
       .catch((err) => {
         console.warn('Sliding-tile full image upgrade failed; staying on thumbnail.', err)
@@ -267,14 +268,24 @@ export class SlidingTilePuzzle {
     this.board = document.createElement('div')
     this.board.className = 'sliding-board'
 
-    this.referenceImage = document.createElement('img')
+    // Slider's reference is a numbered-grid preview of the solved state
+    // (with the gap shown in its home corner), not a peek at the
+    // underlying photo. The tutorial copy talks about "putting tiles
+    // in order — 1 in the top-left, then 2, 3, 4 going across each
+    // row", and showing the photo doesn't help the player figure out
+    // *which number goes where* — especially in rotated layouts where
+    // the gap corner moves and the numbering shifts with it. The grid
+    // makes the solved arrangement directly inspectable.
+    //
+    // (Kept the legacy `referenceImage` field name to keep all
+    // setReferenceVisible / referenceVisible call sites unchanged.)
+    this.referenceImage = document.createElement('div')
     this.referenceImage.className = 'sliding-reference'
-    this.referenceImage.src = this.displayImageUrl
-    this.referenceImage.alt = 'Reference image'
+    this.referenceImage.setAttribute('aria-label', 'Reference: numbered tiles in solved order, with the gap')
     this.referenceImage.addEventListener('click', () => {
       if (!this.referenceVisible) return
       // The double-tap that *opened* the reference also fires a click on
-      // the now-visible image; without this guard it would dismiss
+      // the now-visible overlay; without this guard it would dismiss
       // immediately. Ignore clicks within the opening window.
       if (this._referenceShownAt && performance.now() - this._referenceShownAt < 400) return
       this.setReferenceVisible(false)
@@ -455,8 +466,51 @@ export class SlidingTilePuzzle {
       this.paintVictoryTileFace()
     }
     this.paintGapMarker()
+    this.paintReferenceGrid()
     if (Number.isInteger(this._slotHighlightIndex)) {
       this.highlightTargetSlot(this._slotHighlightIndex)
+    }
+  }
+
+  // Build the reference: one cell per slot, each carrying the photo
+  // slice that *should* live in that slot when solved plus its number
+  // label, with an empty dashed cell where the gap belongs. Players
+  // can use either the colours (e.g. "all the sky tiles go up top")
+  // or the numbers to locate where a given live tile should land —
+  // matching the photo-driven strategies people naturally use on
+  // jigsaw-style puzzles. Rebuilt from scratch on each layout pass so
+  // it stays in sync with cols/rows/tileSize and any rotation that
+  // moves the gap (and therefore the numbering) to a different corner.
+  paintReferenceGrid() {
+    if (!this.referenceImage) return
+    this.referenceImage.innerHTML = ''
+    const emptyHome = this.emptyHomeIndex ?? this.totalSlots - 1
+    const cover = this.getCoverMetrics()
+    for (let slot = 0; slot < this.totalSlots; slot += 1) {
+      const row = Math.floor(slot / this.cols)
+      const col = slot % this.cols
+      const cell = document.createElement('div')
+      cell.className = slot === emptyHome
+        ? 'sliding-reference-cell sliding-reference-cell--gap'
+        : 'sliding-reference-cell'
+      cell.style.width = `${this.tileSize}px`
+      cell.style.height = `${this.tileSize}px`
+      cell.style.transform = `translate(${col * this.tileSize}px, ${row * this.tileSize}px)`
+      if (slot !== emptyHome) {
+        // Slice the source photo by this slot's row/col, mirroring the
+        // live tile's paintTileFace logic so the colour content matches
+        // the actual tile that belongs here.
+        cell.style.backgroundImage = `url("${this.displayImageUrl}")`
+        cell.style.backgroundSize = cover.bgSize
+        cell.style.backgroundPosition = `${cover.offsetX - col * this.tileSize}px ${cover.offsetY - row * this.tileSize}px`
+        cell.style.backgroundRepeat = 'no-repeat'
+        const label = slot < emptyHome ? slot + 1 : slot
+        const num = document.createElement('span')
+        num.className = 'sliding-reference-cell-number'
+        num.textContent = String(label)
+        cell.appendChild(num)
+      }
+      this.referenceImage.appendChild(cell)
     }
   }
 

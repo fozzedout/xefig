@@ -5543,20 +5543,15 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
       const buildSliderTutorialSteps = () => {
         const gapMarker = puzzle?.gapMarker || null
         const board = puzzle?.board || null
-        // Toggles the bright pulse on the gap marker while a step is
-        // pointing at it, then strips the class on cleanup so the marker
-        // returns to its quiet dashed state once the step advances.
-        const highlightGapMarker = () => {
-          if (!gapMarker) return undefined
-          gapMarker.classList.add('is-highlighted')
-          // Dim the tiles so the dashed marker becomes the focal point —
-          // without this the bouncer eclipses the marker and the player
-          // can't actually see what the message is referring to.
-          board?.classList.add('is-tutorial-marker-focus')
-          return () => {
-            gapMarker.classList.remove('is-highlighted')
-            board?.classList.remove('is-tutorial-marker-focus')
-          }
+        // Show the solved-state reference grid while the gap step is
+        // active. The grid shows the dashed gap cell in context with
+        // every other numbered+coloured tile in solved order — much
+        // clearer than dimming the live board and pulsing a bare
+        // dashed outline that reads as "highlighting an empty slot."
+        const showReferenceForGapStep = () => {
+          if (!puzzle?.setReferenceVisible) return undefined
+          puzzle.setReferenceVisible(true)
+          return () => puzzle.setReferenceVisible(false)
         }
         // Find a tile reachable from the current gap (same row OR same
         // column). `mode: 'adjacent'` returns a tile exactly one cell
@@ -5595,8 +5590,8 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         })
         steps.push({
           target: gapMarker || null,
-          message: 'One corner stays empty — that\'s the gap that lets tiles slide around.',
-          onShow: gapMarker ? highlightGapMarker : undefined,
+          message: 'One corner stays empty — that\'s the gap that lets tiles slide around. Here\'s the solved layout, with the gap shown as a dashed cell.',
+          onShow: showReferenceForGapStep,
         })
         // Resolve at step-show time so the bouncer always lands on a
         // tile that's currently adjacent to the gap — picking at

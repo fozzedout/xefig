@@ -5171,16 +5171,25 @@ canvas.slice-image {
   padding-top: var(--sai-top);
 }
 
+/* Slider reference shows the tiles in solved order with both their
+   photo slices and numbers, plus a dashed cell where the gap belongs.
+   Players can navigate by colour ("the sky goes up top") or by number,
+   and the grid follows rotation so the gap corner (and the numbering)
+   stay correct. Built dynamically in paintReferenceGrid(). */
 .sliding-reference {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   opacity: 0;
   pointer-events: none;
   z-index: 1;
   transition: opacity 150ms ease;
+  /* Opaque backdrop so the live tiles beneath are fully hidden when the
+     reference is up. Without it, any cell whose photo slice hasn't
+     finished loading shows the live tile through, and the "this is
+     the solved layout" affordance breaks. */
+  background: #0a0c12;
 }
 
 .sliding-reference.is-visible {
@@ -5188,6 +5197,47 @@ canvas.slice-image {
   z-index: 4;
   pointer-events: auto;
   cursor: pointer;
+}
+
+.sliding-reference-cell {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 0.2rem;
+  background-repeat: no-repeat;
+  /* Dark fallback colour underneath the photo slice — if the image is
+     still streaming the cell still hides the live tile. */
+  background-color: #14181f;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-sizing: border-box;
+}
+
+/* Empty cell where the gap belongs in the solved state — matches the
+   live gapMarker dashed pattern so the two overlays visually agree. */
+.sliding-reference-cell--gap {
+  border: 2px dashed rgba(255, 255, 255, 0.55);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Same chip-on-photo style live tiles use, so the number sits legibly
+   over any photo slice (sky, foliage, water…) without being washed
+   out. Top-left placement mirrors the live tile so the reference and
+   the live board are visually congruent. */
+.sliding-reference-cell-number {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  min-width: 14px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  border-radius: 0.2rem;
+  text-align: center;
 }
 
 .sliding-reference-frame {
