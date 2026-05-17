@@ -216,10 +216,45 @@ export class PolygramPuzzle {
 
     this.tray.append(this.trayGrid)
 
+    // Match jigsaw's "Highlight loose" button + system. Pieces dropped on
+    // the board but not snapped (state === 'placed') can be hard to spot
+    // in a dense layout; tapping the sparkle pulses every loose piece.
+    this.trayTools = document.createElement('div')
+    this.trayTools.className = 'polygram-tray-tools'
+
+    this.highlightTrayBtn = document.createElement('button')
+    this.highlightTrayBtn.type = 'button'
+    this.highlightTrayBtn.className = 'jigsaw-tray-tool polygram-tray-tool'
+    this.highlightTrayBtn.setAttribute('aria-label', 'Highlight loose pieces')
+    this.highlightTrayBtn.title = 'Highlight loose pieces'
+    this.highlightTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>'
+    this.highlightTrayBtn.addEventListener('click', () => this.highlightLoosePieces())
+
+    // Eye toggle for the reference image — same shape and aria-pressed
+    // affordance as jigsaw's. main.js mirrors aria-pressed across this,
+    // the menu's view-btn, and (where applicable) the diamond floating
+    // source button, via the polygram:reference-toggled event we
+    // dispatch below.
+    this.revealTrayBtn = document.createElement('button')
+    this.revealTrayBtn.type = 'button'
+    this.revealTrayBtn.id = 'polygram-reveal-btn'
+    this.revealTrayBtn.className = 'jigsaw-tray-tool polygram-tray-tool'
+    this.revealTrayBtn.setAttribute('aria-label', 'Show reference image')
+    this.revealTrayBtn.setAttribute('aria-pressed', 'false')
+    this.revealTrayBtn.title = 'Show reference image'
+    this.revealTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>'
+    this.revealTrayBtn.addEventListener('click', () => {
+      const active = this.toggleReferenceVisible()
+      this.revealTrayBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
+      this.container.dispatchEvent(new CustomEvent('polygram:reference-toggled', { detail: { active }, bubbles: true }))
+    })
+
+    this.trayTools.append(this.highlightTrayBtn, this.revealTrayBtn)
+
     this.heldLayer = document.createElement('div')
     this.heldLayer.className = 'polygram-held-layer'
 
-    this.root.append(this.boardWrap, this.tray, this.heldLayer)
+    this.root.append(this.boardWrap, this.tray, this.trayTools, this.heldLayer)
     this.container.append(this.root)
 
     // Board zoom/pan listeners
@@ -1218,6 +1253,28 @@ export class PolygramPuzzle {
 
   countLockedPieces() {
     return this.pieces.reduce((c, p) => c + (p.state === 'locked' ? 1 : 0), 0)
+  }
+
+  // Pulse every piece dropped on the board that isn't snapped yet
+  // (state === 'placed'). Mirrors jigsaw's highlightLoosePieces — same
+  // animation, same intent: surface pieces a player has lost track of
+  // somewhere on the canvas. Tray pieces and locked pieces are skipped.
+  highlightLoosePieces() {
+    for (const piece of this.pieces) {
+      if (piece.state !== 'placed') continue
+      const el = piece.element
+      if (!el) continue
+      el.classList.remove('is-highlighted')
+      // Force reflow so the animation restarts when re-adding the class
+      // on a piece that was highlighted moments ago.
+      void el.offsetWidth
+      el.classList.add('is-highlighted')
+      el.addEventListener(
+        'animationend',
+        () => el.classList.remove('is-highlighted'),
+        { once: true },
+      )
+    }
   }
 
   // ---------------------------------------------------------------------------

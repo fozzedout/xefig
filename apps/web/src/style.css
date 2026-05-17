@@ -4756,10 +4756,45 @@ canvas.slice-image {
   }
 }
 
-.jigsaw-piece.is-highlighted {
+.jigsaw-piece.is-highlighted,
+.polygram-piece.is-highlighted {
   -webkit-animation: highlight-pulse 500ms ease-in-out 2;
   animation: highlight-pulse 500ms ease-in-out 2;
   z-index: 999 !important;
+}
+
+/* Polygram tray-tools: top-centre float, same visual language as
+   jigsaw's tray-tools (.jigsaw-tray-tool button class is shared). */
+.polygram-tray-tools {
+  position: absolute;
+  top: calc(0.5rem + var(--sai-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.6rem;
+  z-index: 30;
+  pointer-events: auto;
+}
+
+.polygram-tray-tools .jigsaw-tray-tool {
+  width: 40px;
+  height: 40px;
+  background: rgba(10, 10, 15, 0.55);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.polygram-tray-tools .jigsaw-tray-tool svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Landscape (sidebar tray on the right): float at top-centre of the
+   board area, not the full viewport, so the button doesn't overlap
+   the sidebar. */
+@media (orientation: landscape) {
+  .game-shell--immersive .polygram-tray-tools {
+    left: calc(50% - 60px);
+  }
 }
 
 .jigsaw-carousel-item.is-hidden {
@@ -5290,6 +5325,16 @@ canvas.slice-image {
    like 0.18 made tiles vanish into the dark workspace background and
    players thought the layout had broken. */
 .sliding-board.is-tutorial-marker-focus .sliding-tile {
+  opacity: 0.45;
+  transition: opacity 220ms ease;
+}
+
+/* Generic workspace-level dim — used when a tutorial step is pointing
+   at a helper button (e.g. polygram's tray-tools) so the highlighted
+   button stands out against the puzzle behind it. Kept at 0.45 for
+   the same legibility-vs-focus tradeoff as the slider marker dim. */
+.workspace--tutorial-dim-pieces .polygram-piece,
+.workspace--tutorial-dim-pieces .jigsaw-piece {
   opacity: 0.45;
   transition: opacity 220ms ease;
 }

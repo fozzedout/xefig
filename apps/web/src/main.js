@@ -4941,16 +4941,18 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21h6v-1H9Zm3-19a7 7 0 0 0-4 12.7c.6.4.9 1 .9 1.7v1.1c0 .3.2.5.5.5h5.2c.3 0 .5-.2.5-.5v-1.1c0-.7.3-1.3.9-1.7A7 7 0 0 0 12 2Z"/></svg>
                   I need a hint!
                 </button>
-                ${useImmersiveJigsawChrome ? `
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome ? `
                 <div class="gt-menu-divider" aria-hidden="true"></div>
                 <button id="highlight-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 2l1.6 4.6L15 8l-4.4 1.4L9 14l-1.6-4.6L3 8l4.4-1.4Zm8 4l1 2.8 2.8 1-2.8 1L17 14l-1-2.8L13.2 10l2.8-1Zm-4 10l.8 2.2L16 19.2l-2.2.8L13 22l-.8-2-2.2-1 2.2-.8Z"/></svg>
                   Highlight loose
                 </button>
+                ${useImmersiveJigsawChrome ? `
                 <button id="edges-btn" class="gt-menu-item" type="button" aria-pressed="false">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 3 L18 3 L18 7.2 C18 8.3, 21.5 8.1, 21.5 10.5 C21.5 12.9, 18 12.7, 18 13.8 L18 18 L13.8 18 C12.7 18, 12.9 21.5, 10.5 21.5 C8.1 21.5, 8.3 18, 7.2 18 L3 18 Z"/></svg>
                   Edges only
                 </button>
+                ` : ''}
                 ` : ''}
                 ` : ''}
                 ${viewButtonMarkup}
@@ -5056,9 +5058,12 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
     const pressed = active ? 'true' : 'false'
     if (viewBtn) viewBtn.setAttribute('aria-pressed', pressed)
     if (showSourceFloatingBtn) showSourceFloatingBtn.setAttribute('aria-pressed', pressed)
-    // Jigsaw also exposes the reveal as a tray-side eye button; mirror it.
-    const revealTrayBtn = gameEl.querySelector('#jigsaw-reveal-btn')
-    if (revealTrayBtn) revealTrayBtn.setAttribute('aria-pressed', pressed)
+    // Jigsaw and polygram both expose the reveal as a tray-side eye
+    // button; mirror state across whichever is mounted.
+    const jigsawRevealBtn = gameEl.querySelector('#jigsaw-reveal-btn')
+    if (jigsawRevealBtn) jigsawRevealBtn.setAttribute('aria-pressed', pressed)
+    const polygramRevealBtn = gameEl.querySelector('#polygram-reveal-btn')
+    if (polygramRevealBtn) polygramRevealBtn.setAttribute('aria-pressed', pressed)
   }
 
   if (viewBtn) {
@@ -5069,10 +5074,15 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
     })
   }
 
-  // Jigsaw dispatches this when the in-tray eye button toggles the reference.
-  // Mirror the state across all reference-control surfaces (menu view-btn,
-  // diamond floating button) so any one of them reflects the live truth.
+  // Jigsaw and polygram both dispatch this when their in-tray eye
+  // button toggles the reference. Mirror the state across every
+  // reference-control surface (menu view-btn, the other tray eye if
+  // mounted, diamond floating button) so any one of them reflects the
+  // live truth.
   gameEl.addEventListener('jigsaw:reference-toggled', (event) => {
+    syncSourceButtons(Boolean(event.detail?.active))
+  })
+  gameEl.addEventListener('polygram:reference-toggled', (event) => {
     syncSourceButtons(Boolean(event.detail?.active))
   })
 
@@ -5406,6 +5416,13 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
 
       const buildPolygramTutorialSteps = () => {
         const { trayEl, dropRect } = pickPolygramHintTarget()
+        // Tutorial steps that point at the tray-tool buttons fade out
+        // the surrounding pieces so the button is unambiguously the
+        // focal point — same idea as the slider's marker-focus dim.
+        const dimAround = (assistant) => {
+          assistant.workspace.classList.add('workspace--tutorial-dim-pieces')
+          return () => assistant.workspace.classList.remove('workspace--tutorial-dim-pieces')
+        }
         const steps = [
           { target: null, message: "Welcome! Polygram is rotate-and-place." },
           {
@@ -5414,6 +5431,25 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             onShow: demoPolygramTrayScroll,
           },
         ]
+        // Tray buttons walk-through — placed right after the scroll
+        // demo so the player knows the helper affordances before they
+        // start picking up shards.
+        const revealBtn = puzzle?.revealTrayBtn
+        if (revealBtn) {
+          steps.push({
+            target: revealBtn,
+            message: 'Tap the eye anytime to peek at the finished picture.',
+            onShow: dimAround,
+          })
+        }
+        const highlightBtn = puzzle?.highlightTrayBtn
+        if (highlightBtn) {
+          steps.push({
+            target: highlightBtn,
+            message: 'Lost a shard somewhere on the board? Tap the sparkle to flash every loose piece.',
+            onShow: dimAround,
+          })
+        }
         if (trayEl) {
           steps.push({
             target: trayEl,
