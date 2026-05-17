@@ -3396,9 +3396,21 @@ function showCompletionOverlay({
 }) {
   const overlay = document.createElement('div')
   overlay.className = 'completion-overlay'
+  // The overlay is created synchronously inside the puzzle's afterMove
+  // chain — i.e. between the pointerdown and pointerup of the move that
+  // completed the puzzle. When the user lifts their finger, the
+  // resulting `click` event lands on whatever element is now under the
+  // pointer, which is this overlay's backdrop. Without a debounce,
+  // that synthetic click dismisses the overlay immediately ("shows
+  // briefly and disappears, replaced with the continue screen" — the
+  // Unfinished modal opening via onAfterDismiss). Track the show time
+  // and ignore backdrop dismisses within the opening window.
+  const shownAt = performance.now()
+  const DISMISS_GUARD_MS = 450
 
-  const dismiss = () => {
+  const dismiss = ({ fromBackdrop = false } = {}) => {
     if (overlay.dataset.dismissed === '1') return
+    if (fromBackdrop && performance.now() - shownAt < DISMISS_GUARD_MS) return
     overlay.dataset.dismissed = '1'
     if (completedRun) clearRunForMode(completedRun)
     overlay.classList.remove('is-visible')
@@ -3485,9 +3497,9 @@ function showCompletionOverlay({
   document.body.appendChild(overlay)
   requestAnimationFrame(() => overlay.classList.add('is-visible'))
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss()
+    if (e.target === overlay) dismiss({ fromBackdrop: true })
   })
-  overlay.querySelector('.completion-dismiss').addEventListener('click', dismiss)
+  overlay.querySelector('.completion-dismiss').addEventListener('click', () => dismiss())
 
   if (typeof onShowSource === 'function') {
     const showSourceBtn = overlay.querySelector('.completion-show-source')
