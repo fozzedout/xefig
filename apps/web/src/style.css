@@ -4871,7 +4871,13 @@ canvas.slice-image {
     width: 40px;
     height: 40px;
   }
-  .jigsaw-root > .floating-game-controls .gt-icon-btn--floating svg {
+  /* Exclude the rosette helper button so its .assistant-logo rule
+     (width/height: 100%) can fill the button the same way it does in
+     polygram and slider — without this carve-out the rosette renders
+     as a tiny 16px icon inside a translucent frame, inconsistent with
+     the other modes. Button stays at the jigsaw-internal 40px so it
+     still matches the tray-tool circles below it. */
+  .jigsaw-root > .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant) svg {
     width: 16px;
     height: 16px;
   }
