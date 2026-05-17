@@ -271,6 +271,21 @@ export class SlidingTilePuzzle {
     this.referenceImage.className = 'sliding-reference'
     this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
+    this.referenceImage.addEventListener('click', () => {
+      if (!this.referenceVisible) return
+      // The double-tap that *opened* the reference also fires a click on
+      // the now-visible image; without this guard it would dismiss
+      // immediately. Ignore clicks within the opening window.
+      if (this._referenceShownAt && performance.now() - this._referenceShownAt < 400) return
+      this.setReferenceVisible(false)
+    })
+
+    // Sibling overlay that draws the "this is the reference image" border.
+    // We can't use box-shadow/outline on the <img> itself — the bitmap
+    // content paints over them on iOS Safari, so the border vanished.
+    this.referenceFrame = document.createElement('div')
+    this.referenceFrame.className = 'sliding-reference-frame'
+    this.referenceFrame.setAttribute('aria-hidden', 'true')
 
     this.tileLayer = document.createElement('div')
     this.tileLayer.className = 'sliding-tile-layer'
@@ -283,10 +298,17 @@ export class SlidingTilePuzzle {
     this.gapMarker.className = 'sliding-gap-marker'
     this.gapMarker.setAttribute('aria-hidden', 'true')
 
+    // Dotted indicator the helper uses to mark "this tile's target
+    // slot". Positioned and shown via highlightTargetSlot / cleared via
+    // clearTargetSlot — invisible by default.
+    this.slotHighlight = document.createElement('div')
+    this.slotHighlight.className = 'sliding-slot-highlight'
+    this.slotHighlight.setAttribute('aria-hidden', 'true')
+
     this.victoryTile = document.createElement('div')
     this.victoryTile.className = 'sliding-victory-tile'
 
-    this.board.append(this.referenceImage, this.gapMarker, this.tileLayer, this.victoryTile)
+    this.board.append(this.referenceImage, this.referenceFrame, this.gapMarker, this.slotHighlight, this.tileLayer, this.victoryTile)
     this.boardFrame.append(this.board)
     this.root.append(this.boardFrame)
     this.container.append(this.root)
@@ -308,11 +330,16 @@ export class SlidingTilePuzzle {
       element.className = 'sliding-tile'
       element.setAttribute('aria-label', `Tile ${id + 1}`)
 
+      const numberEl = document.createElement('span')
+      numberEl.className = 'sliding-tile-number'
+      element.appendChild(numberEl)
+
       const tile = {
         id,
         homeIndex: id,
         slotIndex: id,
         element,
+        numberEl,
       }
 
       tile.onPointerDown = (event) => this.onTilePointerDown(event, tile)
@@ -355,6 +382,15 @@ export class SlidingTilePuzzle {
     tile.element.style.backgroundPosition = `${cover.offsetX - tileCol * this.tileSize}px ${cover.offsetY - tileRow * this.tileSize}px`
     tile.element.style.width = `${this.tileSize}px`
     tile.element.style.height = `${this.tileSize}px`
+
+    if (tile.numberEl) {
+      // 1-based reading-order label. Tiles with home before the empty's
+      // home get homeIndex+1; tiles after get homeIndex, so the empty
+      // position is "skipped" and labels run 1..tileCount.
+      const emptyHome = this.emptyHomeIndex ?? this.totalSlots - 1
+      const label = tile.homeIndex < emptyHome ? tile.homeIndex + 1 : tile.homeIndex
+      tile.numberEl.textContent = String(label)
+    }
   }
 
   paintVictoryTileFace() {
@@ -381,6 +417,27 @@ export class SlidingTilePuzzle {
     this.gapMarker.style.transform = `translate(${tileCol * this.tileSize}px, ${tileRow * this.tileSize}px)`
   }
 
+  // Helper-driven "this is where the highlighted tile should end up"
+  // marker. The hint and tutorial call this with the focused tile's
+  // homeIndex; the dotted box pops up over that slot so the player
+  // sees both the tile (with the bouncer on it) and its destination.
+  highlightTargetSlot(slotIndex) {
+    if (!this.slotHighlight) return
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= this.totalSlots) return
+    this._slotHighlightIndex = slotIndex
+    const row = Math.floor(slotIndex / this.cols)
+    const col = slotIndex % this.cols
+    this.slotHighlight.style.width = `${this.tileSize}px`
+    this.slotHighlight.style.height = `${this.tileSize}px`
+    this.slotHighlight.style.transform = `translate(${col * this.tileSize}px, ${row * this.tileSize}px)`
+    this.slotHighlight.classList.add('is-visible')
+  }
+
+  clearTargetSlot() {
+    this._slotHighlightIndex = null
+    if (this.slotHighlight) this.slotHighlight.classList.remove('is-visible')
+  }
+
   applyBoardSize() {
     this.calculateGrid()
 
@@ -398,6 +455,9 @@ export class SlidingTilePuzzle {
       this.paintVictoryTileFace()
     }
     this.paintGapMarker()
+    if (Number.isInteger(this._slotHighlightIndex)) {
+      this.highlightTargetSlot(this._slotHighlightIndex)
+    }
   }
 
   getOrientation() {
@@ -588,17 +648,13 @@ export class SlidingTilePuzzle {
     const emptyRow = Math.floor(this.emptyIndex / this.cols)
     const emptyCol = this.emptyIndex % this.cols
 
-    if (tileRow === emptyRow && tileCol + 1 === emptyCol && direction === 'right') {
-      return true
+    if (tileRow === emptyRow) {
+      if (tileCol < emptyCol && direction === 'right') return true
+      if (tileCol > emptyCol && direction === 'left') return true
     }
-    if (tileRow === emptyRow && tileCol - 1 === emptyCol && direction === 'left') {
-      return true
-    }
-    if (tileCol === emptyCol && tileRow + 1 === emptyRow && direction === 'down') {
-      return true
-    }
-    if (tileCol === emptyCol && tileRow - 1 === emptyRow && direction === 'up') {
-      return true
+    if (tileCol === emptyCol) {
+      if (tileRow < emptyRow && direction === 'down') return true
+      if (tileRow > emptyRow && direction === 'up') return true
     }
 
     return false
@@ -609,12 +665,41 @@ export class SlidingTilePuzzle {
       return false
     }
 
-    if (!isAdjacent(tile.slotIndex, this.emptyIndex, this.cols)) {
+    const targetSlot = tile.slotIndex
+    if (targetSlot === this.emptyIndex) {
       return false
     }
 
-    this.swapWithEmpty(tile.slotIndex, { animate: true, emitProgress: true })
+    const tileRow = Math.floor(targetSlot / this.cols)
+    const tileCol = targetSlot % this.cols
+    const emptyRow = Math.floor(this.emptyIndex / this.cols)
+    const emptyCol = this.emptyIndex % this.cols
+
+    let step
+    if (tileRow === emptyRow) {
+      step = tileCol < emptyCol ? -1 : 1
+    } else if (tileCol === emptyCol) {
+      step = tileRow < emptyRow ? -this.cols : this.cols
+    } else {
+      return false
+    }
+
+    // Walk the gap toward the tapped tile one cell at a time. Each
+    // swap moves the neighbour adjacent to the current empty into the
+    // empty, so a tap on a distant tile in the same row/column slides
+    // every tile between it and the gap by one step.
+    const slideLength = Math.abs(targetSlot - this.emptyIndex) / Math.abs(step)
+    while (this.emptyIndex !== targetSlot) {
+      this.swapWithEmpty(this.emptyIndex + step, { animate: true, emitProgress: false })
+    }
+
+    this.emitProgress()
     this.afterMove()
+    // Tutorial / helper hooks listen for this to advance on real moves
+    // rather than tap-to-skip on the bubble.
+    document.dispatchEvent(new CustomEvent('slider:tile-moved', {
+      detail: { slideLength, tileId: tile.id },
+    }))
     return true
   }
 
@@ -707,6 +792,9 @@ export class SlidingTilePuzzle {
     // solved (the victory tile fills that slot).
     if (this.gapMarker) {
       this.gapMarker.classList.toggle('is-hidden', Boolean(visible))
+    }
+    if (this.board) {
+      this.board.classList.toggle('is-completed', Boolean(visible))
     }
   }
 
@@ -851,7 +939,16 @@ export class SlidingTilePuzzle {
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
     }
+    if (this.referenceFrame) {
+      this.referenceFrame.classList.toggle('is-visible', this.referenceVisible)
+    }
+    if (this.referenceVisible) {
+      this._referenceShownAt = performance.now()
+    }
     this.emitProgress()
+    document.dispatchEvent(new CustomEvent('slider:reference-toggled', {
+      detail: { visible: this.referenceVisible },
+    }))
     return this.referenceVisible
   }
 

@@ -4918,8 +4918,8 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <path d="M12 17 V11 M9 14 L12 11 L15 14"/>
                 </svg>
               </span>
-              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome ? 'Helper menu' : 'Puzzle menu'}">
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome ? `
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? 'Helper menu' : 'Puzzle menu'}">
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? `
                 <svg class="assistant-logo" viewBox="0 0 200 200" aria-hidden="true">
                   <g transform="translate(100 100) rotate(-20)">
                     <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#e070a0"/>
@@ -4932,7 +4932,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                 ` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`}
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome ? `
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? `
                 <button id="how-to-play-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.6 15h-1.3v-1.3h1.3Zm1.7-5.4-.6.6c-.5.5-.7.9-.7 1.8h-1.3v-.3c0-.7.3-1.3.8-1.8l.8-.8a1.5 1.5 0 1 0-2.6-1H8.7a3 3 0 1 1 5.6 1.5Z"/></svg>
                   How to play
@@ -5111,7 +5111,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   // Loaded lazily so the homepage bundle isn't dragged into the puzzle path.
   const howToPlayBtn = gameEl.querySelector('#how-to-play-btn')
   const hintBtn = gameEl.querySelector('#hint-btn')
-  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome) && menuBtn && menuPanel && workspaceEl
+  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome) && menuBtn && menuPanel && workspaceEl
   let assistantPuzzleReady = false
   let assistantNudgeFn = null
   const tryAssistantNudge = () => {
@@ -5548,8 +5548,227 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         return steps
       }
 
-      const tutorialBuilder = useImmersivePolygramChrome ? buildPolygramTutorialSteps : buildJigsawTutorialSteps
-      const hintBuilder = useImmersivePolygramChrome ? buildPolygramHintSteps : buildJigsawHintSteps
+      // Slider helper: tutorial walks through the slide gesture and the
+      // reference-image peek; the hint surfaces a single out-of-place tile
+      // adjacent to the gap so the player has a concrete next move.
+      // The next tile the player should focus on — the lowest-label tile
+      // that isn't in its home slot. Label tracks homeIndex (label =
+      // homeIndex + 1 in the canonical case), so smallest homeIndex
+      // among out-of-place tiles is the "next number to place".
+      const findNextOutOfPlaceTile = () => {
+        if (!puzzle || !Array.isArray(puzzle.tiles)) return null
+        let best = null
+        for (const t of puzzle.tiles) {
+          if (t.slotIndex === t.homeIndex) continue
+          if (!best || t.homeIndex < best.homeIndex) best = t
+        }
+        return best
+      }
+
+      const buildSliderTutorialSteps = () => {
+        const gapMarker = puzzle?.gapMarker || null
+        const board = puzzle?.board || null
+        // Toggles the bright pulse on the gap marker while a step is
+        // pointing at it, then strips the class on cleanup so the marker
+        // returns to its quiet dashed state once the step advances.
+        const highlightGapMarker = () => {
+          if (!gapMarker) return undefined
+          gapMarker.classList.add('is-highlighted')
+          // Dim the tiles so the dashed marker becomes the focal point —
+          // without this the bouncer eclipses the marker and the player
+          // can't actually see what the message is referring to.
+          board?.classList.add('is-tutorial-marker-focus')
+          return () => {
+            gapMarker.classList.remove('is-highlighted')
+            board?.classList.remove('is-tutorial-marker-focus')
+          }
+        }
+        // Find a tile reachable from the current gap (same row OR same
+        // column). `mode: 'adjacent'` returns a tile exactly one cell
+        // away — needed for the "tap this tile to slide it into the gap"
+        // step, because tapping a farther tile would trigger a multi-
+        // slide and contradict the bubble copy. `mode: 'far'` returns a
+        // tile at least two cells away — for the multi-slide step.
+        const pickReachableTile = (mode = 'adjacent') => {
+          if (!puzzle || !Array.isArray(puzzle.tiles) || typeof puzzle.emptyIndex !== 'number') return null
+          const cols = puzzle.cols
+          const emptyRow = Math.floor(puzzle.emptyIndex / cols)
+          const emptyCol = puzzle.emptyIndex % cols
+          let fallback = null
+          for (const t of puzzle.tiles) {
+            const r = Math.floor(t.slotIndex / cols)
+            const c = t.slotIndex % cols
+            let dist = -1
+            if (r === emptyRow) dist = Math.abs(c - emptyCol)
+            else if (c === emptyCol) dist = Math.abs(r - emptyRow)
+            if (dist < 1) continue
+            if (mode === 'adjacent' && dist === 1) return t
+            if (mode === 'far' && dist >= 2) return t
+            if (!fallback) fallback = t
+          }
+          return fallback
+        }
+        const steps = [
+          {
+            target: null,
+            message: "Welcome! Let's learn Slider.",
+          },
+        ]
+        steps.push({
+          target: null,
+          message: 'Goal: put the numbered tiles in order — 1 in the top-left, then 2, 3, 4 going across each row.',
+        })
+        steps.push({
+          target: gapMarker || null,
+          message: 'One corner stays empty — that\'s the gap that lets tiles slide around.',
+          onShow: gapMarker ? highlightGapMarker : undefined,
+        })
+        // Resolve at step-show time so the bouncer always lands on a
+        // tile that's currently adjacent to the gap — picking at
+        // build-time would point at a stale tile if anything (e.g. the
+        // welcome step's bubble click) ran between build and show.
+        steps.push({
+          target: () => pickReachableTile('adjacent')?.element || null,
+          message: 'Tap this numbered tile — it\'ll slide into the gap.',
+          advanceOn: [{ element: document, event: 'slider:tile-moved' }],
+          noManualAdvance: true,
+        })
+        steps.push({
+          target: () => pickReachableTile('far')?.element || board,
+          message: 'You can also tap a tile farther along the same row or column — everything between slides at once. Try a longer slide.',
+          advanceOn: [{
+            element: document,
+            event: 'slider:tile-moved',
+            predicate: (evt) => (evt?.detail?.slideLength || 0) > 1,
+          }],
+          noManualAdvance: true,
+          collapseOnInteraction: true,
+        })
+        steps.push({
+          target: board,
+          message: 'Stuck? Double-tap anywhere on the board to peek at the finished picture.',
+          advanceOn: [{
+            element: document,
+            event: 'slider:reference-toggled',
+            predicate: (evt) => evt?.detail?.visible === true,
+          }],
+          noManualAdvance: true,
+        })
+        steps.push({
+          target: board,
+          message: 'Single-tap the picture to put it away.',
+          advanceOn: [{
+            element: document,
+            event: 'slider:reference-toggled',
+            predicate: (evt) => evt?.detail?.visible === false,
+          }],
+          noManualAdvance: true,
+        })
+        // Guided placement: lock on to whichever tile is the lowest
+        // out-of-place number right now. If tile 1 is already home in
+        // the shuffle, this naturally falls through to tile 2 (etc.)
+        // rather than skipping the lesson — same picker the hint uses.
+        // Only skipped entirely if the board is already solved.
+        const placementTile = findNextOutOfPlaceTile()
+        if (placementTile) {
+          const placementHomeIndex = placementTile.homeIndex
+          const placementLookup = () => puzzle?.tiles?.find((t) => t.homeIndex === placementHomeIndex) || null
+          const placementLabel = placementTile.numberEl?.textContent || String(placementHomeIndex + 1)
+          steps.push({
+            target: () => placementLookup()?.element || null,
+            message: `Now try it for real. Slide tile ${placementLabel} into the dotted target spot — you may need to clear a path first.`,
+            onShow: (assistant) => {
+              puzzle?.highlightTargetSlot?.(placementHomeIndex)
+              const reposition = () => {
+                // Skip if the player collapsed the bubble — keeping the
+                // bouncer parked at the menu button is the whole point
+                // of the collapsed state.
+                if (assistant.isBubbleCollapsed?.()) return
+                const t = placementLookup()
+                if (t?.element) assistant.placeBouncerOver(t.element)
+              }
+              document.addEventListener('slider:tile-moved', reposition)
+              return () => {
+                document.removeEventListener('slider:tile-moved', reposition)
+                puzzle?.clearTargetSlot?.()
+              }
+            },
+            advanceOn: [{
+              element: document,
+              event: 'slider:tile-moved',
+              predicate: () => {
+                const t = placementLookup()
+                return Boolean(t && t.slotIndex === t.homeIndex)
+              },
+            }],
+            noManualAdvance: true,
+            collapseOnInteraction: true,
+          })
+        }
+        steps.push({
+          target: null,
+          message: 'Nice work. Keep going — get every tile in order to win!',
+        })
+        return steps
+      }
+
+      const buildSliderHintSteps = () => {
+        const initial = findNextOutOfPlaceTile()
+        if (!initial) {
+          return [{ target: null, message: 'Every tile is already home — finish the last few slides!' }]
+        }
+        // Lock onto the tile's homeIndex so we keep tracking the same
+        // tile across slides; .find by homeIndex keeps working even
+        // if a transpose remaps tile ids mid-hint.
+        const targetHomeIndex = initial.homeIndex
+        const lookup = () => puzzle?.tiles?.find((t) => t.homeIndex === targetHomeIndex) || null
+        const label = initial.numberEl?.textContent || String(targetHomeIndex + 1)
+        return [{
+          target: () => lookup()?.element || null,
+          message: `Place tile ${label} next. Slide it into the dotted target spot — keep going until it lands home.`,
+          // Stay on this tile until it actually reaches home. Re-position
+          // the bouncer after every move so the spotlight follows the
+          // tile as the player slides it around. Pop up the dotted
+          // target marker over the destination slot, and tear it down
+          // on cleanup so it doesn't linger past the hint.
+          onShow: (assistant) => {
+            puzzle?.highlightTargetSlot?.(targetHomeIndex)
+            const reposition = () => {
+              if (assistant.isBubbleCollapsed?.()) return
+              const t = lookup()
+              if (t?.element) assistant.placeBouncerOver(t.element)
+            }
+            document.addEventListener('slider:tile-moved', reposition)
+            return () => {
+              document.removeEventListener('slider:tile-moved', reposition)
+              puzzle?.clearTargetSlot?.()
+            }
+          },
+          advanceOn: [{
+            element: document,
+            event: 'slider:tile-moved',
+            predicate: () => {
+              const t = lookup()
+              return Boolean(t && t.slotIndex === t.homeIndex)
+            },
+          }],
+          noManualAdvance: true,
+          collapseOnInteraction: true,
+        }]
+      }
+
+      let tutorialBuilder
+      let hintBuilder
+      if (useImmersiveSlidingChrome) {
+        tutorialBuilder = buildSliderTutorialSteps
+        hintBuilder = buildSliderHintSteps
+      } else if (useImmersivePolygramChrome) {
+        tutorialBuilder = buildPolygramTutorialSteps
+        hintBuilder = buildPolygramHintSteps
+      } else {
+        tutorialBuilder = buildJigsawTutorialSteps
+        hintBuilder = buildJigsawHintSteps
+      }
 
       if (howToPlayBtn) {
         howToPlayBtn.addEventListener('click', () => {

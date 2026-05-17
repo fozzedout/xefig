@@ -5145,6 +5145,25 @@ canvas.slice-image {
 .sliding-reference.is-visible {
   opacity: 1;
   z-index: 4;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.sliding-reference-frame {
+  position: absolute;
+  inset: 0;
+  /* --accent-slider is scoped to .slice-launcher only, so inline the
+     same cyan here rather than relying on cascade. */
+  border: 4px solid #40d0f0;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 150ms ease;
+}
+
+.sliding-reference-frame.is-visible {
+  opacity: 1;
 }
 
 .sliding-tile-layer {
@@ -5171,6 +5190,27 @@ canvas.slice-image {
 
 .sliding-tile:active {
   filter: brightness(0.95);
+}
+
+.sliding-tile-number {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  min-width: 14px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  border-radius: 0.2rem;
+  pointer-events: none;
+  text-align: center;
+}
+
+.sliding-board.is-completed .sliding-tile-number {
+  display: none;
 }
 
 .sliding-tile:focus-visible {
@@ -5208,8 +5248,78 @@ canvas.slice-image {
   transition: opacity 200ms ease;
 }
 
+/* Helper target marker — shown by puzzle.highlightTargetSlot(). Sits
+   above tiles (z-index 4) with a dotted cyan frame so the player can
+   see "this is where the highlighted tile should land". Cleared back
+   to invisible by clearTargetSlot() when the hint/tutorial ends. */
+.sliding-slot-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 3px dotted #40d0f0;
+  border-radius: 0.2rem;
+  background: rgba(64, 208, 240, 0.18);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.sliding-slot-highlight.is-visible {
+  opacity: 1;
+  animation: sliding-slot-highlight-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sliding-slot-highlight-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(64, 208, 240, 0); }
+  50%      { box-shadow: inset 0 0 18px 4px rgba(64, 208, 240, 0.45); }
+}
+
 .sliding-gap-marker.is-hidden {
   opacity: 0;
+}
+
+/* During the slider tutorial we lift the gap marker above tiles, fatten
+   the dash, and pulse it — without this it sits at z-index 2 under the
+   tile layer (z-index 3), so even when the helper points at it the
+   player can't see the square. */
+/* Tutorial: while the helper is pointing at the gap marker, dim the
+   tiles so the marker (and the bouncer parked on it) is the focal
+   point. Kept at 0.45 so tiles still read as a grid — earlier values
+   like 0.18 made tiles vanish into the dark workspace background and
+   players thought the layout had broken. */
+.sliding-board.is-tutorial-marker-focus .sliding-tile {
+  opacity: 0.45;
+  transition: opacity 220ms ease;
+}
+
+.sliding-gap-marker.is-highlighted {
+  z-index: 6;
+  /* Override the base 2px dashed white — chunky dashes read as messy
+     when scaled up. Clean solid frame + tinted fill makes the cell
+     itself pop while the bouncer sits inside. */
+  border-style: solid;
+  border-width: 3px;
+  border-color: #f0c040;
+  background: rgba(240, 192, 64, 0.18);
+  animation: sliding-gap-marker-pulse 1.4s ease-in-out infinite;
+}
+
+/* Inset glow only — an outer halo would clip against
+   .sliding-board { overflow: hidden } whenever the marker sits in a
+   corner cell (which is most cases for a canonical bottom-right home). */
+@keyframes sliding-gap-marker-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(240, 192, 64, 0); }
+  50%      { box-shadow: inset 0 0 18px 4px rgba(240, 192, 64, 0.55); }
+}
+
+/* Hide the floating timer across every mode — solving feels more
+   relaxed when the player isn't watching a clock tick. The element
+   still renders so timing logic that reads its textContent stays
+   correct; only the visual is removed. */
+.floating-timer {
+  display: none;
 }
 
 .picture-swap-root {
@@ -7673,6 +7783,25 @@ canvas.slice-image {
 }
 .assistant-tutorial-bubble--leaving {
   opacity: 0;
+}
+
+/* Player-collapsed bubble: hidden visually but still mounted (so we
+   can flip it back open with the same message when the player taps
+   the bouncer). Pointer-events off so it doesn't intercept stray
+   taps while invisible. */
+.assistant-tutorial-bubble--collapsed {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+/* When the bubble is collapsed the bouncer becomes the "summon helper"
+   affordance — pointer-events default to none so puzzle taps reach the
+   tiles below; this class re-enables them. */
+.assistant-bouncer--clickable {
+  pointer-events: auto;
+  cursor: pointer;
 }
 .assistant-tutorial-bubble-text {
   flex: 1 1 auto;

@@ -235,13 +235,62 @@ export class GameAssistant {
         this.cancelSequence()
         return
       }
-      // Some steps wait for a specific gesture (e.g. dismissing the
-      // polygram rotation ring) and shouldn't be tap-past-able from
-      // the bubble — otherwise the user can skip the hands-on bit
-      // by tapping the bubble before doing the actual action.
+      // For steps waiting on a specific in-game gesture, a bubble tap
+      // collapses it out of the way (the bouncer becomes clickable to
+      // bring it back) instead of advancing — players asked for this
+      // because the bubble sits over the puzzle area during long
+      // action steps and gets in the way.
+      if (this.currentStep?.collapseOnInteraction) {
+        this._collapseTutorialBubble()
+        return
+      }
+      // Other noManualAdvance steps (e.g. polygram rotate) keep the
+      // bubble visible — a bubble tap there is a no-op rather than a
+      // hide, since hiding would defeat the guidance.
       if (this.currentStep?.noManualAdvance) return
       if (this.sequenceAdvanceResolve) this.sequenceAdvanceResolve(true)
     })
+
+    // Tap on the bouncer to re-summon the bubble after it was collapsed.
+    // The bouncer is pointer-events: none by default (so tile/piece taps
+    // pass through during normal action steps); we toggle it interactive
+    // only while the bubble is collapsed.
+    bouncer.addEventListener('click', (event) => {
+      event.stopPropagation()
+      this._expandTutorialBubble()
+    })
+
+    // Workspace-level pointerdown auto-collapses the bubble whenever the
+    // player starts interacting with the puzzle during a noManualAdvance
+    // step. Ignores taps inside the bubble or on the bouncer so those
+    // controls keep working.
+    //
+    // The collapse is deferred ~300ms: if the same pointerdown ends up
+    // being the gesture that advances the step (e.g. the slide that
+    // lands tile N home), the new step starts expanded anyway, and an
+    // immediate collapse here causes a visible flicker — collapse then
+    // expand within the same tick. The step-snapshot check below skips
+    // the collapse when the step has switched in the meantime.
+    const onWorkspacePointerDown = (event) => {
+      // Opt-in per step: noManualAdvance alone isn't enough — some
+      // steps (e.g. polygram's "rotate the ring") are slow exploratory
+      // gestures where the player needs the bubble visible the whole
+      // time. Only the slider's long-action steps opt in.
+      if (!this.currentStep?.collapseOnInteraction) return
+      if (!this.tutorialBubble) return
+      if (this.tutorialBubble.classList.contains('assistant-tutorial-bubble--collapsed')) return
+      const t = event.target
+      if (t && t.closest && t.closest('.assistant-tutorial-bubble, .assistant-bouncer')) return
+      const stepAtSchedule = this.currentStep
+      setTimeout(() => {
+        if (this.currentStep !== stepAtSchedule) return
+        if (!this.tutorialBubble) return
+        if (this.tutorialBubble.classList.contains('assistant-tutorial-bubble--collapsed')) return
+        this._collapseTutorialBubble()
+      }, 300)
+    }
+    this.workspace.addEventListener('pointerdown', onWorkspacePointerDown, true)
+    this._sequenceWorkspaceListener = onWorkspacePointerDown
 
     this.placeBouncerOver(this.button, { instant: true })
 
@@ -253,7 +302,25 @@ export class GameAssistant {
       // sequence is waiting on a specific in-game gesture).
       this.currentStep = step
       textEl.textContent = step.message || ''
-      if (step.target) this.placeBouncerOver(step.target)
+      // A target can be a thunk so the picker runs at step-show time —
+      // useful when the right pointee depends on live puzzle state
+      // (e.g. a tile reachable from the *current* gap, not the gap as
+      // it was when the sequence started). Re-evaluating the thunk on
+      // expand-from-collapsed also lets the bouncer follow a target
+      // that moved while the bubble was hidden.
+      this._stepTargetResolver = () => {
+        let t = step.target
+        if (typeof t === 'function') {
+          try { t = t() } catch { t = null }
+        }
+        return t || null
+      }
+      const resolvedTarget = this._stepTargetResolver()
+      // New step always starts expanded — the previous step may have
+      // ended in a collapsed state, and we want the player to see the
+      // new message rather than discover it only by tapping the rosette.
+      this._expandTutorialBubble()
+      if (resolvedTarget) this.placeBouncerOver(resolvedTarget)
       this.positionTutorialBubble()
       if (typeof step.onShow === 'function') {
         try {
@@ -291,6 +358,37 @@ export class GameAssistant {
     this.cancelSequence()
   }
 
+  isBubbleCollapsed() {
+    return Boolean(this.tutorialBubble?.classList.contains('assistant-tutorial-bubble--collapsed'))
+  }
+
+  _collapseTutorialBubble() {
+    if (!this.tutorialBubble) return
+    if (this.tutorialBubble.classList.contains('assistant-tutorial-bubble--collapsed')) return
+    this.tutorialBubble.classList.add('assistant-tutorial-bubble--collapsed')
+    // Bouncer becomes the "tap to bring back the helper" affordance
+    // while the bubble is hidden, and we park it on the menu button so
+    // it stops blocking taps on whichever tile/piece the step is
+    // pointing at. Without this, even with the highlight class added
+    // the bouncer would sit on top of the target tile and intercept
+    // every tap the player made trying to slide it.
+    if (this.bouncer) this.bouncer.classList.add('assistant-bouncer--clickable')
+    if (this.button) this.placeBouncerOver(this.button)
+  }
+
+  _expandTutorialBubble() {
+    if (!this.tutorialBubble) return
+    if (!this.tutorialBubble.classList.contains('assistant-tutorial-bubble--collapsed')) return
+    this.tutorialBubble.classList.remove('assistant-tutorial-bubble--collapsed')
+    if (this.bouncer) this.bouncer.classList.remove('assistant-bouncer--clickable')
+    // Re-resolve the current step's target so the bouncer can fly back
+    // to whichever tile/element it was pointing at — the player may
+    // have moved the target while the bubble was hidden.
+    const target = this._stepTargetResolver ? this._stepTargetResolver() : null
+    if (target) this.placeBouncerOver(target)
+    this.positionTutorialBubble()
+  }
+
   _runStepCleanup() {
     if (typeof this.currentStepCleanup === 'function') {
       try { this.currentStepCleanup() } catch {}
@@ -322,7 +420,16 @@ export class GameAssistant {
       if (Array.isArray(advanceOn)) {
         for (const trigger of advanceOn) {
           if (!trigger?.element || !trigger?.event) continue
-          const handler = () => {
+          const handler = (event) => {
+            // Optional predicate lets a step demand more than "any
+            // event of this name" (e.g. a slide of length > 1).
+            if (typeof trigger.predicate === 'function') {
+              try {
+                if (!trigger.predicate(event)) return
+              } catch {
+                return
+              }
+            }
             if (this.sequenceAdvanceResolve) this.sequenceAdvanceResolve(true)
           }
           // Capture-phase so the puzzle's own pointer handlers can't swallow it.
@@ -336,6 +443,10 @@ export class GameAssistant {
   cancelSequence() {
     this.sequenceCancelled = true
     this._runStepCleanup()
+    if (this._sequenceWorkspaceListener) {
+      this.workspace.removeEventListener('pointerdown', this._sequenceWorkspaceListener, true)
+      this._sequenceWorkspaceListener = null
+    }
     // Unblock any awaiting waitForNext so the runSequence loop can exit.
     if (this.sequenceAdvanceReject) {
       this.sequenceAdvanceReject()
