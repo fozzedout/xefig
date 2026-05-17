@@ -215,6 +215,10 @@ export class GameAssistant {
 
     // Speech bubble attached to the rosette (positioned by JS each time the
     // bouncer moves). Tap anywhere on it to advance; tap the X to bail.
+    // The footer carries either a 'Next ›' chip (manual-advance steps) or
+    // an action-hint line (steps waiting on a specific gesture) so the
+    // affordance is always explicit — testers couldn't tell the bubble
+    // body itself was tappable.
     const bubble = document.createElement('div')
     bubble.className = 'assistant-tutorial-bubble'
     bubble.innerHTML = `
@@ -222,6 +226,13 @@ export class GameAssistant {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 L18 18 M18 6 L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
       </button>
       <span class="assistant-tutorial-bubble-text"></span>
+      <div class="assistant-tutorial-bubble-footer">
+        <span class="assistant-tutorial-bubble-action"></span>
+        <button type="button" class="assistant-tutorial-bubble-next" aria-label="Next">
+          <span class="assistant-tutorial-bubble-next-label">Next</span>
+          <span class="assistant-tutorial-bubble-next-chevron" aria-hidden="true">›</span>
+        </button>
+      </div>
     `
     this.workspace.append(bubble)
     this.tutorialBubble = bubble
@@ -302,6 +313,7 @@ export class GameAssistant {
       // sequence is waiting on a specific in-game gesture).
       this.currentStep = step
       textEl.textContent = step.message || ''
+      this._updateAdvanceAffordance(step)
       // A target can be a thunk so the picker runs at step-show time —
       // useful when the right pointee depends on live puzzle state
       // (e.g. a tile reachable from the *current* gap, not the gap as
@@ -360,6 +372,30 @@ export class GameAssistant {
 
   isBubbleCollapsed() {
     return Boolean(this.tutorialBubble?.classList.contains('assistant-tutorial-bubble--collapsed'))
+  }
+
+  // Show the right footer affordance for the current step: a 'Next ›' chip
+  // when the bubble itself advances on tap, or an action hint describing
+  // the gesture the player needs to perform when it doesn't. Steps can
+  // override the auto-derived hint via step.actionHint.
+  _updateAdvanceAffordance(step) {
+    if (!this.tutorialBubble) return
+    const nextBtn = this.tutorialBubble.querySelector('.assistant-tutorial-bubble-next')
+    const actionEl = this.tutorialBubble.querySelector('.assistant-tutorial-bubble-action')
+    if (!nextBtn || !actionEl) return
+    const isActionStep = Boolean(step?.noManualAdvance)
+    const isCollapseStep = Boolean(step?.collapseOnInteraction)
+    if (isActionStep || isCollapseStep) {
+      nextBtn.hidden = true
+      const hint = step?.actionHint
+        || (isCollapseStep ? 'Tap bubble to hide' : 'Do the gesture above to continue')
+      actionEl.textContent = hint
+      actionEl.hidden = false
+    } else {
+      actionEl.hidden = true
+      actionEl.textContent = ''
+      nextBtn.hidden = false
+    }
   }
 
   _collapseTutorialBubble() {

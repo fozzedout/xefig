@@ -5548,14 +5548,25 @@ canvas.slice-image {
   position: absolute;
   inset: 0;
   z-index: 3;
+  /* The placed layer is a container only — events should pass through
+     its empty areas so the rotation ring SVG sitting below it can
+     receive annulus drags. Placed pieces themselves re-enable pointer
+     events via `.polygram-piece.is-placed { pointer-events: auto; }`,
+     and the clip-path on each shard means only the shard's silhouette
+     captures (gaps in the bounding rect fall through). */
+  pointer-events: none;
 }
 
 .polygram-piece.is-placed {
   cursor: grab;
   pointer-events: auto;
-  filter:
-    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4))
-    drop-shadow(0 0 0.3rem rgba(160, 96, 240, 0.28));
+  /* Just a depth shadow on the shard itself — the neon outline glow
+     lives in a separate SVG overlay (.polygram-shape-outline) that
+     traces the silhouette with three stacked strokes, matching the
+     rotation ring's spindle palette. CSS filter chains compounded
+     too aggressively and read as invisible against busy photo
+     content; a hard SVG stroke definitely shows. */
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
 }
 
 .polygram-snap-hint {
@@ -5768,38 +5779,147 @@ canvas.slice-image {
 
 /* ─── Rotation ring ─── */
 
+/* Rotation handle: SVG annulus (the user's grip) plus 12 radial "energy
+   spindles" inside it (rotate with the shape so the gesture's effect is
+   instantly visible). Centre is pointer-transparent — the shard
+   underneath stays draggable so move + rotate live side-by-side without
+   any mode switching. */
 .polygram-rotate-ring {
   position: absolute;
-  border-radius: 50%;
-  border: 3px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  /* Overflow must stay visible so the outer halo glow on both the
+     annulus and the spindles isn't clipped at the SVG viewport edge. */
+  overflow: visible;
+  /* SVG root is event-transparent; children opt back in. Without this
+     the SVG's bounding rect would swallow taps in the centre hole. */
   pointer-events: none;
   opacity: 0;
-  transition: opacity 150ms ease;
-  z-index: 4;
+  transition: opacity 180ms ease;
+  /* Match the locked + placed layers' z-index so paint order within the
+     z=3 group is determined by DOM order. With this SVG inserted
+     *between* locked and placed in createLayout(), locked paints first,
+     ring paints next, placed shard paints on top — hiding the inner
+     half of every spoke under the shape's clip-path so the visible
+     portion reads as spokes emerging from the silhouette edge. With
+     z-index:4 the ring would jump above the placed layer regardless of
+     DOM order, which is what was leaving the spindles on top of the
+     shape in the first build. */
+  z-index: 3;
   touch-action: none;
 }
 
-.polygram-rotate-ring.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-  cursor: grab;
-}
+.polygram-rotate-ring.is-visible { opacity: 1; }
 
-.polygram-rotate-ring.is-visible:active {
+/* Annulus body — the grippable ring band. Stroke captures rotation
+   drags along the entire 360° circumference, so there's no off-screen
+   "knob hidden at the edge" failure mode the old knob had. */
+.polygram-ring-annulus {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 78%, transparent);
+  stroke-width: 11;
+  pointer-events: stroke;
+  cursor: grab;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.55));
+}
+.polygram-rotate-ring.is-visible:active .polygram-ring-annulus {
   cursor: grabbing;
 }
-
-.polygram-ring-knob {
-  position: absolute;
-  width: 28px;
-  height: 28px;
-  margin: -14px 0 0 -14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 3px solid var(--surface);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+/* Soft accent halo around the annulus, painted underneath the body
+   stroke so the ring still pops against bright or busy photo
+   backgrounds. Pointer-events off — only the body captures. */
+.polygram-ring-annulus-glow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 18;
+  opacity: 0.22;
   pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* Spindle group rotates as a whole via the SVG transform set in
+   updateRingSpindles(). transform-origin is on the viewBox centre so
+   rotation pivots around the shard's centre. */
+.polygram-ring-spindles {
+  pointer-events: none;
+  /* Rotation pivot is supplied inline via the SVG transform attribute
+     `rotate(angle 50 50)` — DO NOT add a CSS transform-origin here. The
+     SVG attribute uses viewBox units (50 = centre of the 100×100 box),
+     while a CSS transform-origin would use CSS pixels of the spindle
+     group's bounding box, drifting the pivot ~55px off-centre at the
+     typical 210px ring size and shifting the whole starburst sideways. */
+}
+
+/* Stacked strokes per spindle — three layers fake a neon glow without
+   the runtime cost of an SVG filter (which would re-rasterise on every
+   rotation tick). Halo: wide, faint, screen-blended for additive lift
+   on dark areas. Glow: medium. Core: thin near-white, always reads on
+   top regardless of backdrop. */
+.polygram-ring-spindle-halo {
+  stroke: var(--accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.28;
+  fill: none;
+  mix-blend-mode: screen;
+}
+.polygram-ring-spindle-glow {
+  stroke: var(--accent);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  opacity: 0.7;
+  fill: none;
+}
+.polygram-ring-spindle-core {
+  stroke: rgba(255, 255, 255, 0.96);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.4));
+}
+
+/* Shape outline overlay — sits above the placed layer so it traces the
+   actual shard silhouette with a neon stroke. Same three-stack
+   technique the spindles use: halo + glow + core. The polygon points
+   are injected at runtime in updateShapeOutlinePoints(piece, ringSize),
+   in the SVG's own 100×100 viewBox. */
+.polygram-shape-outline {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  /* Above placed (z:3) and below the snap hint — same plane as the
+     ring, but rendered after the placed layer in DOM so it paints on
+     top of the shard's photo content. */
+  z-index: 4;
+  touch-action: none;
+}
+.polygram-shape-outline.is-visible { opacity: 1; }
+/* Rotation pivot is supplied inline via the SVG transform attribute
+   `rotate(angle 50 50)` in updateRingSpindles() — DO NOT add a CSS
+   transform-origin here. (Same trap as the spindle group: a CSS
+   transform-origin in pixels would clash with the viewBox-unit pivot
+   and drift the outline sideways from the actual silhouette.) */
+.polygram-shape-outline-halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4.5;
+  stroke-linejoin: round;
+  opacity: 0.5;
+  mix-blend-mode: screen;
+}
+.polygram-shape-outline-glow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+.polygram-shape-outline-core {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.96);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.2px rgba(0, 0, 0, 0.4));
 }
 
 .polygram-piece {
@@ -7803,7 +7923,9 @@ canvas.slice-image {
   left: 0;
   z-index: 45;
   width: min(320px, calc(100vw - 32px));
-  padding: 0.8rem 0.95rem 0.8rem 1rem;
+  /* Right padding reserves room for the absolutely-positioned close X
+     so the message text never runs under it. */
+  padding: 0.8rem 2.6rem 0.7rem 1rem;
   background: rgba(20, 22, 30, 0.96);
   color: #fafafa;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -7813,8 +7935,9 @@ canvas.slice-image {
   -webkit-backdrop-filter: blur(14px);
   font: 500 0.95rem/1.34 inherit;
   display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
   cursor: pointer;
   /* Match the bouncer's transition exactly so they travel in lockstep
      to each new step. Opacity-in stays a one-shot animation handled by
@@ -7855,12 +7978,16 @@ canvas.slice-image {
   cursor: pointer;
 }
 .assistant-tutorial-bubble-text {
-  flex: 1 1 auto;
   pointer-events: none;
-  padding-top: 0.15rem;
+  padding-top: 0.1rem;
 }
+/* Close X is absolutely positioned so it doesn't compete with the
+   footer/message for flex slots; the bubble's right padding reserves
+   the corresponding inset. */
 .assistant-tutorial-bubble-close {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -7875,6 +8002,56 @@ canvas.slice-image {
 }
 .assistant-tutorial-bubble-close svg { width: 14px; height: 14px; }
 .assistant-tutorial-bubble-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Footer carries the advance affordance: a 'Next ›' chip on manual
+   steps, or an action-hint line on gesture-waiting steps. Only one is
+   visible at a time (toggled in JS via the hidden attribute). */
+.assistant-tutorial-bubble-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  min-height: 1.8rem;
+  pointer-events: none;
+}
+.assistant-tutorial-bubble-action {
+  flex: 1 1 auto;
+  font-size: 0.82em;
+  opacity: 0.72;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  /* Soft pulse so it reads as "live / waiting for you" rather than a
+     static caption — testers couldn't tell whether the helper was
+     waiting for an action or had stalled. */
+  animation: assistant-tutorial-action-pulse 1.6s ease-in-out infinite;
+}
+@keyframes assistant-tutorial-action-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+.assistant-tutorial-bubble-next {
+  pointer-events: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.32rem 0.7rem 0.32rem 0.8rem;
+  background: rgba(255, 255, 255, 0.16);
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.assistant-tutorial-bubble-next:hover { background: rgba(255, 255, 255, 0.26); }
+.assistant-tutorial-bubble-next-chevron {
+  font-size: 1.15em;
+  line-height: 1;
+  transform: translateY(-1px);
+}
 
 /* Arrow tail pointing at the bouncer. data-anchor flips which side it
    sticks out of. The triangle's horizontal position uses --arrow-x so
@@ -7929,7 +8106,7 @@ canvas.slice-image {
 @media (max-width: 540px) {
   .assistant-tutorial-bubble {
     font-size: 0.88rem;
-    padding: 0.7rem 0.8rem;
+    padding: 0.7rem 2.4rem 0.6rem 0.9rem;
   }
   .assistant-bubble {
     max-width: 58vw;

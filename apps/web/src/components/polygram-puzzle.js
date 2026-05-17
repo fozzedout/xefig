@@ -54,6 +54,15 @@ export class PolygramPuzzle {
     this.pendingLift = null
     this.trayMomentumRaf = null
 
+    // Tutorial-only: while true, dropping a held piece always lands it in
+    // the 'placed' state (rotation ring) instead of locking, even if the
+    // drop position + random initial rotation happen to be within the
+    // snap margin. Lets the tutorial guarantee the player sees the
+    // rotation lesson on their first drop. Rotation-driven snap honours
+    // the flag too, so the player isn't locked into placement until the
+    // tutorial clears it.
+    this.tutorialBlockSnap = false
+
     this.handleWindowResize = () => this.onWindowResize()
     this.handleWindowPointerMove = (event) => this.onWindowPointerMove(event)
     this.handleWindowPointerUp = (event) => this.onWindowPointerUp(event)
@@ -200,11 +209,89 @@ export class PolygramPuzzle {
     this.placedLayer = document.createElement('div')
     this.placedLayer.className = 'polygram-placed-layer'
 
-    this.rotateRing = document.createElement('div')
-    this.rotateRing.className = 'polygram-rotate-ring'
-    this.rotateRing.innerHTML = '<div class="polygram-ring-knob"></div>'
+    // Rotation handle: an annulus that captures rotation drags around its
+    // ring band, with 12 radial "energy spindles" inside that rotate with
+    // the shape. The centre of the annulus is pointer-transparent so the
+    // placed shard underneath stays draggable — no mode switching, no
+    // tap-to-dismiss to learn. The knob is gone: a single grippy ring
+    // doesn't suffer the "handle clipped off-screen" failure mode the
+    // small knob had near the board edges.
+    const ringSvgNs = 'http://www.w3.org/2000/svg'
+    this.rotateRing = document.createElementNS(ringSvgNs, 'svg')
+    this.rotateRing.setAttribute('class', 'polygram-rotate-ring')
+    this.rotateRing.setAttribute('viewBox', '0 0 100 100')
+    this.rotateRing.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+    // 6 spindles, evenly spaced (60° apart). Each is three stacked
+    // strokes (halo, glow, core) so the "energy" reads on busy/bright
+    // backgrounds without an SVG filter (which would re-rasterise on
+    // every rotation tick). 6 reads as a star/spark; 12 (the previous
+    // count) read as a clock face and competed visually with the photo
+    // fragment inside the shard.
+    const SPINDLE_COUNT = 6
+    const spindleMarkup = []
+    for (let i = 0; i < SPINDLE_COUNT; i += 1) {
+      const angle = (i / SPINDLE_COUNT) * 360 - 90
+      const rad = (angle * Math.PI) / 180
+      // Outer end sits just inside the annulus inner edge (r≈36 vs
+      // annulus stroke band starting at r=36.5). Inner end runs deep
+      // into the shape's likely body (r≈6) — irregular Voronoi shards
+      // can be narrow on one axis, so we want spindles to reach close
+      // to the centre to guarantee they touch the silhouette from any
+      // direction. The placed layer paints the shard on top, so only
+      // the segment outside the shape's clip-path is visible.
+      const x1 = (50 + Math.cos(rad) * 36).toFixed(2)
+      const y1 = (50 + Math.sin(rad) * 36).toFixed(2)
+      const x2 = (50 + Math.cos(rad) * 6).toFixed(2)
+      const y2 = (50 + Math.sin(rad) * 6).toFixed(2)
+      spindleMarkup.push(
+        `<line class="polygram-ring-spindle-halo" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
+        + `<line class="polygram-ring-spindle-glow" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
+        + `<line class="polygram-ring-spindle-core" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`,
+      )
+    }
+    // The annulus is two stacked circles (glow + body) — the body stroke
+    // is the hit-target for rotation; the glow is purely visual. Both
+    // have fill:none so the centre is transparent to pointer events.
+    // Paint order matters: outer glow first (the diffuse halo), then the
+    // spindles paint on top of the glow's inner overlap so their tips
+    // read as bright sparks rather than dimmed-by-haze blobs, then the
+    // crisp annulus body sits on top of everything to define the grip.
+    this.rotateRing.innerHTML = `
+      <circle class="polygram-ring-annulus-glow" cx="50" cy="50" r="42"/>
+      <g class="polygram-ring-spindles">${spindleMarkup.join('')}</g>
+      <circle class="polygram-ring-annulus" cx="50" cy="50" r="42"/>
+    `
 
-    this.boardContent.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.placedLayer, this.snapHint, this.rotateRing)
+    // Shape-outline overlay: same three-stroke neon stack as the
+    // spindles, but as a polygon tracing the shard's silhouette so
+    // there's no doubt the shard itself is the source of the energy
+    // radiating along the spokes. Lives in its own SVG because it has
+    // to sit *above* the placed layer (the actual shard) so the glow
+    // is visible. CSS drop-shadow on the shard didn't survive busy
+    // photo content — five compounded drop-shadows are too diffuse to
+    // read, whereas a hard SVG stroke definitely does.
+    this.shapeOutlineRing = document.createElementNS(ringSvgNs, 'svg')
+    this.shapeOutlineRing.setAttribute('class', 'polygram-shape-outline')
+    this.shapeOutlineRing.setAttribute('viewBox', '0 0 100 100')
+    this.shapeOutlineRing.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+    this.shapeOutlineRing.innerHTML = `
+      <g class="polygram-shape-outline-spin">
+        <polygon class="polygram-shape-outline-halo" points=""/>
+        <polygon class="polygram-shape-outline-glow" points=""/>
+        <polygon class="polygram-shape-outline-core" points=""/>
+      </g>
+    `
+
+    // Ring SVG sits *before* the placed layer so the shard's clip-path
+    // paints on top of the spindles. The visible parts of each spoke
+    // are then just the segments outside the shape's silhouette — they
+    // read as "emerging from the edge of the shape", which is the
+    // spokes-meet-edges look we want even on irregular Voronoi
+    // polygons. The annulus stays unobstructed because it sits well
+    // outside the shape (r=42 viewBox vs ~r=24 shape half-extent).
+    // The outline SVG sits *after* the placed layer so its glowing
+    // stroke paints on top of the photo content, tracing the silhouette.
+    this.boardContent.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.rotateRing, this.placedLayer, this.shapeOutlineRing, this.snapHint)
     this.board.append(this.boardContent)
     this.boardWrap.append(this.board)
 
@@ -374,9 +461,12 @@ export class PolygramPuzzle {
       this.dismissRing()
       this.holdPiece(piece, 0, 0) // position will update on next move
     } else if (piece.state === 'placed') {
-      if (this.ringPieceId === piece.id) {
-        this.dismissRing()
-      } else {
+      // With the annulus design the ring is on whenever a piece is in
+      // placed state — tapping the same piece is a no-op (don't yank
+      // the rotation handle from under the user). A tap on a *different*
+      // placed piece moves the ring to it, which is genuinely useful
+      // when the player has stacked up multiple unplaced drops.
+      if (this.ringPieceId !== piece.id) {
         this.dismissRing()
         this.showRing(piece)
       }
@@ -451,6 +541,9 @@ export class PolygramPuzzle {
     } else {
       this.applyPlacedPieceTransform(piece)
       this.showRing(piece)
+      this.container.dispatchEvent(
+        new CustomEvent('polygram:piece-placed', { detail: { piece }, bubbles: true }),
+      )
     }
 
     this.clearSnapHint()
@@ -658,7 +751,11 @@ export class PolygramPuzzle {
     const centerX = parseFloat(piece.element.dataset.boardX) || 0
     const centerY = parseFloat(piece.element.dataset.boardY) || 0
 
-    const ringSize = Math.max(piece.widthPx, piece.heightPx) * 1.8
+    // Outer diameter is 2.1× the shard's larger dimension: wider than the
+    // old solid ring (1.8×) so the annulus band stays a comfortable
+    // target on hard/extreme shards, with enough centre hole left over
+    // for the shard's body to remain draggable.
+    const ringSize = Math.max(piece.widthPx, piece.heightPx) * 2.1
     const left = centerX - ringSize / 2
     const top = centerY - ringSize / 2
 
@@ -667,8 +764,18 @@ export class PolygramPuzzle {
     this.rotateRing.style.transform = `translate(${left}px, ${top}px)`
     this.rotateRing.classList.add('is-visible')
 
-    // Position knob at current rotation angle
-    this.updateRingKnob(piece)
+    // The shape outline SVG mirrors the ring's position/size so its
+    // viewBox shares the same (50, 50) centre — the polygon points
+    // computed below are in that shared frame.
+    if (this.shapeOutlineRing) {
+      this.shapeOutlineRing.style.width = `${ringSize}px`
+      this.shapeOutlineRing.style.height = `${ringSize}px`
+      this.shapeOutlineRing.style.transform = `translate(${left}px, ${top}px)`
+      this.shapeOutlineRing.classList.add('is-visible')
+      this.updateShapeOutlinePoints(piece, ringSize)
+    }
+
+    this.updateRingSpindles(piece)
   }
 
   dismissRing() {
@@ -677,18 +784,41 @@ export class PolygramPuzzle {
     if (this.rotateRing) {
       this.rotateRing.classList.remove('is-visible')
     }
+    if (this.shapeOutlineRing) {
+      this.shapeOutlineRing.classList.remove('is-visible')
+    }
   }
 
-  updateRingKnob(piece) {
-    const knob = this.rotateRing.querySelector('.polygram-ring-knob')
-    if (!knob) return
-    const angle = piece.rotation - 90 // CSS: 0deg = top
-    const rad = (angle * Math.PI) / 180
-    const radius = 50 // percentage
-    const kx = 50 + Math.cos(rad) * (radius - 2)
-    const ky = 50 + Math.sin(rad) * (radius - 2)
-    knob.style.left = `${kx}%`
-    knob.style.top = `${ky}%`
+  updateRingSpindles(piece) {
+    const spindles = this.rotateRing.querySelector('.polygram-ring-spindles')
+    if (spindles) {
+      // Rotate the spindle group with the shape so the spokes read as
+      // "stuck to" it. The annulus stays fixed — that's the user's grip.
+      spindles.setAttribute('transform', `rotate(${piece.rotation.toFixed(2)} 50 50)`)
+    }
+    if (this.shapeOutlineRing) {
+      const spin = this.shapeOutlineRing.querySelector('.polygram-shape-outline-spin')
+      if (spin) {
+        spin.setAttribute('transform', `rotate(${piece.rotation.toFixed(2)} 50 50)`)
+      }
+    }
+  }
+
+  // Compute the shard polygon's vertices in the outline SVG's 100×100
+  // viewBox. localPoints are 0..1 fractions of the shard's bbox; the
+  // shard is centred at (50, 50) in the viewBox and spans a fraction
+  // of it equal to piece.widthPx / ringSize on each axis.
+  updateShapeOutlinePoints(piece, ringSize) {
+    if (!this.shapeOutlineRing || !piece.blueprint?.localPoints) return
+    const shardWvb = (piece.widthPx / ringSize) * 100
+    const shardHvb = (piece.heightPx / ringSize) * 100
+    const points = piece.blueprint.localPoints
+      .map((p) => `${(50 + (p.x - 0.5) * shardWvb).toFixed(2)},${(50 + (p.y - 0.5) * shardHvb).toFixed(2)}`)
+      .join(' ')
+    for (const cls of ['halo', 'glow', 'core']) {
+      const el = this.shapeOutlineRing.querySelector(`.polygram-shape-outline-${cls}`)
+      if (el) el.setAttribute('points', points)
+    }
   }
 
   getRingPiece() {
@@ -745,7 +875,7 @@ export class PolygramPuzzle {
     this.ringDragState.currentRotation += (deltaRad * 180) / Math.PI
     piece.rotation = this.ringDragState.currentRotation
     this.applyPlacedPieceTransform(piece)
-    this.updateRingKnob(piece)
+    this.updateRingSpindles(piece)
 
     // Check auto-snap during rotation
     if (this.canSnapPlacedPiece(piece)) {
@@ -778,10 +908,21 @@ export class PolygramPuzzle {
 
   onRootPointerDown(event) {
     if (this.heldPieceId == null) {
-      // Dismiss ring if tapping outside it
-      if (this.ringPieceId != null && !this.rotateRing.contains(event.target)) {
+      // Dismiss ring only when the tap is clearly off the rotation handle
+      // *and* its centre area. With the annulus design the centre passes
+      // pointer events through to the shard underneath; gaps inside the
+      // hole (between the shard's polygon and the ring's inner edge) get
+      // routed to whatever is below the SVG — without this check those
+      // clumsy taps would kill the ring out from under the player.
+      if (this.ringPieceId != null) {
         const piece = this.getRingPiece()
-        if (!piece || !piece.element.contains(event.target)) {
+        const onShard = piece && piece.element && piece.element.contains(event.target)
+        const ringRect = this.rotateRing.getBoundingClientRect()
+        const inRingBox = (
+          event.clientX >= ringRect.left && event.clientX <= ringRect.right
+          && event.clientY >= ringRect.top && event.clientY <= ringRect.bottom
+        )
+        if (!onShard && !inRingBox) {
           this.dismissRing()
         }
       }
@@ -872,7 +1013,7 @@ export class PolygramPuzzle {
       this.updateSnapHint(piece)
     } else if (piece.state === 'placed') {
       this.applyPlacedPieceTransform(piece)
-      this.updateRingKnob(piece)
+      this.updateRingSpindles(piece)
       if (this.canSnapPlacedPiece(piece)) {
         this.dismissRing()
         piece.state = 'tray'
@@ -991,6 +1132,7 @@ export class PolygramPuzzle {
   }
 
   canSnapPlacedPiece(piece) {
+    if (this.tutorialBlockSnap) return false
     if (!this.boardMetrics.width) return false
     const boardRelX = parseFloat(piece.element.dataset.boardX) || 0
     const boardRelY = parseFloat(piece.element.dataset.boardY) || 0
@@ -1019,7 +1161,9 @@ export class PolygramPuzzle {
 
     const positionError = Math.hypot(currentCenterX - targetCenterX, currentCenterY - targetCenterY)
     const rotationError = Math.abs(shortestAngleDelta(piece.rotation, 0))
-    const canSnap = positionError <= SNAP_POSITION_MARGIN && rotationError <= SNAP_ROTATION_MARGIN_DEG
+    const canSnap = !this.tutorialBlockSnap
+      && positionError <= SNAP_POSITION_MARGIN
+      && rotationError <= SNAP_ROTATION_MARGIN_DEG
     const nearTarget = positionError <= SNAP_POSITION_MARGIN * 2.2
 
     return {
@@ -1047,6 +1191,9 @@ export class PolygramPuzzle {
     this.flashSnapOutline(piece)
     this.vibrateOnSnap()
     this.playSnapSound()
+    this.container.dispatchEvent(
+      new CustomEvent('polygram:piece-snapped', { detail: { piece }, bubbles: true }),
+    )
   }
 
   flashSnapOutline(piece) {

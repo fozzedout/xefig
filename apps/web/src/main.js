@@ -5278,27 +5278,25 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           steps.push({ target: highlightBtn, message: 'Lost a piece on the board? Tap the sparkle to flash all loose pieces.' })
         }
         if (carouselItem && targetRect) {
-          // Auto-advance when the player presses on the carousel piece —
-          // the natural next gesture after the helper highlights it.
+          // Two-step drag, worded as one continuous instruction so the
+          // bouncer's piece→target motion reads as a demo of the
+          // drag itself. Step 1 advances on pointerdown (gesture
+          // started); step 2 advances on jigsaw:piece-snapped so
+          // we don't congratulate the player for dropping in the
+          // wrong spot.
           steps.push({
             target: carouselItem,
-            message: 'Press and hold this piece to pick it up.',
+            message: 'Grab this piece — press it, then drag.',
             advanceOn: [{ element: carouselItem, event: 'pointerdown' }],
+            noManualAdvance: true,
+            actionHint: 'Press the highlighted piece',
           })
-          // Then auto-advance again when they release (drop) the piece —
-          // wherever it lands. Document-level pointerup catches the
-          // gesture even if the piece itself has been re-parented onto
-          // the board by the time release fires.
           steps.push({
             target: targetRect,
-            message: 'Drag it to about here on the board — pieces snap when they get close.',
-            // Wait for the actual snap (jigsaw:piece-snapped), not just any
-            // pointerup: dropping the piece in the wrong spot used to
-            // advance the tutorial to "That's it" even though nothing
-            // locked. noManualAdvance blocks tap-to-skip past for the
-            // same reason.
+            message: '…over to about here. Pieces snap into place when you let go nearby.',
             advanceOn: [{ element: document, event: 'jigsaw:piece-snapped' }],
             noManualAdvance: true,
+            actionHint: 'Drop the piece near its spot',
           })
         }
         steps.push({ target: null, message: "That's it. Have fun!" })
@@ -5312,15 +5310,18 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         }
         const steps = [{
           target: carouselItem,
-          message: 'Press and hold this piece to pick it up.',
+          message: 'Grab this piece — press it, then drag.',
           advanceOn: [{ element: carouselItem, event: 'pointerdown' }],
+          noManualAdvance: true,
+          actionHint: 'Press the highlighted piece',
         }]
         if (targetRect) {
           steps.push({
             target: targetRect,
-            message: 'It goes about here on the board.',
+            message: '…over to about here on the board.',
             advanceOn: [{ element: document, event: 'jigsaw:piece-snapped' }],
             noManualAdvance: true,
+            actionHint: 'Drop the piece near its spot',
           })
         }
         return steps
@@ -5450,115 +5451,49 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             onShow: dimAround,
           })
         }
-        if (trayEl) {
+        if (trayEl && dropRect) {
+          // Single fluent drag step: pickup (advance on pointerdown)
+          // hands off to the drop step (advance when polygram emits
+          // its piece-placed event). The bouncer rides the same
+          // 620ms spring across to dropRect, so the wording reads
+          // as one continuous instruction matching the motion.
           steps.push({
             target: trayEl,
-            message: 'Tap this shard to pick it up.',
+            message: 'Grab this shard — press it, then drag.',
             advanceOn: [{ element: trayEl, event: 'pointerdown' }],
+            noManualAdvance: true,
+            actionHint: 'Press the highlighted shard',
           })
-          if (dropRect) {
-            // First drop is deliberately off-target so the shard lands
-            // in the "placed but not snapped" state — that's what
-            // surfaces the rotation ring, which the next step explains.
-            // Push the off-target a meaningful distance so the two
-            // drops read as clearly distinct events; small offsets put
-            // the practice drop on top of the real target and the
-            // tutorial loses its "move it again" payoff.
-            const boardEl = puzzle?.board || document.querySelector('.polygram-board')
-            const boardRect = boardEl ? boardEl.getBoundingClientRect() : null
-            const offsetX = boardRect ? Math.min(boardRect.width * 0.38, 240) : 180
-            const offsetY = boardRect ? Math.min(boardRect.height * 0.38, 240) : 180
-            // Direction: bias toward the board centre so we don't
-            // overshoot the edge.
-            const boardCx = boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2
-            const boardCy = boardRect ? boardRect.top + boardRect.height / 2 : window.innerHeight / 2
-            const dropCx = dropRect.left + dropRect.width / 2
-            const dropCy = dropRect.top + dropRect.height / 2
-            const sgnX = dropCx < boardCx ? 1 : -1
-            const sgnY = dropCy < boardCy ? 1 : -1
-            let offLeft = dropRect.left + sgnX * offsetX
-            let offTop = dropRect.top + sgnY * offsetY
-            // Hard clamp to the board's safe area so we don't park the
-            // bouncer (and ask the player to drop) outside the canvas.
-            if (boardRect) {
-              const pad = 40
-              offLeft = Math.max(boardRect.left + pad, Math.min(boardRect.right - pad, offLeft))
-              offTop = Math.max(boardRect.top + pad, Math.min(boardRect.bottom - pad, offTop))
-            }
-            const offRect = { left: offLeft, top: offTop, width: 28, height: 28 }
-            steps.push({
-              target: offRect,
-              message: 'Drop it about here — NOT on the outline. We\'ll rotate it next.',
-              advanceOn: [{ element: document, event: 'pointerup' }],
-            })
-          }
-        }
-        // After the off-target drop, the rotation ring auto-appears
-        // around the placed shard. ONE combined step explains both
-        // verbs (rotate + dismiss) and auto-advances the moment the
-        // ring goes away. Splitting these into two steps meant the
-        // player often dismissed the ring while still on the "drag
-        // the ring" step (no advance criteria) and nothing happened.
-        steps.push({
-          target: '.polygram-board',
-          message: 'A ring appeared — that\'s rotate mode. Drag the ring to spin the shard, then tap anywhere off the ring to switch back to drag mode.',
-          // Block tap-to-advance on the bubble: the next step asks the
-          // user to pick the shard up again, which only works once
-          // they\'re in drag mode (ring dismissed). Letting them tap
-          // past lands them on a step they can\'t actually do.
-          noManualAdvance: true,
-          onShow: (assistant) => {
-            // Watch for the user tapping off the ring. Any pointerdown
-            // outside .polygram-rotate-ring dismisses it (per polygram
-            // pointer handlers). Listen at the document level so we
-            // catch the tap regardless of where it lands. Defer the
-            // advance past the in-flight gesture: the next step's
-            // advanceOn is `pointerup`, and if we advance synchronously
-            // here that listener gets installed in time to catch the
-            // same gesture's pointerup and skips the step.
-            let deferredAdvance = null
-            let pollTimer = null
-            const ring = document.querySelector('.polygram-rotate-ring')
-            const tryAdvance = () => {
-              if (deferredAdvance) return
-              if (!assistant.sequenceAdvanceResolve) return
-              if (ring && ring.classList.contains('is-visible')) return
-              deferredAdvance = setTimeout(() => {
-                deferredAdvance = null
-                if (assistant.sequenceAdvanceResolve) {
-                  assistant.sequenceAdvanceResolve(true)
-                }
-              }, 300)
-            }
-            const onPointerDown = (event) => {
-              if (event.target && event.target.closest && event.target.closest('.polygram-rotate-ring')) return
-              requestAnimationFrame(tryAdvance)
-            }
-            document.addEventListener('pointerdown', onPointerDown, true)
-            pollTimer = setInterval(tryAdvance, 150)
-            const initialCheck = setTimeout(tryAdvance, 80)
-            return () => {
-              clearTimeout(initialCheck)
-              if (deferredAdvance) clearTimeout(deferredAdvance)
-              if (pollTimer) clearInterval(pollTimer)
-              document.removeEventListener('pointerdown', onPointerDown, true)
-            }
-          },
-        })
-        if (trayEl && dropRect) {
-          // Second drop = the real target. By this point the shard is
-          // un-ringed, the user has done the rotate, and they need to
-          // pick the shard back up and drop it on the actual outline.
           steps.push({
             target: dropRect,
-            message: 'Pick the shard up again and drop it about here — on the real outline this time.',
-            advanceOn: [{ element: document, event: 'pointerup' }],
+            // tutorialBlockSnap guarantees the piece lands in the
+            // "placed" state (rotation ring shows) even if the random
+            // starting rotation happened to be near 0 — so the
+            // rotation lesson always has something to teach. Listen
+            // for polygram:piece-placed (dispatched after the ring
+            // is shown) instead of pointerup so we don't race the
+            // puzzle's own pointerup handler.
+            message: '…drop it on this outline. It won\'t snap yet — we\'ll line up the rotation next.',
+            advanceOn: [{ element: document, event: 'polygram:piece-placed' }],
+            noManualAdvance: true,
+            actionHint: 'Drop the shard on its outline',
+            onShow: () => {
+              if (puzzle) puzzle.tutorialBlockSnap = true
+              return () => {
+                if (puzzle) puzzle.tutorialBlockSnap = false
+              }
+            },
           })
         }
-        steps.push({ target: null, message: 'When edges line up, it snaps.' })
+        // Rotation lesson: ring is showing, snap is unblocked. The
+        // step advances the moment the shard locks, so the
+        // player feels the "spin → snap" payoff before the outro.
         steps.push({
-          target: '.polygram-board',
-          message: 'Rule of thumb: drag = move. Tap a placed shard = rotate.',
+          target: '.polygram-rotate-ring',
+          message: 'Drag the glowing ring to spin the shard — the spokes follow along. Drag the shard itself if you need to nudge its position.',
+          advanceOn: [{ element: document, event: 'polygram:piece-snapped' }],
+          noManualAdvance: true,
+          actionHint: 'Spin the ring until it snaps',
         })
         steps.push({ target: null, message: "That's it!" })
         return steps
@@ -5571,14 +5506,18 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         }
         const steps = [{
           target: trayEl,
-          message: 'Pick up this shard.',
+          message: 'Grab this shard — press it, then drag.',
           advanceOn: [{ element: trayEl, event: 'pointerdown' }],
+          noManualAdvance: true,
+          actionHint: 'Press the highlighted shard',
         }]
         if (dropRect) {
           steps.push({
             target: dropRect,
-            message: 'It belongs about here — rotate until it snaps.',
-            advanceOn: [{ element: document, event: 'pointerup' }],
+            message: '…over to here. Rotate it until it lines up and snaps.',
+            advanceOn: [{ element: document, event: 'polygram:piece-snapped' }],
+            noManualAdvance: true,
+            actionHint: 'Drop, rotate, then snap',
           })
         }
         return steps
@@ -5668,6 +5607,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           message: 'Tap this numbered tile — it\'ll slide into the gap.',
           advanceOn: [{ element: document, event: 'slider:tile-moved' }],
           noManualAdvance: true,
+          actionHint: 'Tap the highlighted tile',
         })
         steps.push({
           target: () => pickReachableTile('far')?.element || board,
@@ -5679,6 +5619,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           }],
           noManualAdvance: true,
           collapseOnInteraction: true,
+          actionHint: 'Slide two or more tiles at once',
         })
         steps.push({
           target: board,
@@ -5689,6 +5630,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             predicate: (evt) => evt?.detail?.visible === true,
           }],
           noManualAdvance: true,
+          actionHint: 'Double-tap the board',
         })
         steps.push({
           target: board,
@@ -5699,6 +5641,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             predicate: (evt) => evt?.detail?.visible === false,
           }],
           noManualAdvance: true,
+          actionHint: 'Tap the picture to dismiss',
         })
         // Guided placement: lock on to whichever tile is the lowest
         // out-of-place number right now. If tile 1 is already home in
@@ -5739,6 +5682,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
             }],
             noManualAdvance: true,
             collapseOnInteraction: true,
+            actionHint: `Slide tile ${placementLabel} home`,
           })
         }
         steps.push({
@@ -5790,6 +5734,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
           }],
           noManualAdvance: true,
           collapseOnInteraction: true,
+          actionHint: `Slide tile ${label} home`,
         }]
       }
 
