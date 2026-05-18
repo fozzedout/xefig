@@ -196,9 +196,22 @@ export class PolygramPuzzle {
     this.ghostImage.setAttribute('aria-hidden', 'true')
 
     this.referenceImage = document.createElement('img')
-    this.referenceImage.className = 'polygram-reference'
+    this.referenceImage.className = 'polygram-reference puzzle-reference-overlay'
     this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
+    // Click the visible reference to dismiss — same gesture as the other
+    // modes. 400ms open-guard swallows the click that fires immediately
+    // after the opening double-tap.
+    this.referenceImage.addEventListener('click', () => {
+      if (!this.referenceVisible) return
+      if (this._referenceShownAt && performance.now() - this._referenceShownAt < 400) return
+      this.setReferenceVisible(false)
+    })
+
+    // Frame above the reference signalling "you're in reference mode".
+    this.referenceFrame = document.createElement('div')
+    this.referenceFrame.className = 'polygram-reference-frame puzzle-reference-frame'
+    this.referenceFrame.setAttribute('aria-hidden', 'true')
 
     this.lockedLayer = document.createElement('div')
     this.lockedLayer.className = 'polygram-locked-layer'
@@ -291,7 +304,7 @@ export class PolygramPuzzle {
     // outside the shape (r=42 viewBox vs ~r=24 shape half-extent).
     // The outline SVG sits *after* the placed layer so its glowing
     // stroke paints on top of the photo content, tracing the silhouette.
-    this.boardContent.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.rotateRing, this.placedLayer, this.shapeOutlineRing, this.snapHint)
+    this.boardContent.append(this.ghostImage, this.referenceImage, this.lockedLayer, this.rotateRing, this.placedLayer, this.shapeOutlineRing, this.snapHint, this.referenceFrame)
     this.board.append(this.boardContent)
     this.boardWrap.append(this.board)
 
@@ -331,9 +344,11 @@ export class PolygramPuzzle {
     this.revealTrayBtn.title = 'Show reference image'
     this.revealTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>'
     this.revealTrayBtn.addEventListener('click', () => {
+      // setReferenceVisible dispatches polygram:reference-toggled itself,
+      // so the eye, the menu, the double-tap, and the overlay tap all
+      // funnel through one event channel.
       const active = this.toggleReferenceVisible()
       this.revealTrayBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
-      this.container.dispatchEvent(new CustomEvent('polygram:reference-toggled', { detail: { active }, bubbles: true }))
     })
 
     this.trayTools.append(this.highlightTrayBtn, this.revealTrayBtn)
@@ -751,11 +766,16 @@ export class PolygramPuzzle {
     const centerX = parseFloat(piece.element.dataset.boardX) || 0
     const centerY = parseFloat(piece.element.dataset.boardY) || 0
 
-    // Outer diameter is 2.1× the shard's larger dimension: wider than the
-    // old solid ring (1.8×) so the annulus band stays a comfortable
-    // target on hard/extreme shards, with enough centre hole left over
-    // for the shard's body to remain draggable.
-    const ringSize = Math.max(piece.widthPx, piece.heightPx) * 2.1
+    // Outer diameter is 2.1× the shard's larger dimension. Floor at
+    // MIN_RING_SIZE so small shards (e.g. tip pieces on hard/extreme
+    // boards) still get a touch-friendly band — the natural 2.1× sizing
+    // on a ~60px shard produced a ~14px band, basically untargetable on
+    // mobile. The floor keeps the band ≥ ~25px regardless of shard size,
+    // matching the iOS 44pt touch-target guidance for the perpendicular
+    // hit area along the gesture.
+    const MIN_RING_SIZE = 220
+    const naturalSize = Math.max(piece.widthPx, piece.heightPx) * 2.1
+    const ringSize = Math.max(MIN_RING_SIZE, naturalSize)
     const left = centerX - ringSize / 2
     const top = centerY - ringSize / 2
 
@@ -1515,7 +1535,27 @@ export class PolygramPuzzle {
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
     }
+    if (this.referenceFrame) {
+      this.referenceFrame.classList.toggle('is-visible', this.referenceVisible)
+    }
+    if (this.boardContent) {
+      // .is-reference-active gates pointer-events on the piece /
+      // rotation layers so taps land on the dismissable overlay.
+      this.boardContent.classList.toggle('is-reference-active', this.referenceVisible)
+    }
+    if (this.revealTrayBtn) {
+      this.revealTrayBtn.setAttribute('aria-pressed', this.referenceVisible ? 'true' : 'false')
+    }
+    if (this.referenceVisible) {
+      // Open timestamp — used by the overlay click handler to swallow
+      // the synthetic click that immediately follows a double-tap.
+      this._referenceShownAt = performance.now()
+    }
     this.emitProgress()
+    this.container.dispatchEvent(new CustomEvent('polygram:reference-toggled', {
+      detail: { active: this.referenceVisible },
+      bubbles: true,
+    }))
     return this.referenceVisible
   }
 

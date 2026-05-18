@@ -4930,8 +4930,8 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <path d="M12 17 V11 M9 14 L12 11 L15 14"/>
                 </svg>
               </span>
-              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? 'Helper menu' : 'Puzzle menu'}">
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? `
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? 'Helper menu' : 'Puzzle menu'}">
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? `
                 <svg class="assistant-logo" viewBox="0 0 200 200" aria-hidden="true">
                   <g transform="translate(100 100) rotate(-20)">
                     <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#e070a0"/>
@@ -4944,7 +4944,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                 ` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`}
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome ? `
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? `
                 <button id="how-to-play-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.6 15h-1.3v-1.3h1.3Zm1.7-5.4-.6.6c-.5.5-.7.9-.7 1.8h-1.3v-.3c0-.7.3-1.3.8-1.8l.8-.8a1.5 1.5 0 1 0-2.6-1H8.7a3 3 0 1 1 5.6 1.5Z"/></svg>
                   How to play
@@ -5051,12 +5051,15 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   document.addEventListener('gesturechange', preventBrowserZoom)
   document.addEventListener('gestureend', preventBrowserZoom)
 
+  const cleanupReferenceToggleListeners = []
   backBtn.addEventListener('click', () => {
     clearImmersiveControlsTimer()
     document.removeEventListener('gesturestart', preventBrowserZoom)
     document.removeEventListener('gesturechange', preventBrowserZoom)
     document.removeEventListener('gestureend', preventBrowserZoom)
     document.removeEventListener('click', closeMenu)
+    for (const teardown of cleanupReferenceToggleListeners) teardown()
+    cleanupReferenceToggleListeners.length = 0
     persistActiveRun()
     if (isSyncEnabled()) forcePush().catch(() => { })
     returnFromGame()
@@ -5133,7 +5136,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   // Loaded lazily so the homepage bundle isn't dragged into the puzzle path.
   const howToPlayBtn = gameEl.querySelector('#how-to-play-btn')
   const hintBtn = gameEl.querySelector('#hint-btn')
-  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome) && menuBtn && menuPanel && workspaceEl
+  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome) && menuBtn && menuPanel && workspaceEl
   let assistantPuzzleReady = false
   let assistantNudgeFn = null
   const tryAssistantNudge = () => {
@@ -5745,6 +5748,226 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         }]
       }
 
+      // Swap helper: tutorial walks the player through tap-to-select then
+      // tap-another-tile-to-swap, plus the reference-image peek. The hint
+      // surfaces a clean two-step "swap this with that" pair built from
+      // the current board state.
+      //
+      // The picker looks for the lowest-id out-of-place tile and its
+      // home partner — i.e. it suggests a swap that locks *something*
+      // into place in one move. If that partner happens to be sitting in
+      // tile A's home (a 2-cycle), a single swap fixes both tiles, which
+      // is the strongest reward we can show on a first hint.
+      const pickSwapHintPair = () => {
+        if (!puzzle || !Array.isArray(puzzle.tiles) || !puzzle.tiles.length) return null
+        // Find the smallest-id tile that's currently out of place.
+        let anchor = null
+        for (const t of puzzle.tiles) {
+          if (t.slotIndex === t.homeIndex) continue
+          if (!anchor || t.id < anchor.id) anchor = t
+        }
+        if (!anchor) return null
+        // Partner = whichever tile currently occupies anchor's home slot.
+        // Swapping anchor↔partner lands anchor home; if anchor was also
+        // sitting in partner's home, this is a clean 2-cycle and both
+        // tiles snap home together.
+        const partnerId = puzzle.slots?.[anchor.homeIndex]
+        if (typeof partnerId !== 'number') return null
+        const partner = puzzle.tiles[partnerId]
+        if (!partner || partner.id === anchor.id) return null
+        return { anchor, partner }
+      }
+
+      const buildSwapTutorialSteps = () => {
+        const root = puzzle?.root || gameEl.querySelector('.picture-swap-root')
+        const board = puzzle?.board || gameEl.querySelector('.picture-swap-board')
+        // For the live demo steps we want a concrete pair the player can
+        // actually swap right now — same picker the hint uses.
+        const initialPair = pickSwapHintPair()
+        // Track ids so we can re-resolve the live tile elements at step
+        // show time (positionTile keeps the same .element across the
+        // session, but resolving from `puzzle.tiles[id]` at run-time is
+        // safer if anything rebuilt the layer).
+        const anchorId = initialPair?.anchor?.id ?? null
+        const partnerId = initialPair?.partner?.id ?? null
+        const anchorEl = () => (anchorId != null ? puzzle?.tiles?.[anchorId]?.element || null : null)
+        const partnerEl = () => (partnerId != null ? puzzle?.tiles?.[partnerId]?.element || null : null)
+
+        const steps = [
+          { target: null, message: "Welcome! Let's learn Tile Swap." },
+          {
+            target: board,
+            message: 'Goal: rearrange the scrambled photo by swapping pairs of tiles until every tile is back where it belongs.',
+          },
+        ]
+
+        if (anchorId != null) {
+          steps.push({
+            target: anchorEl,
+            message: 'Tap any tile to pick it up. Try this one — it\'s in the wrong spot.',
+            onShow: (assistant) => {
+              // Pre-highlight the candidate so the player can see it even
+              // before they look at the bouncer. Cleared on step exit so
+              // the helper-driven glow doesn't bleed into the next step.
+              puzzle?.highlightTile?.(anchorId)
+              const reposition = () => {
+                if (assistant.isBubbleCollapsed?.()) return
+                const el = anchorEl()
+                if (el) assistant.placeBouncerOver(el)
+              }
+              document.addEventListener('swap:tile-selected', reposition)
+              return () => {
+                document.removeEventListener('swap:tile-selected', reposition)
+                puzzle?.clearTileHighlight?.()
+              }
+            },
+            advanceOn: [{
+              element: document,
+              event: 'swap:tile-selected',
+              predicate: (evt) => evt?.detail?.tileId === anchorId,
+            }],
+            noManualAdvance: true,
+            actionHint: 'Tap the highlighted tile',
+          })
+
+          if (partnerId != null) {
+            steps.push({
+              target: partnerEl,
+              message: '…now tap its partner over here. The two tiles trade places.',
+              onShow: (assistant) => {
+                puzzle?.highlightTile?.(partnerId)
+                const reposition = () => {
+                  if (assistant.isBubbleCollapsed?.()) return
+                  const el = partnerEl()
+                  if (el) assistant.placeBouncerOver(el)
+                }
+                document.addEventListener('swap:tiles-swapped', reposition)
+                return () => {
+                  document.removeEventListener('swap:tiles-swapped', reposition)
+                  puzzle?.clearTileHighlight?.()
+                }
+              },
+              advanceOn: [{
+                element: document,
+                event: 'swap:tiles-swapped',
+                predicate: (evt) => {
+                  const a = evt?.detail?.tileIdA
+                  const b = evt?.detail?.tileIdB
+                  return (a === anchorId && b === partnerId) || (a === partnerId && b === anchorId)
+                },
+              }],
+              noManualAdvance: true,
+              collapseOnInteraction: true,
+              actionHint: 'Tap to complete the swap',
+            })
+          }
+        }
+
+        // Change-your-mind step: tapping the same tile twice deselects.
+        // Use a thunk for the target so we look up a fresh out-of-place
+        // tile *at show time* — the previous swap may have changed which
+        // tiles are home.
+        const pickAnyOutOfPlace = () => {
+          if (!puzzle || !Array.isArray(puzzle.tiles)) return null
+          return puzzle.tiles.find((t) => t.slotIndex !== t.homeIndex) || null
+        }
+        const cancelDemoTile = pickAnyOutOfPlace()
+        if (cancelDemoTile) {
+          const cancelId = cancelDemoTile.id
+          const cancelEl = () => puzzle?.tiles?.[cancelId]?.element || null
+          steps.push({
+            target: cancelEl,
+            message: 'Changed your mind? Tap a selected tile again to drop it without swapping.',
+            advanceOn: [
+              { element: document, event: 'swap:selection-cleared' },
+            ],
+            noManualAdvance: true,
+            actionHint: 'Tap to select, then tap again',
+          })
+        }
+
+        // Reference peek — swap exposes the original photo as a full-board
+        // overlay. Mirror the slider's gesture: double-tap to open, single
+        // tap on the overlay to dismiss. The menu route exists too but
+        // the gesture is faster and works without leaving the puzzle.
+        steps.push({
+          target: board,
+          message: 'Stuck? Double-tap anywhere on the board to peek at the finished picture.',
+          advanceOn: [{
+            element: document,
+            event: 'swap:reference-toggled',
+            predicate: (evt) => evt?.detail?.visible === true,
+          }],
+          noManualAdvance: true,
+          actionHint: 'Double-tap the board',
+        })
+        steps.push({
+          target: board,
+          message: 'Single-tap the picture to put it away.',
+          advanceOn: [{
+            element: document,
+            event: 'swap:reference-toggled',
+            predicate: (evt) => evt?.detail?.visible === false,
+          }],
+          noManualAdvance: true,
+          actionHint: 'Tap the picture to dismiss',
+        })
+
+        steps.push({
+          target: null,
+          message: 'Nice work! Keep swapping pairs until the photo is back together.',
+        })
+        return steps
+      }
+
+      const buildSwapHintSteps = () => {
+        const pair = pickSwapHintPair()
+        if (!pair) {
+          return [{ target: null, message: 'Every tile is already home — finish the final few swaps!' }]
+        }
+        const anchorId = pair.anchor.id
+        const partnerId = pair.partner.id
+        const anchorEl = () => puzzle?.tiles?.[anchorId]?.element || null
+        const partnerEl = () => puzzle?.tiles?.[partnerId]?.element || null
+        return [
+          {
+            target: anchorEl,
+            message: 'Pick this tile first — it\'s waiting for a partner.',
+            onShow: () => {
+              puzzle?.highlightTile?.(anchorId)
+              return () => puzzle?.clearTileHighlight?.()
+            },
+            advanceOn: [{
+              element: document,
+              event: 'swap:tile-selected',
+              predicate: (evt) => evt?.detail?.tileId === anchorId,
+            }],
+            noManualAdvance: true,
+            actionHint: 'Tap the highlighted tile',
+          },
+          {
+            target: partnerEl,
+            message: '…then tap this one to swap them.',
+            onShow: () => {
+              puzzle?.highlightTile?.(partnerId)
+              return () => puzzle?.clearTileHighlight?.()
+            },
+            advanceOn: [{
+              element: document,
+              event: 'swap:tiles-swapped',
+              predicate: (evt) => {
+                const a = evt?.detail?.tileIdA
+                const b = evt?.detail?.tileIdB
+                return (a === anchorId && b === partnerId) || (a === partnerId && b === anchorId)
+              },
+            }],
+            noManualAdvance: true,
+            collapseOnInteraction: true,
+            actionHint: 'Tap to complete the swap',
+          },
+        ]
+      }
+
       let tutorialBuilder
       let hintBuilder
       if (useImmersiveSlidingChrome) {
@@ -5753,6 +5976,9 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
       } else if (useImmersivePolygramChrome) {
         tutorialBuilder = buildPolygramTutorialSteps
         hintBuilder = buildPolygramHintSteps
+      } else if (useImmersiveSwapChrome) {
+        tutorialBuilder = buildSwapTutorialSteps
+        hintBuilder = buildSwapHintSteps
       } else {
         tutorialBuilder = buildJigsawTutorialSteps
         hintBuilder = buildJigsawHintSteps
@@ -5922,8 +6148,34 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   let lastTapTime = 0
   let lastTapTile = null
   let dblHandled = false
+  // Tracks any reference toggle (via menu, double-tap, single-tap dismiss
+  // on the overlay). Used by the pointerup/dblclick handlers to skip the
+  // double-tap detection inside the same gesture — without this, a tap
+  // that dismisses the reference can be misread as the first half of a
+  // double-tap (re-opening on the next tap) and the native dblclick
+  // fires too (re-opening immediately).
+  let lastReferenceToggleAt = 0
+  const noteReferenceToggle = () => { lastReferenceToggleAt = performance.now() }
+  // Each puzzle dispatches its own event; jigsaw/polygram bubble through
+  // gameEl, slider/swap dispatch on document directly. Listen to all of
+  // them so the guard fires no matter where the toggle came from.
+  for (const evt of ['slider:reference-toggled', 'swap:reference-toggled', 'jigsaw:reference-toggled', 'polygram:reference-toggled']) {
+    document.addEventListener(evt, noteReferenceToggle)
+    cleanupReferenceToggleListeners.push(() => document.removeEventListener(evt, noteReferenceToggle))
+  }
+  const referenceJustToggled = () => performance.now() - lastReferenceToggleAt < 500
+
   mount.addEventListener('pointerup', (e) => {
     if (!puzzle || !isBoardTarget(e.target)) return
+    // Inside the dismissal gesture — the click that dismissed the
+    // reference just fired ~milliseconds ago. Skip double-tap detection
+    // for this and any rapid follow-up tap in the same gesture.
+    if (referenceJustToggled()) {
+      lastTapTime = 0
+      lastTapTile = null
+      dblHandled = false
+      return
+    }
     const tile = e.target.closest('.sliding-tile, .picture-swap-tile') || null
     const now = Date.now()
     const quickRepeat = now - lastTapTime > 0 && now - lastTapTime < 500
@@ -5947,6 +6199,11 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   mount.addEventListener('dblclick', (e) => {
     if (!puzzle || (!isBoardTarget(e.target) && !e.target.closest('.sliding-tile, .picture-swap-tile'))) return
     e.preventDefault()
+    // The browser fires dblclick after the second native click in a
+    // gesture. If a click in that same gesture already toggled the
+    // reference (by dismissing it on the overlay), re-toggling here
+    // would immediately re-open what the player just closed.
+    if (referenceJustToggled()) return
     if (dblHandled) { dblHandled = false; return }
     toggleReference()
   })

@@ -295,7 +295,7 @@ export class SlidingTilePuzzle {
     // We can't use box-shadow/outline on the <img> itself — the bitmap
     // content paints over them on iOS Safari, so the border vanished.
     this.referenceFrame = document.createElement('div')
-    this.referenceFrame.className = 'sliding-reference-frame'
+    this.referenceFrame.className = 'sliding-reference-frame puzzle-reference-frame'
     this.referenceFrame.setAttribute('aria-hidden', 'true')
 
     this.tileLayer = document.createElement('div')

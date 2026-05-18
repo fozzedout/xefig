@@ -4676,6 +4676,15 @@ canvas.slice-image {
 
 .jigsaw-reference.is-visible {
   opacity: 0.96;
+  /* Catch the dismissal tap — same gesture as slider/swap. */
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* While the reference is open, freeze the piece layer so taps land on
+   the dismissable overlay instead of grabbing pieces beneath it. */
+.jigsaw-stage-content.is-reference-active .jigsaw-piece-layer {
+  pointer-events: none;
 }
 
 .jigsaw-piece-layer {
@@ -4788,12 +4797,27 @@ canvas.slice-image {
   height: 16px;
 }
 
-/* Landscape (sidebar tray on the right): float at top-centre of the
-   board area, not the full viewport, so the button doesn't overlap
-   the sidebar. */
+/* Landscape (sidebar tray on the right): stack vertically straddling the
+   canvas/tray boundary, mirroring jigsaw's landscape tray-tools. Switching
+   from absolute → grid placement parks the buttons at the top-left of the
+   tray column; the negative margin-left pulls half their width back onto
+   the canvas so the column reads as the anchor without obscuring tray
+   shards beneath. */
 @media (orientation: landscape) {
   .game-shell--immersive .polygram-tray-tools {
-    left: calc(50% - 60px);
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
+    flex-direction: column;
+    grid-row: 1;
+    grid-column: 2;
+    align-self: start;
+    justify-self: start;
+    /* Polygram tray-tool buttons are 40px (see rule above); -20px is half
+       that, dropping the buttons half-on-canvas / half-on-tray. */
+    margin-left: -20px;
+    margin-top: calc(0.5rem + var(--sai-top));
   }
 }
 
@@ -5240,21 +5264,51 @@ canvas.slice-image {
   text-align: center;
 }
 
-.sliding-reference-frame {
+/* Shared frame for "reference mode is active" across every puzzle. Each
+   mode places this sibling element above its reference overlay so the
+   coloured border is the universal "you're peeking; tap to dismiss" cue.
+   Border colour is mode-scoped (see overrides below) because
+   --accent-* vars are only defined on .slice-launcher (see
+   [[project_accent_vars_scoped_to_launcher]] memory), so cascading the
+   accent into puzzle CSS silently breaks. Pointer-events stay off — the
+   reference overlay itself catches the dismissal tap. */
+.puzzle-reference-frame {
   position: absolute;
   inset: 0;
-  /* --accent-slider is scoped to .slice-launcher only, so inline the
-     same cyan here rather than relying on cascade. */
   border: 4px solid #40d0f0;
+  border-radius: inherit;
   box-sizing: border-box;
   opacity: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 6;
   transition: opacity 150ms ease;
 }
 
-.sliding-reference-frame.is-visible {
+.puzzle-reference-frame.is-visible {
   opacity: 1;
+}
+
+.sliding-reference-frame {
+  /* Kept as an alias of the shared frame so existing call sites and tests
+     (`.sliding-reference-frame.is-visible`) keep working — every visual
+     property now lives on `.puzzle-reference-frame`. */
+}
+
+/* Slider keeps its cyan frame (already the default). */
+
+/* Swap → green accent, matching the launcher's swap colour. */
+.picture-swap-reference-frame {
+  border-color: #50d070;
+}
+
+/* Jigsaw → amber. */
+.jigsaw-reference-frame {
+  border-color: #f0c040;
+}
+
+/* Polygram → purple. */
+.polygram-reference-frame {
+  border-color: #a060f0;
 }
 
 .sliding-tile-layer {
@@ -5479,6 +5533,17 @@ canvas.slice-image {
 .picture-swap-reference.is-visible {
   opacity: 1;
   z-index: 5;
+  /* Catch the dismissal tap so the puzzle beneath stays inert until
+     the player closes the overlay. Cursor cue matches the slider. */
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* While the reference is open, freeze the tile layer so taps land on the
+   reference (which dismisses) instead of swapping tiles invisibly behind
+   the overlay. Mirrors the slider, where the reference catches input. */
+.picture-swap-board.is-reference-active .picture-swap-tile-layer {
+  pointer-events: none;
 }
 
 .picture-swap-tile-layer {
@@ -5491,22 +5556,160 @@ canvas.slice-image {
   position: absolute;
   top: 0;
   left: 0;
+  --swap-tx: 0px;
+  --swap-ty: 0px;
+  --swap-lift: scale(1);
   border: 1px solid rgba(255, 255, 255, 0.35);
   margin: 0;
   padding: 0;
   background-repeat: no-repeat;
   cursor: pointer;
-  transition: transform 130ms ease, box-shadow 130ms ease, border-color 130ms ease;
+  transform: translate(var(--swap-tx), var(--swap-ty)) var(--swap-lift);
+  transition:
+    transform 320ms cubic-bezier(0.34, 1.18, 0.64, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease;
 }
 
 .picture-swap-tile:hover {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
+/* Selection — a single tile is "armed" until the next click commits the
+   swap. Make it unmissable: thick accent border, layered glow, slight lift
+   via scale, and a steady pulse that maps "this tile is waiting for a
+   partner". The lift is applied via a CSS variable so the transform
+   composes with the per-tile translate(). */
 .picture-swap-tile.is-selected {
+  --swap-lift: scale(1.06);
   border: 2px solid var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
-  z-index: 3;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+    0 0 0 3px color-mix(in oklab, var(--accent) 70%, transparent),
+    0 0 18px 4px color-mix(in oklab, var(--accent) 45%, transparent);
+  z-index: 6;
+  animation: picture-swap-selected-pulse 1.4s ease-in-out infinite;
+}
+
+/* Entry pulse — single 360ms burst when a tile is freshly selected. Layers
+   on top of the steady glow so the moment of "I just picked this" reads
+   clearly. */
+.picture-swap-tile.is-select-pulse {
+  animation:
+    picture-swap-selected-pulse 1.4s ease-in-out infinite,
+    picture-swap-select-burst 420ms ease-out;
+}
+
+@keyframes picture-swap-selected-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+      0 0 0 3px color-mix(in oklab, var(--accent) 70%, transparent),
+      0 0 14px 3px color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+      0 0 0 4px color-mix(in oklab, var(--accent) 85%, transparent),
+      0 0 28px 8px color-mix(in oklab, var(--accent) 60%, transparent);
+  }
+}
+
+@keyframes picture-swap-select-burst {
+  0% {
+    --swap-lift: scale(1.0);
+    filter: brightness(1.1);
+  }
+  35% {
+    --swap-lift: scale(1.14);
+    filter: brightness(1.35);
+  }
+  100% {
+    --swap-lift: scale(1.06);
+    filter: brightness(1);
+  }
+}
+
+/* When a tile is selected, dim every other tile so the player's eye is
+   anchored on the picked tile + has clear "next, choose any of these" cues
+   without the selection getting lost in the grid. */
+.picture-swap-board.has-selection .picture-swap-tile:not(.is-selected):not(.is-hint-target) {
+  opacity: 0.62;
+  filter: saturate(0.85);
+}
+
+.picture-swap-board.has-selection .picture-swap-tile:not(.is-selected):hover {
+  opacity: 0.95;
+  filter: saturate(1);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in oklab, var(--accent) 50%, transparent),
+    0 0 10px 1px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+
+/* Mid-swap state: both tiles lift, brighten, and ride above the rest of
+   the grid for the duration of the translate. This is what gives the
+   gesture its weight — without it the swap just looks like two tiles
+   sliding past each other. */
+.picture-swap-tile.is-swapping {
+  --swap-lift: scale(1.12);
+  z-index: 7;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.85),
+    0 0 0 2px color-mix(in oklab, var(--accent) 80%, transparent),
+    0 10px 24px 4px rgba(0, 0, 0, 0.45),
+    0 0 22px 6px color-mix(in oklab, var(--accent) 55%, transparent);
+  filter: brightness(1.18);
+}
+
+/* Brief settle flash after the swap lands — confirms the tile arrived in
+   its new slot without any cumulative state. Auto-cleared by the puzzle
+   timer. */
+.picture-swap-tile.just-swapped {
+  animation: picture-swap-land 520ms ease-out;
+  z-index: 5;
+}
+
+@keyframes picture-swap-land {
+  0% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.95),
+      0 0 0 3px color-mix(in oklab, var(--accent) 80%, transparent),
+      0 0 22px 8px color-mix(in oklab, var(--accent) 65%, transparent);
+    filter: brightness(1.18);
+  }
+  100% {
+    box-shadow: none;
+    filter: brightness(1);
+  }
+}
+
+/* Tutorial / hint guidance ring — bigger, calmer than is-selected so it
+   reads as "here's a candidate" rather than "this is selected". Used by
+   highlightTile() during the helper sequences. */
+.picture-swap-tile.is-hint-target {
+  z-index: 5;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.6),
+    0 0 0 3px color-mix(in oklab, var(--accent) 55%, transparent),
+    0 0 18px 4px color-mix(in oklab, var(--accent) 35%, transparent);
+  animation: picture-swap-hint-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes picture-swap-hint-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 255, 255, 0.6),
+      0 0 0 3px color-mix(in oklab, var(--accent) 55%, transparent),
+      0 0 14px 3px color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 255, 255, 0.85),
+      0 0 0 4px color-mix(in oklab, var(--accent) 75%, transparent),
+      0 0 22px 6px color-mix(in oklab, var(--accent) 50%, transparent);
+  }
 }
 
 .picture-swap-tile:focus-visible {
@@ -5586,6 +5789,22 @@ canvas.slice-image {
 
 .polygram-reference.is-visible {
   opacity: 0.92;
+  /* Raise above the piece layers so the tap can reach the overlay (the
+     piece layers sit at z-index ≥ 3); pointer-events: auto makes the
+     overlay catch the dismissal tap. */
+  z-index: 6;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* While the reference is open, freeze every interactive polygram layer
+   so taps land on the dismissable overlay instead of grabbing shards or
+   the rotation ring beneath it. */
+.polygram-board-content.is-reference-active .polygram-locked-layer,
+.polygram-board-content.is-reference-active .polygram-placed-layer,
+.polygram-board-content.is-reference-active .polygram-rotate-ring,
+.polygram-board-content.is-reference-active .polygram-snap-hint {
+  pointer-events: none;
 }
 
 .polygram-locked-layer {
@@ -5784,6 +6003,13 @@ canvas.slice-image {
   }
 
   .game-shell--immersive .polygram-tray {
+    /* Explicit row 1 col 2 — otherwise the .polygram-tray-tools rule
+       (which also claims row 1 col 2 explicitly so the buttons can
+       straddle the canvas/tray edge) reserves that cell first, and
+       auto-placement bumps the tray into a new auto-generated row
+       that stretches across the full width. */
+    grid-row: 1;
+    grid-column: 2;
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
     mask-image: linear-gradient(to bottom, transparent, black 1rem, black calc(100% - 1rem), transparent);
     padding: 0.35rem 0.2rem;
@@ -5861,11 +6087,15 @@ canvas.slice-image {
 
 /* Annulus body — the grippable ring band. Stroke captures rotation
    drags along the entire 360° circumference, so there's no off-screen
-   "knob hidden at the edge" failure mode the old knob had. */
+   "knob hidden at the edge" failure mode the old knob had. Band widened
+   from 11 → 13 (viewBox units) so the touch target stays comfortable on
+   the smallest shards even at the minimum 220px ring size — at that
+   size the band is ~29px in CSS pixels, comfortably above iOS's 44pt
+   guidance for the gesture-perpendicular dimension. */
 .polygram-ring-annulus {
   fill: none;
   stroke: color-mix(in srgb, var(--accent) 78%, transparent);
-  stroke-width: 11;
+  stroke-width: 13;
   pointer-events: stroke;
   cursor: grab;
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.55));
@@ -5879,11 +6109,12 @@ canvas.slice-image {
 .polygram-ring-annulus-glow {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 18;
+  stroke-width: 20;
   opacity: 0.22;
   pointer-events: none;
   mix-blend-mode: screen;
 }
+
 
 /* Spindle group rotates as a whole via the SVG transform set in
    updateRingSpindles(). transform-origin is on the viewBox centre so

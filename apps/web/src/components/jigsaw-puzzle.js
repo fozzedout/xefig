@@ -243,9 +243,23 @@ export class JigsawPuzzle {
     configureHiDpiCanvas(this.ghostCanvas, this.boardWidth, this.boardHeight, this.renderScale)
 
     this.referenceImage = document.createElement('img')
-    this.referenceImage.className = 'jigsaw-reference'
+    this.referenceImage.className = 'jigsaw-reference puzzle-reference-overlay'
     this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
+    // Click the visible reference to dismiss — same gesture as slider/swap.
+    // Guard the first ~400 ms after open so the second pointerup of the
+    // opening double-tap doesn't immediately close the overlay.
+    this.referenceImage.addEventListener('click', () => {
+      if (!this.referenceVisible) return
+      if (this._referenceShownAt && performance.now() - this._referenceShownAt < 400) return
+      this.setReferenceVisible(false)
+    })
+
+    // Frame above the reference signalling "you're in reference mode";
+    // shared style across every interactive puzzle.
+    this.referenceFrame = document.createElement('div')
+    this.referenceFrame.className = 'jigsaw-reference-frame puzzle-reference-frame'
+    this.referenceFrame.setAttribute('aria-hidden', 'true')
 
     this.pieceLayer = document.createElement('div')
     this.pieceLayer.className = 'jigsaw-piece-layer'
@@ -281,9 +295,11 @@ export class JigsawPuzzle {
     this.revealTrayBtn.title = 'Show reference image'
     this.revealTrayBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Zm10.5 3.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z"/></svg>'
     this.revealTrayBtn.addEventListener('click', () => {
+      // setReferenceVisible dispatches the jigsaw:reference-toggled event
+      // itself, so toggling from any path (eye button, menu, double-tap,
+      // overlay tap) reaches the single listener in main.js.
       const active = this.toggleReferenceVisible()
       this.revealTrayBtn.setAttribute('aria-pressed', active ? 'true' : 'false')
-      this.container.dispatchEvent(new CustomEvent('jigsaw:reference-toggled', { detail: { active }, bubbles: true }))
     })
 
     this.carouselTools.append(this.highlightTrayBtn, this.edgesTrayBtn, this.revealTrayBtn)
@@ -291,7 +307,7 @@ export class JigsawPuzzle {
     this.carouselTrack = document.createElement('div')
     this.carouselTrack.className = 'jigsaw-carousel-track'
 
-    this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer)
+    this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer, this.referenceFrame)
     this.stage.append(this.stageContent)
     this.carousel.append(this.carouselTrack)
     this.root.append(this.stage, this.carousel, this.carouselTools)
@@ -1500,7 +1516,28 @@ export class JigsawPuzzle {
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
     }
+    if (this.referenceFrame) {
+      this.referenceFrame.classList.toggle('is-visible', this.referenceVisible)
+    }
+    if (this.stageContent) {
+      // .is-reference-active gates pointer-events on the piece layer so
+      // taps fall through to the overlay (which dismisses) instead of
+      // grabbing a piece beneath the reference.
+      this.stageContent.classList.toggle('is-reference-active', this.referenceVisible)
+    }
+    if (this.revealTrayBtn) {
+      this.revealTrayBtn.setAttribute('aria-pressed', this.referenceVisible ? 'true' : 'false')
+    }
+    if (this.referenceVisible) {
+      // Open timestamp — used by the overlay click handler to swallow
+      // the synthetic click that immediately follows a double-tap.
+      this._referenceShownAt = performance.now()
+    }
     this.emitProgress()
+    this.container.dispatchEvent(new CustomEvent('jigsaw:reference-toggled', {
+      detail: { active: this.referenceVisible },
+      bubbles: true,
+    }))
     return this.referenceVisible
   }
 

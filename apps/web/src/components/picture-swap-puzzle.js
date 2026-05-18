@@ -140,6 +140,16 @@ export class PictureSwapPuzzle {
       }
     }
 
+    if (this._swapAnimTimer) {
+      clearTimeout(this._swapAnimTimer)
+      this._swapAnimTimer = null
+    }
+    if (this._swapFlashTimer) {
+      clearTimeout(this._swapFlashTimer)
+      this._swapFlashTimer = null
+    }
+    this._hintTileId = null
+
     this.tiles = []
     this.slots = []
     this.selectedTileId = null
@@ -254,9 +264,27 @@ export class PictureSwapPuzzle {
     this.board.className = 'picture-swap-board'
 
     this.referenceImage = document.createElement('img')
-    this.referenceImage.className = 'picture-swap-reference'
+    this.referenceImage.className = 'picture-swap-reference puzzle-reference-overlay'
     this.referenceImage.src = this.displayImageUrl
     this.referenceImage.alt = 'Reference image'
+    // Click the visible reference to dismiss — matches the slider's
+    // single-tap-to-close gesture. Guard the first ~400 ms after open so
+    // the second pointerup of the opening double-tap doesn't immediately
+    // close the overlay it just summoned.
+    this.referenceImage.addEventListener('click', () => {
+      if (!this.referenceVisible) return
+      if (this._referenceShownAt && performance.now() - this._referenceShownAt < 400) return
+      this.setReferenceVisible(false)
+    })
+
+    // Frame overlay drawn above the reference image so every mode shows
+    // the same "you're in reference mode now" cue. Drawn as a sibling
+    // (not as a box-shadow on the <img>) because the bitmap content
+    // paints over outlines on iOS Safari, which is the same reason the
+    // slider has a separate frame element.
+    this.referenceFrame = document.createElement('div')
+    this.referenceFrame.className = 'picture-swap-reference-frame puzzle-reference-frame'
+    this.referenceFrame.setAttribute('aria-hidden', 'true')
 
     this.tileLayer = document.createElement('div')
     this.tileLayer.className = 'picture-swap-tile-layer'
@@ -265,7 +293,7 @@ export class PictureSwapPuzzle {
     this.confettiCanvas.className = 'picture-swap-confetti'
     this.confettiCtx = this.confettiCanvas.getContext('2d')
 
-    this.board.append(this.referenceImage, this.tileLayer, this.confettiCanvas)
+    this.board.append(this.referenceImage, this.referenceFrame, this.tileLayer, this.confettiCanvas)
     this.boardFrame.append(this.board)
     this.root.append(this.boardFrame)
     this.container.append(this.root)
@@ -401,6 +429,12 @@ export class PictureSwapPuzzle {
     if (this.completed) {
       return
     }
+    // While the reference overlay is up the tile layer is also blocked
+    // via CSS, but a programmatic dispatch could still land here — keep
+    // the puzzle logic in sync with the visual lock.
+    if (this.referenceVisible) {
+      return
+    }
 
     if (this.selectedTileId === null) {
       this.selectTile(tile.id)
@@ -429,7 +463,17 @@ export class PictureSwapPuzzle {
     const tile = this.tiles[tileId]
     if (tile) {
       tile.element.classList.add('is-selected')
+      // Replay the entry pulse on re-select by removing then re-adding
+      // the animation class on the next frame.
+      tile.element.classList.remove('is-select-pulse')
+      requestAnimationFrame(() => {
+        if (this.tiles[tileId] === tile) tile.element.classList.add('is-select-pulse')
+      })
     }
+    if (this.board) this.board.classList.add('has-selection')
+    document.dispatchEvent(new CustomEvent('swap:tile-selected', {
+      detail: { tileId },
+    }))
   }
 
   clearSelection() {
@@ -437,9 +481,37 @@ export class PictureSwapPuzzle {
       const tile = this.tiles[this.selectedTileId]
       if (tile) {
         tile.element.classList.remove('is-selected')
+        tile.element.classList.remove('is-select-pulse')
       }
+      const prevId = this.selectedTileId
+      this.selectedTileId = null
+      if (this.board) this.board.classList.remove('has-selection')
+      document.dispatchEvent(new CustomEvent('swap:selection-cleared', {
+        detail: { tileId: prevId },
+      }))
+      return
     }
     this.selectedTileId = null
+    if (this.board) this.board.classList.remove('has-selection')
+  }
+
+  // Helper-driven highlight ring. The tutorial/hint adds it to nudge the
+  // player toward a specific candidate without committing to a selection.
+  // Stays put across pointer events because nothing in the swap flow
+  // toggles `is-hint-target` itself.
+  highlightTile(tileId) {
+    this.clearTileHighlight()
+    const tile = this.tiles[tileId]
+    if (!tile) return
+    tile.element.classList.add('is-hint-target')
+    this._hintTileId = tileId
+  }
+
+  clearTileHighlight() {
+    if (this._hintTileId == null) return
+    const tile = this.tiles[this._hintTileId]
+    if (tile) tile.element.classList.remove('is-hint-target')
+    this._hintTileId = null
   }
 
   swapTilePositions(tileIdA, tileIdB) {
@@ -458,8 +530,47 @@ export class PictureSwapPuzzle {
     this.slots[slotA] = tileIdB
     this.slots[slotB] = tileIdA
 
+    // Stage the swap visuals: both tiles lift (z-index + scale) for the
+    // duration of the slide so they read as "trading places" rather than
+    // sliding past each other through the grid. Cleared on transitionend
+    // so we don't leave the lifted state stuck if multiple swaps stack
+    // up (the next click would race the timer).
+    this.runSwapAnimation(tileA, tileB)
+
     this.positionTile(tileA, { animate: true })
     this.positionTile(tileB, { animate: true })
+
+    document.dispatchEvent(new CustomEvent('swap:tiles-swapped', {
+      detail: { tileIdA, tileIdB },
+    }))
+  }
+
+  runSwapAnimation(tileA, tileB) {
+    const tiles = [tileA, tileB]
+    for (const tile of tiles) {
+      tile.element.classList.remove('is-swapping')
+      tile.element.classList.remove('just-swapped')
+    }
+    // Force a reflow so the class re-add restarts the animation even if
+    // a prior swap was still mid-flight.
+    void tileA.element.offsetWidth
+    for (const tile of tiles) tile.element.classList.add('is-swapping')
+
+    const SWAP_MS = 360
+    const FLASH_MS = 520
+    if (this._swapAnimTimer) clearTimeout(this._swapAnimTimer)
+    this._swapAnimTimer = setTimeout(() => {
+      this._swapAnimTimer = null
+      for (const tile of tiles) {
+        tile.element.classList.remove('is-swapping')
+        tile.element.classList.add('just-swapped')
+      }
+      if (this._swapFlashTimer) clearTimeout(this._swapFlashTimer)
+      this._swapFlashTimer = setTimeout(() => {
+        this._swapFlashTimer = null
+        for (const tile of tiles) tile.element.classList.remove('just-swapped')
+      }, FLASH_MS)
+    }, SWAP_MS)
   }
 
   positionTile(tile, { animate }) {
@@ -467,7 +578,11 @@ export class PictureSwapPuzzle {
     const col = tile.slotIndex % this.cols
 
     tile.element.style.transition = animate ? '' : 'none'
-    tile.element.style.transform = `translate(${col * this.tileWidth}px, ${row * this.tileHeight}px)`
+    // Slot position lives on CSS vars so .is-selected / .is-swapping can
+    // layer a scale on top via the composed transform in style.css. Setting
+    // inline `transform: translate(...)` would have overridden the scale.
+    tile.element.style.setProperty('--swap-tx', `${col * this.tileWidth}px`)
+    tile.element.style.setProperty('--swap-ty', `${row * this.tileHeight}px`)
 
     if (!animate) {
       requestAnimationFrame(() => {
@@ -633,7 +748,8 @@ export class PictureSwapPuzzle {
       cols: this.cols,
       rows: this.rows,
       slots: [...this.slots],
-      selectedTileId: this.selectedTileId,
+      // selectedTileId intentionally omitted — see applyProgressState for
+      // why. Saving it round-tripped a UI state we don't want to restore.
       completed: this.completed,
       startedAtMs: this.startedAtMs,
       homes,
@@ -719,17 +835,14 @@ export class PictureSwapPuzzle {
     this.completed = Boolean(state.completed) || this.isSolved()
     this.syncAllTilePositions({ animate: false })
 
-    const selectedTileId = Number(state.selectedTileId)
-    if (
-      !this.completed &&
-      Number.isInteger(selectedTileId) &&
-      selectedTileId >= 0 &&
-      selectedTileId < this.totalTiles
-    ) {
-      this.selectTile(selectedTileId)
-    } else {
-      this.clearSelection()
-    }
+    // Selection is per-session UI state, not persisted progress. Always
+    // restore with nothing selected — otherwise resuming a session where
+    // the player tapped tile 0 (or any tile) shows it as pre-selected
+    // before they touched anything, which reads as a bug. The earlier
+    // `Number(state.selectedTileId)` coercion made this worse by turning
+    // null/undefined into 0, but even the corrected check still surfaced
+    // stale selections across sessions.
+    this.clearSelection()
 
     this.emitProgress()
   }
@@ -752,7 +865,26 @@ export class PictureSwapPuzzle {
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
     }
+    if (this.referenceFrame) {
+      this.referenceFrame.classList.toggle('is-visible', this.referenceVisible)
+    }
+    if (this.board) {
+      // .is-reference-active gates pointer-events on the tile layer so
+      // taps land on the dismissible overlay instead of the puzzle
+      // beneath. Single-tap dismissal is therefore "tap anywhere on the
+      // board while in reference mode."
+      this.board.classList.toggle('is-reference-active', this.referenceVisible)
+    }
+    if (this.referenceVisible) {
+      // Open timestamp — used by the click handler to swallow the
+      // synthetic click that fires immediately after a double-tap opens
+      // the overlay.
+      this._referenceShownAt = performance.now()
+    }
     this.emitProgress()
+    document.dispatchEvent(new CustomEvent('swap:reference-toggled', {
+      detail: { visible: this.referenceVisible },
+    }))
     return this.referenceVisible
   }
 
