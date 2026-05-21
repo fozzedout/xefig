@@ -23,6 +23,19 @@ async function boot() {
     status('Steam not detected — starting in offline mode')
   }
 
+  // E2E hook: when XEFIG_E2E_LOG points at a writable path, dump the boot
+  // result there so headless launchers can verify init without screenshots.
+  if (process.env.XEFIG_E2E_LOG) {
+    try {
+      require('fs').writeFileSync(process.env.XEFIG_E2E_LOG, JSON.stringify({
+        bootedAt: new Date().toISOString(),
+        steam: steamResult,
+      }, null, 2))
+    } catch (err) {
+      console.warn('[boot] could not write E2E log:', err.message)
+    }
+  }
+
   // Brief delay so the status line is visible during cold start; remove
   // once the boot screen has an actual loading animation worth seeing.
   await new Promise((r) => setTimeout(r, 250))
