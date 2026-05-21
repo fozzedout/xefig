@@ -1,0 +1,29 @@
+{
+  "name": "xefig-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "nw.js wrapper around the Xefig web build for Steam distribution",
+  "main": "src/index.html",
+  "window": {
+    "title": "Xefig",
+    "width": 1280,
+    "height": 800,
+    "min_width": 800,
+    "min_height": 600,
+    "frame": true,
+    "resizable": true,
+    "icon": "src/icon.png"
+  },
+  "chromium-args": "--enable-features=SharedArrayBuffer",
+  "node-remote": "<all_urls>",
+  "scripts": {
+    "build:web": "npm --prefix ../web run build && node scripts/copy-web-dist.mjs",
+    "setup-sdk": "node scripts/setup-sdk.mjs",
+    "dev": "npm run build:web && nw .",
+    "start": "nw ."
+  },
+  "devDependencies": {
+    "nw": "^0.83.0"
+  },
+  "//greenworks": "Steam SDK bindings (greenworks) are installed by a separate one-time setup step — see apps/desktop/README.md. They require a native build against the unzipped Steamworks SDK, so they're kept out of normal npm install."
+}
