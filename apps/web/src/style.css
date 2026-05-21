@@ -5904,7 +5904,12 @@ canvas.slice-image {
 
 /* Diamond menu mirrors the back button: same translucent idle state and
    tighter 40px circle so the two read as a matched pair flanking the canvas. */
-.game-shell--diamond .floating-game-controls .gt-icon-btn--floating {
+/* The faint translucent disc was for the old kebab menu button. With the
+   rosette now in the floating menu slot it inherits the cross-mode
+   .gt-icon-btn--assistant styling (transparent, full-size .assistant-logo)
+   — so exclude the assistant version from the diamond carve-outs the
+   same way jigsaw does. */
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant) {
   width: 40px;
   height: 40px;
   background: rgba(10, 10, 15, 0.55);
@@ -5914,14 +5919,14 @@ canvas.slice-image {
   transition: opacity 180ms ease, background 180ms ease;
 }
 
-.game-shell--diamond .floating-game-controls .gt-icon-btn--floating svg {
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant) svg {
   width: 18px;
   height: 18px;
 }
 
-.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:hover,
-.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:focus-visible,
-.game-shell--diamond .floating-game-controls .gt-icon-btn--floating[aria-expanded='true'] {
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant):hover,
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant):focus-visible,
+.game-shell--diamond .floating-game-controls .gt-icon-btn--floating:not(.gt-icon-btn--assistant)[aria-expanded='true'] {
   opacity: 1;
   background: rgba(10, 10, 15, 0.8);
 }
@@ -7531,6 +7536,31 @@ canvas.slice-image {
 .diamond-swatch:focus-visible {
   outline: 2px solid var(--text);
   outline-offset: 2px;
+}
+
+/* Tutorial / hint guidance ring around a swatch — calmer than .selected
+   so it reads as "consider me" rather than committing to a selection.
+   The helper sequences add this via highlightSwatch(); the swatch keeps
+   its own .selected state independently. */
+.diamond-swatch.is-hint-target {
+  z-index: 5;
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--accent) 60%, transparent),
+    0 0 16px 4px color-mix(in oklab, var(--accent) 40%, transparent);
+  animation: diamond-swatch-hint-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes diamond-swatch-hint-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px color-mix(in oklab, var(--accent) 55%, transparent),
+      0 0 14px 3px color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in oklab, var(--accent) 80%, transparent),
+      0 0 22px 6px color-mix(in oklab, var(--accent) 55%, transparent);
+  }
 }
 
 /* ── Diamond immersive chrome ────────────────────────── */

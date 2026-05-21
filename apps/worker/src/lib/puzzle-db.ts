@@ -12,8 +12,13 @@ type PendingBatchJob = {
   phase: 'submitted' | 'fetched'
   processedCategories: PuzzleCategory[]
   requestedCategories?: PuzzleCategory[]
-  // Track validation failures per category for retry logic
+  // Per-category border-regen counter — drives the no-border addendum
+  // and caps regens for stubborn borders.
   validationFailures?: Record<string, number>
+  // Per-category NO_IMAGE retry counter — model accepted the prompt
+  // but produced no image (safety filter or generation glitch). Capped
+  // separately from border failures since the regen prompt differs.
+  noImageFailures?: Record<string, number>
 }
 
 export type { PendingBatchJob }
@@ -38,12 +43,23 @@ export async function ensurePuzzleTables(db: D1Database): Promise<void> {
     // resubmits (e.g. retry jigsaw for 2026-04-20 while also re-submitting
     // diamond for the same date).
     db.prepare(
-      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT)`,
+      `CREATE TABLE IF NOT EXISTS batch_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, batch_name TEXT NOT NULL UNIQUE, target_date TEXT NOT NULL, categories TEXT NOT NULL DEFAULT '{}', submitted_at TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'submitted', processed_categories TEXT NOT NULL DEFAULT '[]', requested_categories TEXT, validation_failures TEXT, no_image_failures TEXT)`,
     ),
     db.prepare(
       `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ),
   ])
+
+  // Migrate pre-existing batch_jobs tables that pre-date no_image_failures.
+  try {
+    const cols = await db.prepare(`PRAGMA table_info(batch_jobs)`).all<{ name: string }>()
+    const hasNoImage = (cols.results || []).some((c) => c.name === 'no_image_failures')
+    if (!hasNoImage) {
+      await db.prepare(`ALTER TABLE batch_jobs ADD COLUMN no_image_failures TEXT`).run()
+    }
+  } catch (err) {
+    console.error('batch_jobs migration failed', err)
+  }
 
   tablesReady = true
 }
@@ -195,6 +211,7 @@ type BatchJobRow = {
   processed_categories: string
   requested_categories: string | null
   validation_failures: string | null
+  no_image_failures: string | null
 }
 
 function rowToJob(row: BatchJobRow | null): PendingBatchJob | null {
@@ -209,6 +226,7 @@ function rowToJob(row: BatchJobRow | null): PendingBatchJob | null {
       processedCategories: JSON.parse(row.processed_categories) || [],
       requestedCategories: row.requested_categories ? JSON.parse(row.requested_categories) : undefined,
       validationFailures: row.validation_failures ? JSON.parse(row.validation_failures) : undefined,
+      noImageFailures: row.no_image_failures ? JSON.parse(row.no_image_failures) : undefined,
     }
   } catch {
     return null
@@ -221,7 +239,7 @@ function rowToJob(row: BatchJobRow | null): PendingBatchJob | null {
 export async function getBatchJob(db: D1Database): Promise<PendingBatchJob | null> {
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs ORDER BY id ASC LIMIT 1',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures FROM batch_jobs ORDER BY id ASC LIMIT 1',
     )
     .first<BatchJobRow>()
   return rowToJob(row ?? null)
@@ -236,7 +254,7 @@ export async function getBatchJobByTargetDate(
   // want "is there anything for this date" still work.
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC LIMIT 1',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC LIMIT 1',
     )
     .bind(targetDate)
     .first<BatchJobRow>()
@@ -249,7 +267,7 @@ export async function getBatchJobsByTargetDate(
 ): Promise<PendingBatchJob[]> {
   const rows = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures FROM batch_jobs WHERE target_date = ? ORDER BY id ASC',
     )
     .bind(targetDate)
     .all<BatchJobRow>()
@@ -267,7 +285,7 @@ export async function getBatchJobByBatchName(
 ): Promise<PendingBatchJob | null> {
   const row = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs WHERE batch_name = ?',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures FROM batch_jobs WHERE batch_name = ?',
     )
     .bind(batchName)
     .first<BatchJobRow>()
@@ -277,7 +295,7 @@ export async function getBatchJobByBatchName(
 export async function getAllPendingBatchJobs(db: D1Database): Promise<PendingBatchJob[]> {
   const rows = await db
     .prepare(
-      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures FROM batch_jobs ORDER BY id ASC',
+      'SELECT batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures FROM batch_jobs ORDER BY id ASC',
     )
     .all<BatchJobRow>()
   const results: PendingBatchJob[] = []
@@ -295,7 +313,7 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
   // multiple jobs can target the same date.
   await db
     .prepare(
-      'INSERT OR REPLACE INTO batch_jobs (batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO batch_jobs (batch_name, target_date, categories, submitted_at, phase, processed_categories, requested_categories, validation_failures, no_image_failures) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .bind(
       job.batchName,
@@ -306,6 +324,7 @@ export async function saveBatchJob(db: D1Database, job: PendingBatchJob): Promis
       JSON.stringify(job.processedCategories),
       job.requestedCategories ? JSON.stringify(job.requestedCategories) : null,
       job.validationFailures ? JSON.stringify(job.validationFailures) : null,
+      job.noImageFailures ? JSON.stringify(job.noImageFailures) : null,
     )
     .run()
 }

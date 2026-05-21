@@ -2366,6 +2366,15 @@ details.trigger-card[open] > summary.trigger-card-header::after {
 .session-log-recon-header[data-state="ok"] { color: var(--green); }
 .session-log-recon-header[data-state="warn"] { color: var(--amber); }
 
+/* "Copy for Claude" sits on its own row at the bottom of the session
+   readout so the JSON-export action doesn't crowd the metric chips. */
+.session-log-copy-claude {
+  flex-basis: 100%;
+  margin-top: 0.5rem;
+  align-self: flex-start;
+  width: max-content;
+}
+
 .complexity-time-stats {
   display: inline-flex;
   flex-wrap: wrap;

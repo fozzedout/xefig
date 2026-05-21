@@ -40,6 +40,7 @@ type BatchJobRawResponse = {
     responses?: Array<{
       response?: {
         candidates?: Array<{
+          finishReason?: string
           content?: {
             parts?: Array<{
               inlineData?: { mimeType: string; data: string }
@@ -56,6 +57,7 @@ type BatchJobRawResponse = {
     inlinedResponses?: Array<{
       response?: {
         candidates?: Array<{
+          finishReason?: string
           content?: {
             parts?: Array<{
               inlineData?: { mimeType: string; data: string }
@@ -133,7 +135,20 @@ export async function submitImageBatch(
 
 export type BatchPollResult =
   | { state: 'pending' | 'running'; stats?: Record<string, string>; rawResponse?: unknown }
-  | { state: 'succeeded'; images: BatchImageResult[]; rawResponse?: unknown }
+  | {
+      state: 'succeeded'
+      images: BatchImageResult[]
+      // Categories that returned a response entry but no image — Gemini
+      // accepted the prompt and reported finishReason='NO_IMAGE' (safety
+      // filter or generation failure). The batch is permanently done at
+      // the provider; the caller has to resubmit for these categories.
+      noImageCategories: PuzzleCategory[]
+      // True when the response payload had at least one inlined entry —
+      // distinguishes "model declined" from "Gemini returned an empty
+      // batch" (which is transient).
+      hasResponseEntries: boolean
+      rawResponse?: unknown
+    }
   | { state: 'failed'; error: string; rawResponse?: unknown }
   | { state: 'unknown'; error: string; rawResponse?: unknown }
 
@@ -168,9 +183,15 @@ export async function pollImageBatch(
   }
 
   if (state === 'BATCH_STATE_SUCCEEDED' || state === 'BATCH_STATE_COMPLETED') {
-    const images = extractImagesFromResponse(raw)
+    const { images, noImageCategories, entryCount } = extractImagesFromResponse(raw)
     const debugRaw = images.length === 0 ? stripInlineData(raw) : undefined
-    return { state: 'succeeded', images, rawResponse: debugRaw }
+    return {
+      state: 'succeeded',
+      images,
+      noImageCategories,
+      hasResponseEntries: entryCount > 0,
+      rawResponse: debugRaw,
+    }
   }
 
   // Unknown state — keep the job, return raw for debugging
@@ -185,6 +206,7 @@ export async function pollImageBatch(
 type ResponseEntry = {
   response?: {
     candidates?: Array<{
+      finishReason?: string
       content?: {
         parts?: Array<{
           inlineData?: { mimeType: string; data: string }
@@ -196,7 +218,11 @@ type ResponseEntry = {
   metadata?: { key: string }
 }
 
-function extractImagesFromResponse(raw: BatchJobRawResponse): BatchImageResult[] {
+function extractImagesFromResponse(raw: BatchJobRawResponse): {
+  images: BatchImageResult[]
+  noImageCategories: PuzzleCategory[]
+  entryCount: number
+} {
   // Gemini nests responses as: response.inlinedResponses.inlinedResponses[]
   // and also at: metadata.output.inlinedResponses.inlinedResponses[]
   const topLevel = raw as Record<string, unknown>
@@ -207,16 +233,21 @@ function extractImagesFromResponse(raw: BatchJobRawResponse): BatchImageResult[]
     []
 
   const images: BatchImageResult[] = []
+  const noImageCategories: PuzzleCategory[] = []
 
   for (const entry of entries) {
     const category = entry.metadata?.key as PuzzleCategory | undefined
     if (!category) continue
 
     const parts = entry.response?.candidates?.[0]?.content?.parts
-    if (!parts) continue
+    const imagePart = parts?.find((p) => p.inlineData?.data)
 
-    const imagePart = parts.find((p) => p.inlineData?.data)
-    if (!imagePart?.inlineData) continue
+    if (!imagePart?.inlineData) {
+      // No image bytes for this category. Could be finishReason='NO_IMAGE',
+      // a safety block, or just a malformed entry — they all need a regen.
+      noImageCategories.push(category)
+      continue
+    }
 
     const base64 = imagePart.inlineData.data
     const binaryString = atob(base64)
@@ -232,7 +263,7 @@ function extractImagesFromResponse(raw: BatchJobRawResponse): BatchImageResult[]
     })
   }
 
-  return images
+  return { images, noImageCategories, entryCount: entries.length }
 }
 
 // Walk a nested path and return the value if found, or undefined

@@ -1,5 +1,5 @@
 import './admin.css'
-import { sampleCellRegions, samplePixelsForPalette, createDistinctPalette, sortPaletteDarkToLight, assignCellColors, cleanupTinyRegions, splitLargeRegions } from './components/diamond-painting-puzzle.js'
+import { sampleCellRegions, samplePixelsForPalette, createDistinctPalette, sortPaletteDarkToLight, decollideLabelSilhouettes, assignCellColors, cleanupTinyRegions, splitLargeRegions } from './components/diamond-painting-puzzle.js'
 import { loadImage, releaseLoadedImage } from './components/image-loader.js'
 import { renderDiamondSliceThumbnail, drawGrid as drawDiamondGrid } from './components/diamond-grid-thumbnail.js'
 
@@ -907,6 +907,10 @@ async function checkDiamondComplexity() {
     const chromaReserve = Math.max(0, parseInt(document.getElementById('diamond-chroma-reserve')?.value, 10) || 0)
     const palette = createDistinctPalette(palettePixels, DIAMOND_NUM_COLORS, chromaWeight, chromaReserve)
     sortPaletteDarkToLight(palette)
+    // Match the puzzle init pipeline: break label-silhouette collisions
+    // for confusable colour pairs so the admin's "Check complexity" panel
+    // shows the same ordering the player will see.
+    decollideLabelSilhouettes(palette)
     const dither = !!document.getElementById('diamond-dither-toggle')?.checked
     const cleanupMax = Math.max(0, parseInt(document.getElementById('diamond-cleanup-max')?.value, 10) || 0)
     const splitPercent = Math.max(0, parseInt(document.getElementById('diamond-split-max')?.value, 10) || 0)
@@ -1571,6 +1575,255 @@ function reconstructSessionLog(log) {
   }
 }
 
+// Single structured export of everything a future analysis needs to
+// reason about a session WITHOUT having to parse the on-screen layout.
+// Every number is keyed and unit-suffixed (e.g. `active_sec`, not just
+// `active`); every list is one row per object so a linearised paste
+// can't get column-shifted. Combines puzzle complexity (gridStats,
+// stamped at init) with session timing (summary, reconstruction,
+// per-colour) and pre-computes the derived metrics that take a few
+// arithmetic steps to recover from the raw fields — sec/region is the
+// one I keep needing.
+function buildSessionExport(log, dropdownLabel) {
+  if (!log) return null
+  const stats = summariseSessionLog(log)
+  if (!stats) return null
+  const recon = reconstructSessionLog(log)
+  const gs = log.gridStats || null
+  const events = Array.isArray(log.events) ? log.events : []
+
+  const eventSpanMs = stats.eventSpanMs || 0
+  const activeMs = stats.activeMs || 0
+
+  // ─── Per-colour join — adds nearest-palette-neighbour info so a
+  // reviewer can spot palette-confusion outliers (a colour with high
+  // sec/region right next to a near-Δ neighbour) without re-computing
+  // distances from rgb. Sorted by active_sec desc so the slowest
+  // colours sit at the top.
+  const perColorMs = new Map(stats.perColor || [])
+  const perColor = []
+  if (gs) {
+    const cellsPerColor = gs.cellsPerColor || []
+    const regionsPerColor = gs.regionsPerColor || []
+    const neighbours = gs.colorNearestNeighbour || []
+    for (let i = 0; i < cellsPerColor.length; i++) {
+      const cells = cellsPerColor[i] || 0
+      if (cells === 0) continue
+      const regions = regionsPerColor[i] || 0
+      const activeMs = perColorMs.get(i) || 0
+      const nn = neighbours[i] || null
+      perColor.push({
+        color_index: i,
+        // 1-based label matching what the player sees on the in-game
+        // palette chip and the per-cell glyph. Reviews that quote a
+        // colour back to the player should use this, not color_index —
+        // otherwise every reference is one off.
+        display_label: i + 1,
+        rgb: gs.paletteRgb?.[i] || null,
+        cells,
+        regions,
+        mean_cells_per_region: regions ? +(cells / regions).toFixed(2) : 0,
+        active_sec: +(activeMs / 1000).toFixed(2),
+        sec_per_region: regions ? +((activeMs / 1000) / regions).toFixed(2) : 0,
+        nearest_palette_color: nn ? nn.index : null,
+        nearest_palette_display_label: nn ? nn.index + 1 : null,
+        nearest_palette_delta: nn ? nn.delta : null,
+      })
+    }
+    perColor.sort((a, b) => b.active_sec - a.active_sec)
+  }
+
+  // Derived: median sec/region across active colours. The outlier-detection
+  // rule that surfaced c12-as-confusable was "any colour ≥ 2× this median."
+  const secPerRegionSorted = perColor
+    .filter((c) => c.regions > 0)
+    .map((c) => c.sec_per_region)
+    .sort((a, b) => a - b)
+  const medianSecPerRegion = secPerRegionSorted.length
+    ? secPerRegionSorted[Math.floor(secPerRegionSorted.length / 2)]
+    : 0
+
+  // ─── Histogram: regions + cells per bucket — saves the reviewer from
+  // having to estimate cell coverage as `count × mean`. cell_share_pct
+  // adds up to 100 across buckets.
+  const histRegions = gs?.regionSizeHistogram || {}
+  const histCells = gs?.regionSizeHistogramCells || {}
+  const totalCells = gs?.totalCells || 0
+  const regionSizeHistogram = Object.keys(histRegions).map((bin) => {
+    const cells = histCells[bin] || 0
+    return {
+      bin,
+      regions: histRegions[bin] || 0,
+      cells,
+      cell_share_pct: totalCells > 0 ? Math.round((cells / totalCells) * 1000) / 10 : 0,
+    }
+  })
+
+  // ─── Gap distribution — percentiles tell us about pacing more honestly
+  // than just mean/median/max. p95 catches the "occasional long pause"
+  // tail; p25/p75 bound the tempo most of the run actually moved at.
+  const gaps = []
+  for (let i = 1; i < events.length; i++) {
+    const g = events[i].t - events[i - 1].t
+    if (g >= 0) gaps.push(g)
+  }
+  gaps.sort((a, b) => a - b)
+  const pct = (p) => {
+    if (gaps.length === 0) return 0
+    const idx = Math.min(gaps.length - 1, Math.floor(gaps.length * p))
+    return +(gaps[idx] / 1000).toFixed(2)
+  }
+  const gapPercentilesSec = {
+    p10: pct(0.10),
+    p25: pct(0.25),
+    p50: pct(0.50),
+    p75: pct(0.75),
+    p90: pct(0.90),
+    p95: pct(0.95),
+    p99: pct(0.99),
+  }
+
+  // ─── Fill rate over time — split the session into quarters and report
+  // fills per minute in each. Lets the reviewer see "player slowed in
+  // the back half" vs "consistent pace" at a glance.
+  let fillRateOverTimeFpm = null
+  if (events.length > 0 && eventSpanMs > 0) {
+    const quarters = [0, 0, 0, 0]
+    const quarterMs = eventSpanMs / 4
+    for (const e of events) {
+      if (e.k !== 'f') continue
+      const q = Math.min(3, Math.floor(e.t / quarterMs))
+      quarters[q]++
+    }
+    const minutesPerQuarter = quarterMs / 60000
+    fillRateOverTimeFpm = quarters.map((count) => +(count / minutesPerQuarter).toFixed(2))
+  }
+
+  // ─── Wrong-fill diagnostics — for each wrong fill, what colour did
+  // the player accidentally tap, and what was the cell's correct colour?
+  // (`w` events carry the player's intended colour `c` and the cell `i`;
+  // the correct colour for that cell is whatever the subsequent `f`
+  // event lands.) Cluster wrong-fill (intended, actual) pairs — repeat
+  // pairs point at palette-confusion hot spots.
+  const wrongFillPairs = new Map()  // key = `${intended}->${actual}` → count
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
+    if (e.k !== 'w') continue
+    const intended = e.c
+    if (intended == null) continue
+    // Find the next 'f' on the same cell to learn the correct colour.
+    let actual = null
+    for (let j = i + 1; j < events.length; j++) {
+      const f = events[j]
+      if (f.k === 'f' && f.i === e.i) {
+        actual = f.c
+        break
+      }
+    }
+    if (actual == null) continue
+    const key = `${intended}->${actual}`
+    wrongFillPairs.set(key, (wrongFillPairs.get(key) || 0) + 1)
+  }
+  const wrongFillTopPairs = Array.from(wrongFillPairs.entries())
+    .map(([key, count]) => {
+      const [intendedStr, actualStr] = key.split('->')
+      const intended = +intendedStr
+      const actual = +actualStr
+      return {
+        intended_color: intended,
+        intended_display_label: intended + 1,
+        actual_color: actual,
+        actual_display_label: actual + 1,
+        count,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+
+  return {
+    label: dropdownLabel || null,
+    captured_at: log.remoteUploadedAt || log.savedAt || null,
+    session_id: log.testId || log.sessionId || null,
+    puzzle: {
+      date: log.date || null,
+      cols: gs?.cols ?? log.cols ?? null,
+      rows: gs?.rows ?? log.rows ?? null,
+      total_cells: gs?.totalCells ?? (log.cols && log.rows ? log.cols * log.rows : null),
+      cleanup_level_used: gs?.cleanupLevelUsed ?? null,
+      region_count: gs?.regionCount ?? null,
+      largest_region_size: gs?.largestRegionSize ?? null,
+      largest_region_pct: gs?.largestRegionFraction != null
+        ? Math.round(gs.largestRegionFraction * 1000) / 10
+        : null,
+      region_size_histogram: regionSizeHistogram,
+      palette_size: gs?.paletteRgb?.length ?? null,
+      active_palette_count: gs?.activePaletteCount ?? null,
+      mean_regions_per_active_color: gs?.meanRegionsPerActiveColor != null
+        ? +gs.meanRegionsPerActiveColor.toFixed(1)
+        : null,
+      adjacency_diff_pct: gs?.adjacencyDiffRate != null
+        ? Math.round(gs.adjacencyDiffRate * 1000) / 10
+        : null,
+      isolated_cells: gs?.isolatedCount ?? null,
+      min_palette_pair_delta: gs?.minPalettePairDelta ?? null,
+      // Both `a`/`b` keys are the 0-based color_index used elsewhere in
+      // the export; `*_display_label` mirrors the in-game 1-based number
+      // the player sees, so a confusion call-out reads as e.g. "16 ↔ 18"
+      // (display) instead of "15 ↔ 17" (index).
+      closest_palette_pairs: (gs?.closestPalettePairs ?? []).map((p) => ({
+        a: p.a,
+        a_display_label: p.a + 1,
+        b: p.b,
+        b_display_label: p.b + 1,
+        delta: p.delta,
+      })),
+    },
+    session: {
+      active_sec: +(activeMs / 1000).toFixed(2),
+      event_span_sec: +(eventSpanMs / 1000).toFixed(2),
+      unlogged_sec: +(Math.max(0, activeMs - eventSpanMs) / 1000).toFixed(2),
+      fills: stats.fills,
+      wrong_fills: stats.wrong,
+      wrong_fill_rate_pct: stats.fills > 0
+        ? Math.round((stats.wrong / stats.fills) * 1000) / 10
+        : 0,
+      selects: stats.selects,
+      total_events: stats.totalEvents,
+      mean_gap_sec: +(stats.meanGapMs / 1000).toFixed(2),
+      median_gap_sec: +(stats.medianGapMs / 1000).toFixed(2),
+      max_gap_sec: +(stats.maxGapMs / 1000).toFixed(2),
+      top_gaps_sec: (stats.topGaps || []).map((ms) => +(ms / 1000).toFixed(2)),
+      gap_percentiles_sec: gapPercentilesSec,
+      median_sec_per_region: medianSecPerRegion,
+      fill_rate_over_time_fpm: fillRateOverTimeFpm,
+      wrong_fill_top_pairs: wrongFillTopPairs,
+    },
+    reconstruction: recon ? {
+      consistent: recon.consistent,
+      f_events: recon.fCount,
+      unique_tap_cells: recon.uniqueTapCells,
+      sum_n: recon.sumN,
+      cells_unaccounted: recon.cellShortfall,
+      mean_cells_per_fill: +recon.meanCellsPerFill.toFixed(2),
+      min_n: recon.minN,
+      max_n: recon.maxN,
+      n_missing: recon.nMissing,
+      duplicate_tap_cells: recon.duplicateTapCells,
+      duplicate_tap_total: recon.duplicateTapTotal,
+    } : null,
+    per_color: perColor,
+  }
+}
+
+async function copySessionExport(log, dropdownLabel, buttonLabel) {
+  const exported = buildSessionExport(log, dropdownLabel)
+  if (!exported) {
+    setStatus(`Nothing to copy for ${buttonLabel}.`, 'error')
+    return
+  }
+  await copyText(JSON.stringify(exported, null, 2), buttonLabel)
+}
+
 async function renderDiamondSessionLog(value) {
   const result = document.getElementById('diamond-session-log-result')
   if (!result) return
@@ -1687,6 +1940,28 @@ async function renderDiamondSessionLog(value) {
     }
     result.appendChild(palette)
   }
+
+  appendCopyForClaudeButton(result, log, value)
+}
+
+// "Copy for Claude" — emits the full session as JSON so a future review
+// can be done without parsing the linearised on-screen text. Keeps the
+// puzzle complexity (gridStats) and the session timing in one blob.
+function appendCopyForClaudeButton(result, log, dropdownLabel) {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'btn-outline btn-micro session-log-copy-claude'
+  btn.textContent = 'Copy for Claude'
+  btn.title = 'Copy this session as structured JSON for analysis'
+  btn.addEventListener('click', async () => {
+    btn.disabled = true
+    try {
+      await copySessionExport(log, dropdownLabel, 'Session JSON')
+    } finally {
+      btn.disabled = false
+    }
+  })
+  result.appendChild(btn)
 }
 
 // Render the stamped static-grid features and join them with the
@@ -2004,6 +2279,8 @@ async function renderDiamondTestLog(value) {
     }
     result.appendChild(palette)
   }
+
+  appendCopyForClaudeButton(result, log, value)
 }
 
 document.getElementById('diamond-test-log-select')?.addEventListener('change', (e) => {

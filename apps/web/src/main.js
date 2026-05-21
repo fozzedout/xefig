@@ -4930,8 +4930,8 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                   <path d="M12 17 V11 M9 14 L12 11 L15 14"/>
                 </svg>
               </span>
-              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? 'Helper menu' : 'Puzzle menu'}">
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? `
+              <button id="menu-btn" class="gt-icon-btn gt-icon-btn--floating${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome ? ' gt-icon-btn--assistant' : ''}" type="button" aria-label="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome ? 'Helper menu' : 'Puzzle menu'}" aria-expanded="false" title="${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome ? 'Helper menu' : 'Puzzle menu'}">
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome ? `
                 <svg class="assistant-logo" viewBox="0 0 200 200" aria-hidden="true">
                   <g transform="translate(100 100) rotate(-20)">
                     <path d="M 28.69 -74.68 A 80 80 0 0 0 -28.69 -74.68 A 12 12 0 0 0 -34.10 -56.42 L -25.50 -44.59 A 12 12 0 0 0 -12.28 -40.16 A 42 42 0 0 1 12.28 -40.16 A 12 12 0 0 0 25.50 -44.59 L 34.10 -56.42 A 12 12 0 0 0 28.69 -74.68 Z" fill="#e070a0"/>
@@ -4944,7 +4944,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
                 ` : `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`}
               </button>
               <div id="gt-menu" class="gt-menu gt-menu--floating" hidden>
-                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome ? `
+                ${useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome ? `
                 <button id="how-to-play-btn" class="gt-menu-item" type="button">
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm.6 15h-1.3v-1.3h1.3Zm1.7-5.4-.6.6c-.5.5-.7.9-.7 1.8h-1.3v-.3c0-.7.3-1.3.8-1.8l.8-.8a1.5 1.5 0 1 0-2.6-1H8.7a3 3 0 1 1 5.6 1.5Z"/></svg>
                   How to play
@@ -5136,7 +5136,7 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
   // Loaded lazily so the homepage bundle isn't dragged into the puzzle path.
   const howToPlayBtn = gameEl.querySelector('#how-to-play-btn')
   const hintBtn = gameEl.querySelector('#hint-btn')
-  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome) && menuBtn && menuPanel && workspaceEl
+  const useAssistant = (useImmersiveJigsawChrome || useImmersivePolygramChrome || useImmersiveSlidingChrome || useImmersiveSwapChrome || useImmersiveDiamondChrome) && menuBtn && menuPanel && workspaceEl
   let assistantPuzzleReady = false
   let assistantNudgeFn = null
   const tryAssistantNudge = () => {
@@ -5968,6 +5968,212 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
         ]
       }
 
+      // Diamond helper: tutorial walks the player through tap-to-pick-a-colour
+      // then tap-a-cell to flood-fill, plus the reference-image peek via the
+      // floating eye button. The hint mirrors the same two-step shape — pick
+      // the colour with the most unpainted cells, then prompt a fill.
+      //
+      // Cells live on a <canvas> with no per-cell DOM, so we point the
+      // bouncer at the board frame for the "tap a cell" step rather than at
+      // a specific cell. The swatch is a real button, so swatch steps use
+      // the same placeBouncerOver pattern as swap/slider.
+      const buildDiamondTutorialSteps = () => {
+        const root = puzzle?.root || gameEl.querySelector('.diamond-root')
+        const board = puzzle?.boardFrame || gameEl.querySelector('.diamond-board-frame')
+        const palette = puzzle?.paletteBar || gameEl.querySelector('.diamond-palette-bar')
+        // Resolve the teaching colour at builder time but always look up
+        // the swatch element lazily — the palette can re-layout between
+        // orientations, recreating .selected styles but not the elements
+        // themselves.
+        const teachColor = puzzle?.pickTeachingColor?.()
+        const swatchEl = () => (teachColor != null ? puzzle?.swatches?.[teachColor] || null : null)
+        const colorNumber = teachColor != null ? teachColor + 1 : null
+
+        // resolveTargetRect accepts a {left, top, width, height} object, so
+        // we can hand the bouncer a synthetic zero-size rect at the exact
+        // visual centre of the board frame. Using the board element itself
+        // works *most* of the time, but only when the frame is fully on
+        // screen — orientation flips, software keyboards, and the safe-area
+        // insets all shift things by a few px and the centre becomes
+        // approximate. A live thunk recomputes per-paint so it stays
+        // accurate across resizes.
+        const boardCentre = () => {
+          if (!board) return null
+          const r = board.getBoundingClientRect()
+          return { left: r.left + r.width / 2, top: r.top + r.height / 2, width: 0, height: 0 }
+        }
+
+        // Touch-only viewports get the pinch instructions; mouse-bearing
+        // (pointer: fine) get the wheel ones. matchMedia is checked at
+        // builder time — re-running the tutorial after plugging in a mouse
+        // would still serve the old copy, but that's a very narrow edge.
+        const hasFinePointer = !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches)
+        const zoomMessage = hasFinePointer
+          ? 'The cell numbers are small — scroll the mouse wheel over the board to zoom in and out. The view zooms toward your cursor.'
+          : 'The cell numbers are small — pinch two fingers apart on the board to zoom in, pinch them together to zoom out.'
+        const panMessage = hasFinePointer
+          ? 'Once you\'re zoomed in, click and drag the board to pan around and find the next region.'
+          : 'Once you\'re zoomed in, drag with one finger to pan around and find the next region.'
+
+        const steps = [
+          { target: null, message: "Welcome! Let's learn Paint by Numbers." },
+          {
+            target: boardCentre,
+            message: 'Goal: paint every cell with the colour that matches its number, like a paint-by-numbers kit.',
+          },
+        ]
+
+        if (teachColor != null && palette && swatchEl()) {
+          // Park the bouncer immediately adjacent to the highlighted
+          // swatch on whichever edge of the palette faces the empty
+          // board area:
+          //   - portrait: palette runs along the bottom — bouncer goes
+          //     ABOVE the palette, X-aligned with the swatch.
+          //   - landscape: palette is a vertical column on the right —
+          //     bouncer goes to the LEFT of the palette, Y-aligned with
+          //     the swatch.
+          // Bubble then flows out from the bouncer into the empty board
+          // area in both cases, never covering other swatches.
+          const swatchAnchor = () => {
+            const el = swatchEl()
+            if (!el) return null
+            const swRect = el.getBoundingClientRect()
+            const palRect = palette?.getBoundingClientRect?.()
+            if (!palRect) {
+              return { left: swRect.left + swRect.width / 2, top: swRect.top - 40, width: 0, height: 0 }
+            }
+            // Tall-and-narrow palette = landscape side column.
+            const isVerticalPalette = palRect.height > palRect.width
+            if (isVerticalPalette) {
+              return {
+                left: palRect.left - 36,
+                top: swRect.top + swRect.height / 2,
+                width: 0,
+                height: 0,
+              }
+            }
+            return {
+              left: swRect.left + swRect.width / 2,
+              top: palRect.top - 36,
+              width: 0,
+              height: 0,
+            }
+          }
+          const isLandscape = !!(window.matchMedia && window.matchMedia('(orientation: landscape)').matches)
+          const paletteWhere = isLandscape ? 'on the right' : 'below'
+          steps.push({
+            target: swatchAnchor,
+            message: `The colours live on the palette ${paletteWhere}. Tap the glowing colour ${colorNumber} swatch to pick it up — it covers the most cells right now.`,
+            onShow: (assistant) => {
+              puzzle?.highlightSwatch?.(teachColor)
+              // The palette can re-layout between orientations (the
+              // landscape grid recalculates after a tutorial step has
+              // already started) — re-anchor the bouncer if that fires.
+              const reposition = () => {
+                if (assistant.isBubbleCollapsed?.()) return
+                const anchor = swatchAnchor()
+                if (anchor) assistant.placeBouncerOver(anchor)
+              }
+              window.addEventListener('resize', reposition)
+              window.addEventListener('orientationchange', reposition)
+              return () => {
+                window.removeEventListener('resize', reposition)
+                window.removeEventListener('orientationchange', reposition)
+                puzzle?.clearSwatchHighlight?.()
+              }
+            },
+            advanceOn: [{
+              element: document,
+              event: 'diamond:color-selected',
+              predicate: (evt) => evt?.detail?.colorIndex === teachColor,
+            }],
+            noManualAdvance: true,
+            actionHint: `Tap colour ${colorNumber}`,
+          })
+
+          // Zoom + pan come BEFORE the first fill — the cell numbers are
+          // too small to read at the default fit, so the player needs to
+          // know how to zoom in and move around before they can find a
+          // matching cell.
+          steps.push({
+            target: boardCentre,
+            message: zoomMessage,
+          })
+
+          steps.push({
+            target: boardCentre,
+            message: panMessage,
+          })
+
+          // Wrong-colour reassurance lives INSIDE the fill prompt rather
+          // than as a separate step after a successful fill — the
+          // standalone "if you pick the wrong colour" step landed AFTER
+          // the player just did it right, which read as criticism.
+          steps.push({
+            target: board,
+            message: `Now tap any cell with the number ${colorNumber} on the board — the whole region floods in. If you ever tap the wrong number, the cell just flashes red and snaps back, so feel free to experiment.`,
+            advanceOn: [{
+              element: document,
+              event: 'diamond:cell-filled',
+              predicate: (evt) => evt?.detail?.colorIndex === teachColor,
+            }],
+            noManualAdvance: true,
+            collapseOnInteraction: true,
+            actionHint: `Tap a cell numbered ${colorNumber}`,
+          })
+        }
+
+        steps.push({
+          target: null,
+          message: 'Nice work! Pick a colour, fill its cells, repeat — the picture comes together one colour at a time.',
+        })
+        return steps
+      }
+
+      const buildDiamondHintSteps = () => {
+        const board = puzzle?.boardFrame || gameEl.querySelector('.diamond-board-frame')
+        const teachColor = puzzle?.pickTeachingColor?.()
+        if (teachColor == null) {
+          return [{ target: null, message: 'Every cell is already painted — you\'re right at the finish line!' }]
+        }
+        const colorNumber = teachColor + 1
+        const swatchEl = () => puzzle?.swatches?.[teachColor] || null
+        const selectedColor = puzzle?.selectedColor
+        const steps = []
+
+        if (selectedColor !== teachColor && swatchEl()) {
+          steps.push({
+            target: swatchEl,
+            message: `Try colour ${colorNumber} next — it has the most cells still to paint.`,
+            onShow: () => {
+              puzzle?.highlightSwatch?.(teachColor)
+              return () => puzzle?.clearSwatchHighlight?.()
+            },
+            advanceOn: [{
+              element: document,
+              event: 'diamond:color-selected',
+              predicate: (evt) => evt?.detail?.colorIndex === teachColor,
+            }],
+            noManualAdvance: true,
+            actionHint: `Tap colour ${colorNumber}`,
+          })
+        }
+
+        steps.push({
+          target: board,
+          message: `Find a cell marked ${colorNumber} on the board and tap it to fill that region.`,
+          advanceOn: [{
+            element: document,
+            event: 'diamond:cell-filled',
+            predicate: (evt) => evt?.detail?.colorIndex === teachColor,
+          }],
+          noManualAdvance: true,
+          collapseOnInteraction: true,
+          actionHint: `Tap a cell numbered ${colorNumber}`,
+        })
+        return steps
+      }
+
       let tutorialBuilder
       let hintBuilder
       if (useImmersiveSlidingChrome) {
@@ -5979,6 +6185,9 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
       } else if (useImmersiveSwapChrome) {
         tutorialBuilder = buildSwapTutorialSteps
         hintBuilder = buildSwapHintSteps
+      } else if (useImmersiveDiamondChrome) {
+        tutorialBuilder = buildDiamondTutorialSteps
+        hintBuilder = buildDiamondHintSteps
       } else {
         tutorialBuilder = buildJigsawTutorialSteps
         hintBuilder = buildJigsawHintSteps

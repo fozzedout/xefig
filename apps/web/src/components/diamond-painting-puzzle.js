@@ -9,9 +9,6 @@ const CELL_SAMPLE_GRID = 3
 const DITHER_ENABLED = false
 const CLEANUP_ENABLED = true
 const CLEANUP_MIN_REGION = 2
-const CLEANUP_START_LEVEL = 1
-const CLEANUP_MAX_LEVEL = 3
-const CLEANUP_REGION_TARGET = 1200
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const MAX_CANVAS_DIMENSION = 4096
@@ -125,21 +122,19 @@ export class DiamondPaintingPuzzle {
     const palettePixels = samplePixelsForPalette(this.image, 20000)
     this.palette = createDistinctPalette(palettePixels, NUM_COLORS)
     sortPaletteDarkToLight(this.palette)
+    // Re-order to break label-silhouette collisions before cells get
+    // assigned. Run *after* the luminance sort so the starting state is
+    // "ordered" and the greedy pass only locally permutes where needed.
+    // MUST run before assignCellColors — the grid is indexed by palette
+    // position, so any palette permutation has to happen before cells
+    // get those indices written into them.
+    decollideLabelSilhouettes(this.palette)
     const rawGrid = assignCellColors(cellSamples, this.palette, this.cols)
     this.grid = rawGrid
     let cleanupLevelUsed = 0
     if (CLEANUP_ENABLED) {
-      // Adaptive cleanup: escalate the threshold if the cleaned grid still
-      // has too many regions (busy images project to ~5s/region completion
-      // time, so >800 regions blows past the daily target).
-      let level = CLEANUP_START_LEVEL
-      let cleaned = cleanupTinyRegions(rawGrid, this.cols, this.rows, level + 1)
-      while (level < CLEANUP_MAX_LEVEL && countDiamondRegions(cleaned, this.cols, this.rows) > CLEANUP_REGION_TARGET) {
-        level++
-        cleaned = cleanupTinyRegions(rawGrid, this.cols, this.rows, level + 1)
-      }
-      this.grid = cleaned
-      cleanupLevelUsed = level
+      this.grid = cleanupTinyRegions(rawGrid, this.cols, this.rows, CLEANUP_MIN_REGION)
+      cleanupLevelUsed = 1
     }
     this.fills = new Int8Array(this.totalCells).fill(-1)
     // Stamp the played grid's static features so admin doesn't have to
@@ -435,6 +430,47 @@ export class DiamondPaintingPuzzle {
       this.recordSessionEvent({ k: 's', c: index })
       if (!this.muted) playClick()
     }
+    document.dispatchEvent(new CustomEvent('diamond:color-selected', {
+      detail: { colorIndex: index, changed },
+    }))
+  }
+
+  // Helper-driven ring around a palette swatch. Used by the tutorial /
+  // hint flow to point at the colour the player should pick next.
+  highlightSwatch(index) {
+    this.clearSwatchHighlight()
+    const swatch = this.swatches?.[index]
+    if (!swatch) return
+    swatch.classList.add('is-hint-target')
+    this._hintSwatchIndex = index
+  }
+
+  clearSwatchHighlight() {
+    if (this._hintSwatchIndex == null) return
+    const swatch = this.swatches?.[this._hintSwatchIndex]
+    if (swatch) swatch.classList.remove('is-hint-target')
+    this._hintSwatchIndex = null
+  }
+
+  // Pick a colour with the most cells still unpainted — the tutorial and
+  // hint use it so the player's first fill rewards them with a big visible
+  // patch instead of a single stray cell. Returns null only if the whole
+  // grid is already finished.
+  pickTeachingColor() {
+    if (!this.grid || !this.fills) return null
+    const counts = new Array(this.palette?.length || 0).fill(0)
+    for (let i = 0; i < this.grid.length; i++) {
+      if (this.fills[i] !== this.grid[i]) counts[this.grid[i]]++
+    }
+    let best = -1
+    let bestCount = 0
+    for (let c = 0; c < counts.length; c++) {
+      if (counts[c] > bestCount) {
+        best = c
+        bestCount = counts[c]
+      }
+    }
+    return best >= 0 ? best : null
   }
 
   // ─── Events ───
@@ -575,6 +611,9 @@ export class DiamondPaintingPuzzle {
     // stack mismatched fills on top of an in-flight restore.
     if (this.selectedColor !== targetGridColor) {
       this.recordSessionEvent({ k: 'w', c: this.selectedColor, i: index })
+      document.dispatchEvent(new CustomEvent('diamond:wrong-fill', {
+        detail: { colorIndex: this.selectedColor, expectedColor: targetGridColor, cellIndex: index },
+      }))
       this.filling = true
       const allIdx = this.collectFloodIndices(col, row, targetGridColor, currentFill)
       for (const idx of allIdx) {
@@ -603,6 +642,9 @@ export class DiamondPaintingPuzzle {
     // gap distribution downstream).
     const filledCount = waves.reduce((sum, w) => sum + w.length, 0)
     this.recordSessionEvent({ k: 'f', c: this.selectedColor, i: index, n: filledCount })
+    document.dispatchEvent(new CustomEvent('diamond:cell-filled', {
+      detail: { colorIndex: this.selectedColor, cellIndex: index, cellCount: filledCount },
+    }))
 
     if (waves.length === 1) {
       // Single cell — fill instantly
@@ -775,6 +817,13 @@ export class DiamondPaintingPuzzle {
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       const lum = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+      // Reverted from the dark-outline attempt (2026-05-19): outline at
+      // any weight tested adds visual noise around both digits without
+      // disambiguating the pair — 16 and 18 share a silhouette, and
+      // sharpening that silhouette identically on both doesn't help.
+      // See diamond-label-readability.spec.js for the A/B grid. Real
+      // fix needs glyph distinctness (different typeface, different
+      // label set, or chip-shape variation), not a stroke trick.
       ctx.fillStyle = lum > 180
         ? `rgb(${color[0] >> 1},${color[1] >> 1},${color[2] >> 1})`
         : rgbString(color)
@@ -920,9 +969,16 @@ export class DiamondPaintingPuzzle {
   }
 
   setReferenceVisible(visible) {
-    this.referenceVisible = Boolean(visible)
+    const next = Boolean(visible)
+    const changed = next !== this.referenceVisible
+    this.referenceVisible = next
     if (this.referenceImage) {
       this.referenceImage.classList.toggle('is-visible', this.referenceVisible)
+    }
+    if (changed) {
+      document.dispatchEvent(new CustomEvent('diamond:reference-toggled', {
+        detail: { visible: this.referenceVisible },
+      }))
     }
     this.emitProgress()
     return this.referenceVisible
@@ -1054,10 +1110,16 @@ export function samplePixelsForPalette(image, sampleCount = 20000, maxDim = 1024
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  // Pin both the canvas backing buffer and the read-back to sRGB so the
+  // sampled RGB values are identical across browsers. Without this,
+  // Safari draws images into a display-P3 buffer on wide-gamut screens
+  // while Chrome stays in sRGB — same source image, different pixel
+  // values out of getImageData, different palette quantisation, and
+  // different region counts (see Chrome=906 vs Safari=973 mismatch).
+  const ctx = canvas.getContext('2d', { willReadFrequently: true, colorSpace: 'srgb' })
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(image, 0, 0, w, h)
-  const data = ctx.getImageData(0, 0, w, h).data
+  const data = ctx.getImageData(0, 0, w, h, { colorSpace: 'srgb' }).data
   const total = w * h
   // Oversample 4× when biasing so rejection has headroom to reach the
   // target count even if most candidates are grey.
@@ -1087,11 +1149,14 @@ export function sampleCellRegions(image, cols, rows, sampleGrid, useMedian = fal
   const canvas = document.createElement('canvas')
   canvas.width = cols * sampleGrid
   canvas.height = rows * sampleGrid
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  // Pin sRGB on the buffer and the read-back — same reason as
+  // samplePixelsForPalette: keeps Chrome and Safari sampling identical
+  // pixels from the same source image.
+  const ctx = canvas.getContext('2d', { willReadFrequently: true, colorSpace: 'srgb' })
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
 
-  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height, { colorSpace: 'srgb' })
   if (bilateralStrength > 0) {
     imageData = bilateralFilter(imageData, bilateralStrength * 0.4, bilateralStrength * 5)
   }
@@ -1520,11 +1585,29 @@ export function splitLargeRegions(grid, cellSamples, palette, cols, rows, maxFra
   return result
 }
 
+// Redmean perceptual distance — cheaper than CIELAB and good enough to
+// flag visually-confusable palette pairs. Output range ≈ 0-765.
+// Mirrors admin.js's local helper so puzzle-side stamping and admin-side
+// live checks return identical numbers.
+function _redmeanDistance(a, b) {
+  const rMean = (a[0] + b[0]) / 2
+  const dr = a[0] - b[0]
+  const dg = a[1] - b[1]
+  const db = a[2] - b[2]
+  return Math.sqrt(
+    (2 + rMean / 256) * dr * dr +
+    4 * dg * dg +
+    (2 + (255 - rMean) / 256) * db * db,
+  )
+}
+
 // Static features of the played grid, computed once at init so the
 // session log carries the predictors alongside the timing data. Admin
 // can correlate per-colour active time against per-colour fragmentation
 // without recomputing (which would diverge from the actual played grid
-// when re-decoding the image on a different device).
+// when re-decoding the image on a different device — and across
+// browsers, since Chrome and Safari can sample subtly different RGB
+// values from the same image, see colour-space pin in sampleCellRegions).
 function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
   const total = grid.length
   const numColors = palette?.length || 0
@@ -1534,10 +1617,12 @@ function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
 
   // Single-pass 8-connected region scan: per region, increment its
   // colour bucket and append its size to the size list (used for the
-  // histogram below).
+  // histogram below). 8-connectivity matches the flood-fill the player
+  // experiences, so region count = expected tap count.
   const visited = new Uint8Array(total)
   const stack = []
   const sizes = []
+  let largestRegionSize = 0
   for (let start = 0; start < total; start++) {
     if (visited[start]) continue
     const color = grid[start]
@@ -1566,6 +1651,7 @@ function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
     }
     regionsPerColor[color] = (regionsPerColor[color] || 0) + 1
     sizes.push(size)
+    if (size > largestRegionSize) largestRegionSize = size
   }
 
   // Buckets chosen for gameplay relevance, not even spacing:
@@ -1574,14 +1660,126 @@ function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
   //   5-16: small clusters
   //   17-64: medium blobs
   //   65+: dominant regions (background-tier)
-  const histogram = { '1': 0, '2-4': 0, '5-16': 0, '17-64': 0, '65+': 0 }
-  for (const sz of sizes) {
-    if (sz === 1) histogram['1']++
-    else if (sz <= 4) histogram['2-4']++
-    else if (sz <= 16) histogram['5-16']++
-    else if (sz <= 64) histogram['17-64']++
-    else histogram['65+']++
+  // `cells` per bucket lets a downstream review compute "% of canvas in
+  // each size class" without re-deriving from regions × mean.
+  const bucketDefs = [
+    { key: '1', min: 1, max: 1 },
+    { key: '2-4', min: 2, max: 4 },
+    { key: '5-16', min: 5, max: 16 },
+    { key: '17-64', min: 17, max: 64 },
+    { key: '65+', min: 65, max: Infinity },
+  ]
+  const histogram = {}
+  const histogramCells = {}
+  for (const b of bucketDefs) {
+    histogram[b.key] = 0
+    histogramCells[b.key] = 0
   }
+  for (const sz of sizes) {
+    for (const b of bucketDefs) {
+      if (sz >= b.min && sz <= b.max) {
+        histogram[b.key]++
+        histogramCells[b.key] += sz
+        break
+      }
+    }
+  }
+
+  // ─── Image-busyness ────────────────────────────────────────────────
+  // 8-direction adjacency diff rate. Higher = busier picture; correlates
+  // tightly with completion time across past sessions.
+  let adjPairs = 0
+  let adjDiffs = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c
+      if (c + 1 < cols) {
+        adjPairs++
+        if (grid[i] !== grid[i + 1]) adjDiffs++
+      }
+      if (r + 1 < rows) {
+        adjPairs++
+        if (grid[i] !== grid[i + cols]) adjDiffs++
+      }
+      if (r + 1 < rows && c + 1 < cols) {
+        adjPairs++
+        if (grid[i] !== grid[i + cols + 1]) adjDiffs++
+      }
+      if (r + 1 < rows && c > 0) {
+        adjPairs++
+        if (grid[i] !== grid[i + cols - 1]) adjDiffs++
+      }
+    }
+  }
+  const adjacencyDiffRate = adjPairs > 0 ? adjDiffs / adjPairs : 0
+
+  // Cells with no same-colour neighbour in any 8-direction. Pre-cleanup
+  // these were "specks"; post-cleanup any survivors are evidence the
+  // cleanup pass couldn't merge them (e.g. neighbour-Δ too high).
+  let isolatedCount = 0
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c
+      const color = grid[idx]
+      let hasMatch = false
+      for (let dr = -1; dr <= 1 && !hasMatch; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr
+          const nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          if (grid[nr * cols + nc] === color) { hasMatch = true; break }
+        }
+      }
+      if (!hasMatch) isolatedCount++
+    }
+  }
+
+  // ─── Palette geometry ─────────────────────────────────────────────
+  // For every active colour, its nearest-neighbour in palette space —
+  // this is the metric I keep wanting when a session shows one colour
+  // taking 2× normal sec/region (palette confusion, not region scarcity).
+  const activeIndices = []
+  for (let i = 0; i < numColors; i++) if (cellsPerColor[i] > 0) activeIndices.push(i)
+  const activePaletteCount = activeIndices.length
+
+  const colorNearestNeighbour = new Array(numColors).fill(null)
+  let minPalettePairDelta = null
+  const pairs = []  // sorted to surface confusables to a reviewer
+  for (let i = 0; i < activeIndices.length; i++) {
+    const ai = activeIndices[i]
+    const a = palette[ai]
+    if (!a) continue
+    let bestD = Infinity
+    let bestJ = -1
+    for (let j = 0; j < activeIndices.length; j++) {
+      if (j === i) continue
+      const bj = activeIndices[j]
+      const b = palette[bj]
+      if (!b) continue
+      const d = _redmeanDistance(a, b)
+      if (j > i) {
+        pairs.push({ a: ai, b: bj, delta: d })
+      }
+      if (d < bestD) {
+        bestD = d
+        bestJ = bj
+      }
+    }
+    if (bestJ !== -1) {
+      colorNearestNeighbour[ai] = { index: bestJ, delta: Math.round(bestD * 100) / 100 }
+      if (minPalettePairDelta == null || bestD < minPalettePairDelta) {
+        minPalettePairDelta = bestD
+      }
+    }
+  }
+  // Top 5 closest active pairs — flags confusable swatches directly.
+  pairs.sort((p, q) => p.delta - q.delta)
+  const closestPalettePairs = pairs.slice(0, 5).map((p) => ({
+    a: p.a,
+    b: p.b,
+    delta: Math.round(p.delta * 100) / 100,
+  }))
 
   return {
     cols,
@@ -1589,51 +1787,26 @@ function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
     totalCells: total,
     cleanupLevelUsed: cleanupLevelUsed | 0,
     regionCount: sizes.length,
-    largestRegionSize: sizes.length ? Math.max(...sizes) : 0,
+    largestRegionSize,
+    largestRegionFraction: total > 0 ? largestRegionSize / total : 0,
     cellsPerColor,
     regionsPerColor,
     regionSizeHistogram: histogram,
+    regionSizeHistogramCells: histogramCells,
     paletteRgb: (palette || []).map((c) => [c[0], c[1], c[2]]),
+    activePaletteCount,
+    meanRegionsPerActiveColor: activePaletteCount > 0 ? sizes.length / activePaletteCount : 0,
+    adjacencyDiffRate,
+    isolatedCount,
+    minPalettePairDelta: minPalettePairDelta != null ? Math.round(minPalettePairDelta * 100) / 100 : null,
+    closestPalettePairs,
+    colorNearestNeighbour,
   }
 }
 
 // Absorb connected regions smaller than `minRegion` (8-direction) into
 // the dominant colour among their external 8-neighbours. Targets the
 // "1-cell hide-and-seek" gameplay pain without touching larger regions.
-function countDiamondRegions(grid, cols, rows) {
-  const total = grid.length
-  const visited = new Uint8Array(total)
-  const stack = []
-  let count = 0
-  for (let start = 0; start < total; start++) {
-    if (visited[start]) continue
-    const color = grid[start]
-    stack.length = 0
-    stack.push(start)
-    visited[start] = 1
-    while (stack.length > 0) {
-      const idx = stack.pop()
-      const r = (idx / cols) | 0
-      const c = idx - r * cols
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue
-          const nr = r + dr
-          const nc = c + dc
-          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
-          const n = nr * cols + nc
-          if (!visited[n] && grid[n] === color) {
-            visited[n] = 1
-            stack.push(n)
-          }
-        }
-      }
-    }
-    count++
-  }
-  return count
-}
-
 export function cleanupTinyRegions(grid, cols, rows, minRegion = CLEANUP_MIN_REGION) {
   const MAX_PASSES = 5
   let current = grid
@@ -1827,6 +2000,107 @@ export function sortPaletteDarkToLight(palette) {
   indices.sort((a, b) => luminances[a] - luminances[b])
   const sorted = indices.map((i) => palette[i])
   for (let i = 0; i < palette.length; i++) palette[i] = sorted[i]
+}
+
+// Two palette positions whose display labels share a silhouette. The
+// canonical confusion case is two two-digit labels with the same tens
+// digit (16/18, 12/13, 27/28) — same overall glyph mass, rounded
+// second-digit shapes that blur together at the 10px in-game render
+// size. Confirmed in 2026-05-18 session review: the c15↔c17 orange
+// pair (labels 16/18) accounted for 4 of 27 wrong fills.
+function _labelsShareSilhouette(i, j) {
+  const a = i + 1
+  const b = j + 1
+  // Both two-digit AND same tens digit.
+  if (a >= 10 && b >= 10 && Math.floor(a / 10) === Math.floor(b / 10)) return true
+  return false
+}
+
+// Perceptual distance (redmean), local copy of admin.js's helper so the
+// puzzle-side de-collide pass uses the same numbers as the admin
+// complexity check / session export.
+function _redmean(a, b) {
+  const rMean = (a[0] + b[0]) / 2
+  const dr = a[0] - b[0]
+  const dg = a[1] - b[1]
+  const db = a[2] - b[2]
+  return Math.sqrt(
+    (2 + rMean / 256) * dr * dr +
+    4 * dg * dg +
+    (2 + (255 - rMean) / 256) * db * db,
+  )
+}
+
+// Permute the palette to break label-silhouette collisions between
+// colour-similar pairs. Called *after* sortPaletteDarkToLight so the
+// starting state is luminance-ordered; greedy swaps only fire when they
+// strictly reduce the collision count, so the result stays mostly in
+// luminance order — only the local rearrangements needed to pull
+// confusable colours into different tens-digit groups happen.
+//
+// `threshold` defines "confusable colour" via redmean perceptual
+// distance. Default 50 catches the real-world c15/c17 orange pair
+// (Δ ≈ 46, confirmed source of 4 of 27 wrong fills in the 2026-05-18
+// session) without sweeping up borderline pairs (Δ 50-70) that humans
+// tell apart fine. Tuned 2026-05-19 against the probe in
+// diamond-label-decollide.spec.js — threshold 70 destroyed luminance
+// order on a 24-swatch test palette, 40 missed the actual orange
+// confusion, 50 catches it while keeping the rearrangement local.
+export function decollideLabelSilhouettes(palette, threshold = 50) {
+  const n = palette.length
+  if (n < 2) return palette
+
+  const countCollisions = () => {
+    let count = 0
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (_labelsShareSilhouette(i, j) && _redmean(palette[i], palette[j]) < threshold) {
+          count++
+        }
+      }
+    }
+    return count
+  }
+
+  let current = countCollisions()
+  if (current === 0) return palette
+
+  // O(n × range) per iteration where range=±5; ~240 ops × 50 iters at
+  // worst. Greedy: accept any swap that strictly reduces the collision
+  // count. Constrain swap distance to ±SWAP_RANGE positions so swaps
+  // stay local — long-range swaps fix collisions but obliterate the
+  // luminance ordering players read as "some semblance of order." Some
+  // tight-cluster collisions may survive the constraint; that's fine
+  // because the threshold is already conservative.
+  const SWAP_RANGE = 5
+  const MAX_ITER = 50
+  for (let iter = 0; iter < MAX_ITER && current > 0; iter++) {
+    let bestSwap = null
+    let bestCount = current
+    for (let i = 0; i < n; i++) {
+      const jMax = Math.min(n, i + SWAP_RANGE + 1)
+      for (let j = i + 1; j < jMax; j++) {
+        const tmp = palette[i]
+        palette[i] = palette[j]
+        palette[j] = tmp
+        const next = countCollisions()
+        // Revert
+        palette[j] = palette[i]
+        palette[i] = tmp
+        if (next < bestCount) {
+          bestCount = next
+          bestSwap = [i, j]
+        }
+      }
+    }
+    if (!bestSwap) break
+    const [i, j] = bestSwap
+    const tmp = palette[i]
+    palette[i] = palette[j]
+    palette[j] = tmp
+    current = bestCount
+  }
+  return palette
 }
 
 function oklabDistSq(a, b) {

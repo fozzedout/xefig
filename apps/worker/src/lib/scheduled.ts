@@ -368,7 +368,9 @@ export async function handleBatchPoll(
     // most BORDER_REGEN_LIMIT regens before we give up and accept the image
     // so the pipeline can't spin forever on a stubborn model.
     const BORDER_REGEN_LIMIT = 2
+    const NO_IMAGE_REGEN_LIMIT = 3
     const failures = job.validationFailures ?? {}
+    const noImageFailures = job.noImageFailures ?? {}
     let saved = 0
     let borderFlagged = 0
     for (const image of result.images) {
@@ -404,10 +406,44 @@ export async function handleBatchPoll(
     }
     job.validationFailures = failures
 
-    if (saved === 0 && borderFlagged === 0) {
+    // Track per-category NO_IMAGE responses (Gemini accepted the prompt
+    // but the model produced no image — finishReason='NO_IMAGE' or a
+    // safety block). These need a freshly-generated prompt and a regen.
+    for (const category of result.noImageCategories) {
+      noImageFailures[category] = (noImageFailures[category] ?? 0) + 1
+      console.warn(
+        `[no-image] ${job.targetDate}/${category} returned no image (attempt ${noImageFailures[category]}/${NO_IMAGE_REGEN_LIMIT})`,
+      )
+    }
+    job.noImageFailures = noImageFailures
+
+    const exhausted = result.noImageCategories.find(
+      (c) => (noImageFailures[c] ?? 0) >= NO_IMAGE_REGEN_LIMIT,
+    )
+    if (exhausted) {
+      // Permanent failure for at least one category — bail out so an
+      // alert fires and the operator can investigate / cancel manually.
+      await deleteBatchJob(env.DB, job.batchName)
       return {
         found: true,
-        message: `Batch for ${job.targetDate} completed but no images found. Job kept for retry.`,
+        message: `Batch for ${job.targetDate} exhausted NO_IMAGE retries for ${exhausted} (${noImageFailures[exhausted]}/${NO_IMAGE_REGEN_LIMIT}).`,
+        batchName: job.batchName,
+        targetDate: job.targetDate,
+        state: 'failed',
+        submittedAt: job.submittedAt,
+        error: `Gemini returned NO_IMAGE for ${exhausted} ${noImageFailures[exhausted]} times in a row.`,
+        rawResponse: result.rawResponse,
+      }
+    }
+
+    // If the batch came back with zero response entries (not just zero
+    // images), that's a transient Gemini issue rather than the model
+    // declining to draw. Keep the job for retry without bumping any
+    // counters, mirroring the pre-fix behaviour.
+    if (!result.hasResponseEntries && saved === 0 && borderFlagged === 0) {
+      return {
+        found: true,
+        message: `Batch for ${job.targetDate} completed but no response entries from Gemini. Job kept for retry.`,
         batchName: job.batchName,
         targetDate: job.targetDate,
         state: 'incomplete',
@@ -417,9 +453,10 @@ export async function handleBatchPoll(
       }
     }
 
-    // Flipping to 'fetched' even when every image was border-flagged is
-    // intentional: processRemainingCategories sees the missing temps and
-    // submits single-category regens with a sharper prompt.
+    // Flipping to 'fetched' even when every image was border-flagged or
+    // NO_IMAGE'd is intentional: processRemainingCategories sees the
+    // missing temps and submits single-category regens with a fresh
+    // prompt (and the border addendum where appropriate).
     job.phase = 'fetched'
     await saveBatchJob(env.DB, job)
 
