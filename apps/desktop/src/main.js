@@ -2,8 +2,12 @@
 // Initialise Steam first (greenworks if available, no-op otherwise) so
 // the overlay hooks into the window before the game's renderer starts;
 // then hand control to the bundled web build.
+//
+// Note on `__dirname`: it is NOT defined in scripts loaded via plain
+// <script src="…"> tags in nw.js. CommonJS module variables only exist
+// inside files that `require()` loaded (e.g. ./steam-bridge.js). For
+// this entry point we use window.location for path resolution instead.
 
-const path = require('path')
 const steam = require('./steam-bridge')
 
 const status = (msg) => {
@@ -43,8 +47,10 @@ async function boot() {
   // Hand off to the bundled web app. We swap the entire document via
   // location rather than embedding in an iframe — same-origin postMessage
   // bridges are noisy and the web app already expects to own the page.
-  const dist = path.join(__dirname, '..', 'dist-runtime', 'index.html')
-  window.location.href = `file://${dist}`
+  // src/index.html is loaded from file://…/apps/desktop/src/; the bundle
+  // lives one level up at apps/desktop/dist-runtime/index.html. Resolve
+  // via the URL constructor so it works without __dirname.
+  window.location.href = new URL('../dist-runtime/index.html', window.location.href).href
 }
 
 window.addEventListener('error', (e) => {
