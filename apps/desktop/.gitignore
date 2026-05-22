@@ -6,6 +6,11 @@ build/
 # greenworks is cloned + built locally per-developer (see README).
 greenworks/
 
+# Offline pack is pulled from xefig.com by scripts/pull-puzzles.mjs.
+# Keep it out of git — it's regenerable, can run to many MB, and ties
+# specific commit history to specific puzzle dates we'd rather not pin.
+offline-pack/
+
 # The Steamworks SDK is NDA-restricted; each developer fetches their
 # own copy and runs `npm run setup-sdk` to extract it here. The README
 # inside stays committed so the directory still exists in fresh clones.

@@ -1,14 +1,16 @@
 // nw.js entry — runs in the Chromium context with Node integration on.
-// Initialise Steam first (greenworks if available, no-op otherwise) so
-// the overlay hooks into the window before the game's renderer starts;
-// then hand control to the bundled web build.
+// Initialise Steam, then spin up a localhost HTTP server backed by the
+// offline pack, then navigate the window to it. We can't load the web
+// build via file:// because service workers refuse to register on that
+// scheme and the bundle wedges on its "Loading..." overlay.
 //
 // Note on `__dirname`: it is NOT defined in scripts loaded via plain
 // <script src="…"> tags in nw.js. CommonJS module variables only exist
-// inside files that `require()` loaded (e.g. ./steam-bridge.js). For
-// this entry point we use window.location for path resolution instead.
+// inside files that `require()` loaded. The helpers below (steam-bridge,
+// server) are require()'d so they can use __dirname normally.
 
 const steam = require('./steam-bridge')
+const server = require('./server')
 
 const status = (msg) => {
   const el = document.getElementById('boot-status')
@@ -40,17 +42,19 @@ async function boot() {
     }
   }
 
+  status('Starting local server...')
+  const { url, port } = await server.start()
+  console.log('[boot] serving offline pack at', url)
+
   // Brief delay so the status line is visible during cold start; remove
   // once the boot screen has an actual loading animation worth seeing.
   await new Promise((r) => setTimeout(r, 250))
 
-  // Hand off to the bundled web app. We swap the entire document via
-  // location rather than embedding in an iframe — same-origin postMessage
-  // bridges are noisy and the web app already expects to own the page.
-  // src/index.html is loaded from file://…/apps/desktop/src/; the bundle
-  // lives one level up at apps/desktop/dist-runtime/index.html. Resolve
-  // via the URL constructor so it works without __dirname.
-  window.location.href = new URL('../dist-runtime/index.html', window.location.href).href
+  status(`Loading game (port ${port})...`)
+  // Hand off to the bundled web app via http://127.0.0.1:<port>/ so the
+  // bundle's relative /api/* fetches and service worker registration
+  // both resolve against a real same-origin server.
+  window.location.href = url
 }
 
 window.addEventListener('error', (e) => {

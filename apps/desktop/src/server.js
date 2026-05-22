@@ -1,0 +1,149 @@
+// Embedded HTTP server for the desktop client.
+//
+// Loading the web bundle via file:// breaks half of what the renderer
+// expects to work — service workers won't register, fetch() to relative
+// /api/* paths resolves to nowhere, and the bundle's "Loading..." screen
+// waits forever. Spinning up a tiny http.createServer on localhost
+// solves all of that in one go: same-origin requests work, SW registers,
+// caches behave normally.
+//
+// Routes (in order of precedence per request):
+//   /api/*        -> offline-pack/api/<rest>.json (snapshot from xefig.com)
+//   /cdn/*        -> offline-pack/cdn/<rest>     (images pulled from R2)
+//   /sw-*.js      -> stubbed empty SW so the bundle's registration call
+//                    doesn't 404 (real SW caching is unnecessary when
+//                    everything's already on localhost)
+//   /*            -> dist-runtime/<rest>          (built web app)
+//   404 fallback  -> dist-runtime/index.html      (SPA-style)
+//
+// Endpoints the snapshot doesn't cover (sync, leaderboard, telemetry,
+// contact form) return 204 No Content so the bundle's "fire-and-forget"
+// calls don't error out and trigger retries.
+
+const http = require('http')
+const fs = require('fs')
+const path = require('path')
+
+const DESKTOP_ROOT = path.join(__dirname, '..')
+const DIST = path.join(DESKTOP_ROOT, 'dist-runtime')
+const PACK = path.join(DESKTOP_ROOT, 'offline-pack')
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+}
+
+// Endpoints the bundle calls that we don't (yet) need to mock with real
+// data. Returning 204 lets the bundle's promises resolve without errors.
+// Order matters — prefix match, first hit wins.
+const NOOP_API_PREFIXES = [
+  '/api/sync/',
+  '/api/leaderboard/',
+  '/api/diamond/session-log',
+  '/api/diamond/test-session-log',
+  '/api/contact',
+]
+
+function mimeFor(filePath) {
+  return MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
+}
+
+function send(res, status, body, contentType) {
+  res.writeHead(status, {
+    'Content-Type': contentType || 'application/octet-stream',
+    'Cache-Control': 'no-store',
+  })
+  res.end(body)
+}
+
+function sendFile(filePath, res) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) return send(res, 404, 'Not Found', 'text/plain')
+    send(res, 200, data, mimeFor(filePath))
+  })
+}
+
+// Strip query string + leading slash so we don't get tripped up by the
+// ?v=cachebust suffix the API attaches to image URLs.
+function cleanPath(urlPath) {
+  return urlPath.split('?')[0].replace(/^\/+/, '')
+}
+
+function safeJoin(root, urlPath) {
+  const clean = cleanPath(urlPath)
+  const target = path.resolve(root, clean)
+  // Prevent ../ traversal out of the served roots.
+  if (!target.startsWith(root)) return null
+  return target
+}
+
+function handleApi(req, res) {
+  // No-op shortcuts for endpoints we deliberately don't snapshot.
+  for (const prefix of NOOP_API_PREFIXES) {
+    if (req.url.startsWith(prefix)) {
+      res.writeHead(204).end()
+      return
+    }
+  }
+
+  // Otherwise look up offline-pack/api/<rest>.json.
+  const apiPath = req.url.slice('/api/'.length)
+  const lookup = safeJoin(path.join(PACK, 'api'), apiPath + '.json')
+  if (lookup && fs.existsSync(lookup)) {
+    return sendFile(lookup, res)
+  }
+  // Special case: /api/puzzles/today falls back to whatever date is
+  // staged as today.json.
+  send(res, 404, JSON.stringify({ error: 'not in offline pack', path: req.url }), MIME['.json'])
+}
+
+function handleCdn(req, res) {
+  const lookup = safeJoin(PACK, req.url)
+  if (lookup && fs.existsSync(lookup)) {
+    return sendFile(lookup, res)
+  }
+  send(res, 404, 'asset not staged', 'text/plain')
+}
+
+function handleStatic(req, res) {
+  const target = safeJoin(DIST, req.url)
+  if (target && fs.existsSync(target) && fs.statSync(target).isFile()) {
+    return sendFile(target, res)
+  }
+  // SPA fallback so deep links land on index.html.
+  sendFile(path.join(DIST, 'index.html'), res)
+}
+
+function start() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      try {
+        if (req.url.startsWith('/api/')) return handleApi(req, res)
+        if (req.url.startsWith('/cdn/')) return handleCdn(req, res)
+        return handleStatic(req, res)
+      } catch (err) {
+        send(res, 500, String(err), 'text/plain')
+      }
+    })
+    server.on('error', (err) => console.error('[server] error', err))
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port
+      resolve({ url: `http://127.0.0.1:${port}/`, port, server })
+    })
+  })
+}
+
+module.exports = { start }
