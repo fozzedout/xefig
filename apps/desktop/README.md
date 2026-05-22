@@ -47,13 +47,36 @@ working C++ toolchain — neither is true for fresh clones.
 
 | OS      | Install command                                                          |
 | ------- | ------------------------------------------------------------------------ |
-| Linux (Fedora) | `sudo dnf install gcc-c++ make python3`                            |
+| Linux (Fedora) | `sudo dnf group install "c-development" && sudo dnf install python3` |
 | Linux (Debian) | `sudo apt install build-essential python3`                         |
 | macOS   | `xcode-select --install`                                                 |
 | Windows | "Desktop development with C++" workload in Visual Studio Build Tools, plus Python 3 from python.org |
 
 `nw-gyp` (the nw.js-flavoured node-gyp) is installed automatically by
 the helper script on first run.
+
+### Python 2 (yes, really)
+
+nw-gyp bundles a 2009-era copy of gyp whose scripts use Python 2
+`print` statements. Every fork on GitHub still pins semver
+`>=2.5.0 <3.0.0` for Python — nobody upstream has done the work to
+port the bundled gyp to Python 3. Fedora and current Debian have both
+dropped Python 2 entirely, so install it locally via `pyenv`:
+
+```sh
+# One-time pyenv install (no sudo)
+curl https://pyenv.run | bash
+# Follow the printed instructions to add pyenv to your shell rc, then:
+exec $SHELL
+pyenv install 2.7.18
+
+# Tell the greenworks installer to use it
+export PYTHON="$(pyenv root)/versions/2.7.18/bin/python2"
+```
+
+You only need this for the greenworks build; the desktop shell itself
+has no Python dependency at runtime. The install script bails with the
+same `pyenv` instructions if it can't find a Python 2 binary.
 
 ### Run the helper
 

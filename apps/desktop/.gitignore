@@ -3,6 +3,9 @@ dist-runtime/
 build/
 *.log
 
+# greenworks is cloned + built locally per-developer (see README).
+greenworks/
+
 # The Steamworks SDK is NDA-restricted; each developer fetches their
 # own copy and runs `npm run setup-sdk` to extract it here. The README
 # inside stays committed so the directory still exists in fresh clones.

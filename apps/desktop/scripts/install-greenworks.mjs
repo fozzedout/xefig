@@ -64,12 +64,38 @@ console.log(`SDK at: ${SDK}`)
 console.log(`nw.js target version: ${NW_VERSION}`)
 
 const which = (bin) => spawnSync('which', [bin]).status === 0
-const missing = ['python3', 'gcc', 'g++', 'make'].filter((b) => !which(b))
+const missing = ['gcc', 'g++', 'make'].filter((b) => !which(b))
 if (missing.length) {
   console.error(`Missing build tools: ${missing.join(', ')}`)
   console.error('Install them via your package manager. See README.md.')
   process.exit(1)
 }
+
+// nw-gyp's bundled gyp (from 2009) genuinely requires Python 2. The
+// project's never been updated to Python 3 — every fork on GitHub still
+// pins semver `>=2.5.0 <3.0.0`. Fedora 44 (and recent Debian/Ubuntu)
+// have dropped Python 2 entirely, so contributors typically install it
+// via pyenv. Look for the explicit binary first, then fall back to
+// `python` (which on legacy systems still means Python 2).
+const PYTHON =
+  process.env.PYTHON ||
+  (which('python2') ? 'python2' : (which('python2.7') ? 'python2.7' : null))
+
+if (!PYTHON) {
+  console.error('Python 2.7 not found on PATH and PYTHON env var not set.')
+  console.error('nw-gyp\'s bundled gyp scripts use Python 2 print statements,')
+  console.error('so Python 3 will not work even with --python.')
+  console.error('')
+  console.error('Recommended install (no sudo, no system pollution):')
+  console.error('  curl https://pyenv.run | bash')
+  console.error('  # follow the printed shell-rc setup, then:')
+  console.error('  pyenv install 2.7.18')
+  console.error('  export PYTHON="$(pyenv root)/versions/2.7.18/bin/python2"')
+  console.error('  npm run desktop:install-greenworks')
+  process.exit(1)
+}
+console.log(`Python 2 binary: ${PYTHON}`)
+
 if (!which('nw-gyp')) {
   console.warn('nw-gyp not on PATH — installing it locally (npx will use it).')
   run('npm install --no-save nw-gyp', { cwd: ROOT })
@@ -94,10 +120,10 @@ console.log(`SDK -> ${SDK_DEST}`)
 step('Install greenworks fork deps')
 run('npm install --no-audit --no-fund --ignore-scripts', { cwd: GW })
 
-step(`Build with nw-gyp (target nw ${NW_VERSION})`)
+step(`Build with nw-gyp (target nw ${NW_VERSION}, python=${PYTHON})`)
 const arch = process.arch
-run(`npx nw-gyp configure --target=${NW_VERSION} --arch=${arch}`, { cwd: GW })
-run(`npx nw-gyp build`, { cwd: GW })
+run(`npx nw-gyp configure --target=${NW_VERSION} --arch=${arch} --python="${PYTHON}"`, { cwd: GW })
+run(`npx nw-gyp build`, { cwd: GW, env: { ...process.env, PYTHON } })
 
 step('Stage Steam redist next to the built addon')
 const builtNode = join(GW, 'build', 'Release')
