@@ -110,9 +110,13 @@ if (existsSync(GW)) {
 }
 
 step('Stage SDK into the fork')
-// Most greenworks forks expect the SDK under deps/steamworks/sdk/.
-// If your fork uses a different path, edit it here.
-const SDK_DEST = join(GW, 'deps', 'steamworks', 'sdk')
+// The canonical greenheartgames fork resolves the SDK via
+// tools/steamworks_sdk_dir.js, which honours STEAMWORKS_SDK_PATH and
+// otherwise looks at deps/steamworks_sdk/ (underscore — not the
+// `deps/steamworks/sdk/` path some readmes claim). Stage the SDK there
+// and the binding.gyp include_dirs entry `<(steamworks_sdk_dir)/public`
+// resolves cleanly. Other forks may need editing here.
+const SDK_DEST = join(GW, 'deps', 'steamworks_sdk')
 if (existsSync(SDK_DEST)) rmSync(SDK_DEST, { recursive: true, force: true })
 cpSync(SDK, SDK_DEST, { recursive: true })
 console.log(`SDK -> ${SDK_DEST}`)
@@ -122,8 +126,11 @@ run('npm install --no-audit --no-fund --ignore-scripts', { cwd: GW })
 
 step(`Build with nw-gyp (target nw ${NW_VERSION}, python=${PYTHON})`)
 const arch = process.arch
+// --target has to be passed to BOTH configure and build — nw-gyp's build
+// step rereads it to populate release.version (otherwise the semver.gt
+// check at lib/build.js:64 explodes on Invalid Version: undefined).
 run(`npx nw-gyp configure --target=${NW_VERSION} --arch=${arch} --python="${PYTHON}"`, { cwd: GW })
-run(`npx nw-gyp build`, { cwd: GW, env: { ...process.env, PYTHON } })
+run(`npx nw-gyp build --target=${NW_VERSION}`, { cwd: GW, env: { ...process.env, PYTHON } })
 
 step('Stage Steam redist next to the built addon')
 const builtNode = join(GW, 'build', 'Release')
