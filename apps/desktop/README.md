@@ -20,23 +20,109 @@ cloud saves, etc.
 ```sh
 # 1. Install workspace deps (downloads nw.js prebuilt for your OS)
 npm install
+# Heads-up: nw 0.83.x's postinstall doesn't follow the dl.nwjs.io 302.
+# If `node_modules/nw/nwjs/` is missing after install, grab the tarball
+# manually with `curl -L https://dl.nwjs.io/v0.83.0/nwjs-v0.83.0-<plat>-<arch>.<ext>`
+# into `node_modules/nw/`, then run `node node_modules/nw/lib/install.js`.
 
 # 2. Extract your Steamworks SDK (NDA — do not commit)
 npm run desktop:setup-sdk
-# By default this reads the newest steamworks_sdk_*.zip in ~/Downloads.
+# Defaults to the newest steamworks_sdk_*.zip in ~/Downloads.
 # Override with: npm --prefix apps/desktop run setup-sdk -- /path/to/sdk.zip
 
-# 3. (Optional, recommended) Install greenworks built against the SDK.
-#    Greenworks is kept out of package.json because it needs a native
-#    build with platform-specific toolchains:
-#      - Windows:  Visual Studio Build Tools + Python 3
-#      - macOS:    Xcode CLT
-#      - Linux:    build-essential
-#    Build steps live in greenworks' own README and depend on the
-#    upstream fork you pick. See "Choosing a greenworks fork" below.
+# 3. (Optional, recommended) Install greenworks against the SDK.
+#    See "Greenworks install" below.
 ```
 
-The shell launches fine without greenworks — Steam features just no-op.
+The shell launches fine without greenworks — Steam features just no-op
+(`steam-bridge` returns `{ ok: false, degraded: true }`).
+
+## Greenworks install
+
+Greenworks is a Steam SDK binding built as a native Node addon. It's
+out of `package.json` because the build needs the SDK on disk plus a
+working C++ toolchain — neither is true for fresh clones.
+
+### Prereqs (one-time per machine)
+
+| OS      | Install command                                                          |
+| ------- | ------------------------------------------------------------------------ |
+| Linux (Fedora) | `sudo dnf install gcc-c++ make python3`                            |
+| Linux (Debian) | `sudo apt install build-essential python3`                         |
+| macOS   | `xcode-select --install`                                                 |
+| Windows | "Desktop development with C++" workload in Visual Studio Build Tools, plus Python 3 from python.org |
+
+`nw-gyp` (the nw.js-flavoured node-gyp) is installed automatically by
+the helper script on first run.
+
+### Run the helper
+
+From the repo root:
+
+```sh
+npm run desktop:install-greenworks
+```
+
+That walks through:
+
+1. Verifies the SDK and toolchain are present.
+2. Clones a greenworks fork into `apps/desktop/greenworks/` (default:
+   `greenheartgames/greenworks`; pass `--fork <url>` and `--branch`
+   to point at a community fork that's been updated for SDK 1.6x).
+3. Copies the unzipped SDK into the fork's `deps/steamworks/sdk/`.
+4. Runs `nw-gyp configure && nw-gyp build` against the nw.js version
+   pinned in `apps/desktop/package.json`.
+5. Copies the per-platform shared library (`libsteam_api.so` /
+   `steam_api64.dll` / `libsteam_api.dylib`) next to the built `.node`.
+
+After it finishes, symlink the build into `node_modules` so the
+bridge's `require('greenworks')` resolves:
+
+```sh
+cd apps/desktop
+ln -s ../greenworks node_modules/greenworks   # or `mklink /D` on Windows
+```
+
+Then re-run `npm run desktop:dev`. The boot status should flip from
+"Running without Steam (SDK not installed)" to "Steam ready".
+
+### When the canonical fork won't compile
+
+The upstream `greenheartgames/greenworks` repo lags the Steamworks SDK
+by a year or two. If the build fails on missing 1.6x headers, point
+the helper at a fresher fork:
+
+```sh
+npm run desktop:install-greenworks -- --fork https://github.com/<user>/greenworks.git --branch <branch>
+```
+
+Picking a fork is a moving target — verify the fork's binding.gyp
+references match the SDK version under `vendor/steamworks-sdk/sdk/`.
+Promising signals: recent commits touching `binding.gyp`,
+`deps/steamworks/sdk/public/steam/*.h`, and `steam_api_flat.h`.
+
+### What can go wrong
+
+* **`Cannot find module 'nan'`** — fork's `npm install` was skipped or
+  failed. `cd apps/desktop/greenworks && npm install --ignore-scripts`
+  manually.
+* **`fatal error: steam/steam_api.h: No such file or directory`** —
+  fork expects the SDK at a different path. Inspect its `binding.gyp`
+  for the `include_dirs` entry and re-stage the SDK to match.
+* **`undefined symbol: SteamAPI_Init`** at runtime — the redist
+  shared lib isn't sitting next to the built `.node` addon. Copy it
+  manually from `vendor/steamworks-sdk/sdk/redistributable_bin/`.
+* **`Steam_Init returned false`** — almost always a mismatch between
+  `steam_appid.txt` and what the running Steam client expects, or the
+  Steam client isn't running.
+
+### Why no Steam in CI
+
+The Steamworks SDK is NDA-restricted, so it can't live in CI. The
+shell's `steam-bridge` degrades cleanly when greenworks is missing, so
+CI builds the app and runs Playwright against the web bundle without
+touching Steam at all. Real Steam smoke-tests happen on
+contributor laptops or in a self-hosted runner with the SDK mounted.
 
 ## Daily devloop
 
@@ -63,20 +149,6 @@ init runs first; the result is logged to the DevTools console.
 - The renderer can re-require `./steam-bridge` later for in-game calls
   (unlocking achievements, opening the overlay, etc.). All entry points
   should tolerate a degraded bridge so non-Steam builds still work.
-
-## Choosing a greenworks fork
-
-The original `greenheartgames/greenworks` repo is unmaintained. The
-forks worth evaluating, in rough order of recency:
-
-- `ChromeProfileService/greenworks` — recent SDK 1.5x bumps
-- `greenworks-prebuilds` on npm — drops the rebuild step but lags the
-  latest SDK
-- A fresh fork of upstream with a `binding.gyp` updated for SDK 1.64
-
-For initial integration with SpaceWar (480), any of them work. Pick the
-one whose binding matches the SDK version under
-`vendor/steamworks-sdk/sdk/`.
 
 ## Pointers for later
 

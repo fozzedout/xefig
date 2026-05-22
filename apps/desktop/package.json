@@ -19,6 +19,7 @@
   "scripts": {
     "build:web": "npm --prefix ../web run build && node scripts/copy-web-dist.mjs",
     "setup-sdk": "node scripts/setup-sdk.mjs",
+    "install-greenworks": "node scripts/install-greenworks.mjs",
     "dev": "npm run build:web && nw .",
     "start": "nw ."
   },

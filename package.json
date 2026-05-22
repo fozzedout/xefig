@@ -16,7 +16,8 @@
     "web:build": "npm --prefix apps/web run build",
     "desktop:dev": "npm --prefix apps/desktop run dev",
     "desktop:start": "npm --prefix apps/desktop run start",
-    "desktop:setup-sdk": "npm --prefix apps/desktop run setup-sdk"
+    "desktop:setup-sdk": "npm --prefix apps/desktop run setup-sdk",
+    "desktop:install-greenworks": "npm --prefix apps/desktop run install-greenworks"
   },
   "dependencies": {
     "@jsquash/webp": "^1.5.0",
