@@ -163,9 +163,17 @@ init runs first; the result is logged to the DevTools console.
 
 ## How Steam init works
 
-- `steam_appid.txt` next to this README holds the App ID (`480` for
-  dev). Steam reads it directly when a non-launched-by-Steam process
-  calls `SteamAPI_Init`.
+- `src/steam-bridge.js` resolves the App ID in this order on every
+  launch:
+    1. `$STEAM_APP_ID` env var
+    2. `steam_appid.local.txt` next to this README (gitignored — drop
+       your real ID here while the listing is pre-announcement)
+    3. fallback `480` (Valve's SpaceWar — works against any account
+       that has the SDK)
+  It then writes the resolved ID to `steam_appid.txt` because that's
+  the file Steam itself reads at `SteamAPI_Init` time. The runtime
+  `steam_appid.txt` is also gitignored — it's regenerated every boot,
+  so neither file should ever land in git.
 - `src/steam-bridge.js` requires `greenworks` inside a `try/catch`.
   Missing → returns `{ ok: false, degraded: true }` and logs a warning.
   Present → calls `greenworks.initAPI()` and surfaces success/failure.
@@ -183,7 +191,9 @@ init runs first; the result is logged to the DevTools console.
 - **Packaging** — `nw-builder` is the standard way to produce Win/Mac/
   Linux distributables from a single dev machine. Don't introduce it
   until the offline asset story is settled.
-- **Real App ID** — once provisioned, edit `steam_appid.txt`. Do NOT
-  commit the real ID until you've decided whether the repo is public.
+- **Real App ID** — drop it into `apps/desktop/steam_appid.local.txt`
+  (gitignored) so the bridge picks it up at launch. The committed
+  pieces stay neutral so the repo doesn't telegraph the ID before the
+  Steam listing is announced.
 - **Achievements / Cloud / DLC** — drop calls into `steam-bridge.js`
   with a default-false guard so they only fire on a real init.

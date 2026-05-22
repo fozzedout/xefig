@@ -6,6 +6,13 @@ build/
 # greenworks is cloned + built locally per-developer (see README).
 greenworks/
 
+# Real Steam App ID lives in steam_appid.local.txt for pre-announcement
+# builds; src/steam-bridge.js reads it (or $STEAM_APP_ID) and writes
+# the resolved value to steam_appid.txt at launch. The runtime file is
+# (re)generated every boot, so neither should ever land in git.
+steam_appid.local.txt
+steam_appid.txt
+
 # Offline pack is pulled from xefig.com by scripts/pull-puzzles.mjs.
 # Keep it out of git — it's regenerable, can run to many MB, and ties
 # specific commit history to specific puzzle dates we'd rather not pin.

@@ -5,23 +5,47 @@
 // the workspace's normal `npm install`. If it isn't present we degrade
 // to a no-op so devs without the SDK can still launch the shell.
 //
-// The Steam App ID is read from steam_appid.txt (Steam's own convention
-// for sideloaded development builds) and defaults to 480 (SpaceWar) so
-// the integration works against any Steamworks account before a real
-// app ID is provisioned.
+// The Steam App ID is resolved in this order:
+//   1. $STEAM_APP_ID env var (CI / one-off override)
+//   2. apps/desktop/steam_appid.local.txt (gitignored — the real ID
+//      while the listing is pre-announcement)
+//   3. apps/desktop/steam_appid.txt        (committed placeholder, 480)
+// 480 is Valve's public SpaceWar app — it works against any Steamworks
+// account, so contributors without the real ID can still test the init
+// flow. steam_appid.txt is also what Steam itself reads when it loads
+// a sideloaded build, so the file has to exist on disk regardless.
 
 const fs = require('fs')
 const path = require('path')
 
 const APP_ID_FILE = path.join(__dirname, '..', 'steam_appid.txt')
+const APP_ID_LOCAL_FILE = path.join(__dirname, '..', 'steam_appid.local.txt')
 const FALLBACK_APP_ID = '480' // SpaceWar — Valve's public placeholder
 
 function readAppId() {
+  if (process.env.STEAM_APP_ID && process.env.STEAM_APP_ID.trim()) {
+    return process.env.STEAM_APP_ID.trim()
+  }
+  for (const file of [APP_ID_LOCAL_FILE, APP_ID_FILE]) {
+    try {
+      const raw = fs.readFileSync(file, 'utf8').trim()
+      if (raw) return raw
+    } catch {
+      // file missing — try the next one.
+    }
+  }
+  return FALLBACK_APP_ID
+}
+
+// Steam itself only ever looks at steam_appid.txt at the moment
+// SteamAPI_Init() runs, so we just (re)write it on every launch from
+// whatever the resolution order picked. The file is gitignored — it's
+// runtime state, not committed config.
+function writeAppIdFile(appId) {
   try {
-    const raw = fs.readFileSync(APP_ID_FILE, 'utf8').trim()
-    return raw || FALLBACK_APP_ID
-  } catch {
-    return FALLBACK_APP_ID
+    fs.writeFileSync(APP_ID_FILE, `${appId}\n`)
+  } catch (err) {
+    console.warn('[steam] could not write steam_appid.txt', err.message)
   }
 }
 
@@ -38,6 +62,7 @@ function tryRequireGreenworks() {
 
 function init() {
   const appId = readAppId()
+  writeAppIdFile(appId)
   const greenworks = tryRequireGreenworks()
 
   if (!greenworks) {
