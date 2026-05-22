@@ -130,6 +130,14 @@ function handleStatic(req, res) {
 function start() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
+      // Log every request through nw.js's stderr so we can grep
+      // launch logs for "request not in pack" symptoms without
+      // attaching a debugger.
+      const origWrite = res.writeHead.bind(res)
+      res.writeHead = (status, ...rest) => {
+        process.stderr.write(`[server] ${status} ${req.method} ${req.url}\n`)
+        return origWrite(status, ...rest)
+      }
       try {
         if (req.url.startsWith('/api/')) return handleApi(req, res)
         if (req.url.startsWith('/cdn/')) return handleCdn(req, res)

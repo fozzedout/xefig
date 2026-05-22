@@ -14,6 +14,8 @@
     "resizable": true,
     "icon": "src/icon.png"
   },
+  "//inject_js_end": "Runs in every loaded page after DOM ready. The shim eagerly swaps the launcher's <img src=thumb> to data-full-url, because in the desktop offline build the full image is always already on disk and there's no bandwidth reason to be lazy about it.",
+  "inject_js_end": "src/inject-end.js",
   "chromium-args": "--enable-features=SharedArrayBuffer",
   "node-remote": "<all_urls>",
   "scripts": {
