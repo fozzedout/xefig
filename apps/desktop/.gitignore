@@ -3,6 +3,11 @@ dist-runtime/
 build/
 *.log
 
+# Diamond paint session telemetry — captured during demo timing runs
+# so analyse-paint.mjs can correlate per-image solve behaviour. Local
+# data only.
+session-logs/
+
 # greenworks is cloned + built locally per-developer (see README).
 greenworks/
 

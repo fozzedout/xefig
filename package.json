@@ -19,7 +19,8 @@
     "desktop:setup-sdk": "npm --prefix apps/desktop run setup-sdk",
     "desktop:install-greenworks": "npm --prefix apps/desktop run install-greenworks",
     "desktop:pull-puzzles": "npm --prefix apps/desktop run pull-puzzles --",
-    "desktop:test-demo": "npm --prefix apps/desktop run test:demo --"
+    "desktop:test-demo": "npm --prefix apps/desktop run test:demo --",
+    "desktop:analyse-paint": "npm --prefix apps/desktop run analyse:paint --"
   },
   "dependencies": {
     "@jsquash/webp": "^1.5.0",

@@ -52,10 +52,15 @@ const MIME = {
 const NOOP_API_PREFIXES = [
   '/api/sync/',
   '/api/leaderboard/',
-  '/api/diamond/session-log',
-  '/api/diamond/test-session-log',
   '/api/contact',
 ]
+
+// Diamond paint logs are too useful to drop on the floor during the
+// demo timing run — they're the only data we have on per-image solve
+// behaviour. Stash each POST in apps/desktop/session-logs/ so
+// scripts/analyse-paint.mjs can correlate them against the puzzle
+// they were played from.
+const SESSION_LOG_DIR = path.join(__dirname, '..', 'session-logs')
 
 function mimeFor(filePath) {
   return MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
@@ -90,7 +95,33 @@ function safeJoin(root, urlPath) {
   return target
 }
 
+function captureDiamondLog(req, res) {
+  const chunks = []
+  req.on('data', (c) => chunks.push(c))
+  req.on('end', () => {
+    try {
+      const body = Buffer.concat(chunks).toString('utf8')
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const isTest = req.url.includes('/test-session-log') ? '-test' : ''
+      const out = path.join(SESSION_LOG_DIR, `${ts}${isTest}.json`)
+      fs.mkdirSync(SESSION_LOG_DIR, { recursive: true })
+      fs.writeFileSync(out, body)
+      process.stderr.write(`[server] saved diamond log -> ${out}\n`)
+    } catch (err) {
+      process.stderr.write(`[server] diamond log save failed: ${err.message}\n`)
+    }
+    res.writeHead(204).end()
+  })
+}
+
 function handleApi(req, res) {
+  // Capture diamond paint telemetry to local files for the demo
+  // timing analysis. Same 204 behaviour the bundle expects; the body
+  // just lands on disk instead of disappearing.
+  if (req.method === 'POST' && (req.url.startsWith('/api/diamond/session-log') || req.url.startsWith('/api/diamond/test-session-log'))) {
+    return captureDiamondLog(req, res)
+  }
+
   // No-op shortcuts for endpoints we deliberately don't snapshot.
   for (const prefix of NOOP_API_PREFIXES) {
     if (req.url.startsWith(prefix)) {
@@ -181,9 +212,22 @@ function start() {
       }
     })
     server.on('error', (err) => console.error('[server] error', err))
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port
-      resolve({ url: `http://127.0.0.1:${port}/`, port, server })
+    // Pin to a fixed port so localStorage persists across nw restarts.
+    // localStorage is scoped per origin (scheme://host:port) — a random
+    // port means each launch is a different origin and previous play
+    // sessions vanish. PORT env var overrides; falls back to a random
+    // port if the fixed one is busy (rare in practice).
+    const preferred = Number(process.env.PORT) || 7321
+    server.listen(preferred, '127.0.0.1', (err) => {
+      if (err) {
+        server.listen(0, '127.0.0.1', () => {
+          const port = server.address().port
+          resolve({ url: `http://127.0.0.1:${port}/`, port, server })
+        })
+      } else {
+        const port = server.address().port
+        resolve({ url: `http://127.0.0.1:${port}/`, port, server })
+      }
     })
   })
 }
