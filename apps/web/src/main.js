@@ -98,7 +98,12 @@ function demoOverrideArgs(modeSlug, raw) {
   if (modeSlug === 'jigsaw' && raw.cols && raw.rows) return { gridOverride: { cols: raw.cols, rows: raw.rows } }
   if ((modeSlug === 'sliding' || modeSlug === 'slider' || modeSlug === 'swap') && raw.cols && raw.rows) return { gridOverride: { cols: raw.cols, rows: raw.rows } }
   if (modeSlug === 'polygram' && Number.isFinite(raw.shards)) return { shardOverride: raw.shards }
-  if (modeSlug === 'diamond' && Number.isFinite(raw.targetCells)) return { targetCellsOverride: raw.targetCells }
+  if (modeSlug === 'diamond') {
+    const out = {}
+    if (Number.isFinite(raw.targetCells)) out.targetCellsOverride = raw.targetCells
+    if (Number.isFinite(raw.paletteSize)) out.paletteSizeOverride = raw.paletteSize
+    if (Object.keys(out).length > 0) return out
+  }
   return {}
 }
 

@@ -15,7 +15,7 @@ const MAX_CANVAS_DIMENSION = 4096
 const MAX_CANVAS_PIXELS = 4096 * 4096
 
 export class DiamondPaintingPuzzle {
-  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', targetCellsOverride, onComplete, onProgress, onLoadProgress, muted = false }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', targetCellsOverride, paletteSizeOverride, onComplete, onProgress, onLoadProgress, muted = false }) {
     if (!container) {
       throw new Error('DiamondPaintingPuzzle requires a container element.')
     }
@@ -29,6 +29,13 @@ export class DiamondPaintingPuzzle {
     // range so the canvas doesn't try to allocate a million cells.
     this.targetCellsOverride = Number.isFinite(targetCellsOverride) && targetCellsOverride > 0
       ? Math.max(500, Math.min(30000, Math.round(targetCellsOverride)))
+      : null
+    // Explicit palette-size override for demo tiers. Smaller palettes
+    // consolidate cells into bigger regions AND cut colour-switches —
+    // both speed up paint without changing image fidelity much. Clamped
+    // to >= 4 so the algorithm has something to work with.
+    this.paletteSizeOverride = Number.isFinite(paletteSizeOverride) && paletteSizeOverride > 0
+      ? Math.max(4, Math.min(32, Math.round(paletteSizeOverride)))
       : null
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -127,7 +134,7 @@ export class DiamondPaintingPuzzle {
 
     const cellSamples = sampleCellRegions(this.image, this.cols, this.rows, CELL_SAMPLE_GRID)
     const palettePixels = samplePixelsForPalette(this.image, 20000)
-    this.palette = createDistinctPalette(palettePixels, NUM_COLORS)
+    this.palette = createDistinctPalette(palettePixels, this.paletteSizeOverride ?? NUM_COLORS)
     sortPaletteDarkToLight(this.palette)
     // Re-order to break label-silhouette collisions before cells get
     // assigned. Run *after* the luminance sort so the starting state is
