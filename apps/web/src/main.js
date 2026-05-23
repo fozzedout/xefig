@@ -2386,6 +2386,29 @@ function renderLauncher() {
       upgradeSliceImagesToFull(container)
 
       if (demo?.area && demo.modeSlug) {
+        // Demo timing flow always starts fresh — wipe any persisted
+        // save + completion record for this date/mode pair so the
+        // bundle doesn't drop the player on a "you've already
+        // finished this, want to replay?" screen. Production users
+        // never hit this path (no __xefigDemo means no wipe).
+        try {
+          const date = demo.area.puzzleDate
+          const mode = demo.modeSlug
+          localStorage.removeItem(`xefig:run:${date}:${mode}`)
+          const completedRaw = localStorage.getItem('xefig:puzzles:completed:v1')
+          if (completedRaw) {
+            const completed = JSON.parse(completedRaw) || {}
+            if (completed[date]?.[mode]) {
+              delete completed[date][mode]
+              if (Object.keys(completed[date]).length === 0) delete completed[date]
+              localStorage.setItem('xefig:puzzles:completed:v1', JSON.stringify(completed))
+            }
+          }
+        } catch {
+          // localStorage failures are non-fatal; click will fall
+          // through to the completion screen and the player can hit
+          // Replay manually.
+        }
         // Defer to the next tick so bindSliceEvents has wired up its
         // listeners before we dispatch the synthetic click. The
         // __xefigDemo wipe happens at the puzzleConfig assembly site
