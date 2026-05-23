@@ -44,6 +44,11 @@ export class JigsawPuzzle {
     this.gridOverride = gridOverride && Number.isFinite(gridOverride.cols) && Number.isFinite(gridOverride.rows)
       ? { cols: Math.max(2, gridOverride.cols | 0), rows: Math.max(2, gridOverride.rows | 0) }
       : null
+    // Caller-supplied snapDistance is treated as a *floor* — the
+    // effective snap radius gets recomputed in setupLayout based on
+    // piece size, so tutorials with big 6x4 pieces feel forgiving and
+    // hard 10x10 grids still demand precision.
+    this.snapDistanceFloor = snapDistance
     this.snapDistance = snapDistance
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -236,6 +241,16 @@ export class JigsawPuzzle {
     this.pieceHeight = this.boardHeight / this.rows
     this.knobSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.28
     this.bleed = Math.ceil(this.knobSize * 1.2)
+
+    // Snap tolerance scales with piece size — the constructor default
+    // is a floor (10px) for very small pieces, but larger pieces (e.g.
+    // 6×4 tutorial grids) need a wider catch zone or they read as
+    // "the piece is sitting in place but won't snap". 18% of the
+    // shorter dimension is roughly the size of the inner knob, which
+    // is the visual cue players use to judge fit. Recomputed on every
+    // setupLayout so resize doesn't lock in a stale value.
+    const baseSnap = Math.min(this.pieceWidth, this.pieceHeight) * 0.18
+    this.snapDistance = Math.max(this.snapDistanceFloor, baseSnap)
     this.pieceCanvasWidth = Math.ceil(this.pieceWidth + this.bleed * 2)
     this.pieceCanvasHeight = Math.ceil(this.pieceHeight + this.bleed * 2)
 

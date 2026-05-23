@@ -23,6 +23,7 @@
     "setup-sdk": "node scripts/setup-sdk.mjs",
     "install-greenworks": "node scripts/install-greenworks.mjs",
     "pull-puzzles": "node scripts/pull-puzzles.mjs",
+    "test:demo": "node scripts/test-demo.mjs",
     "dev": "npm run build:web && nw .",
     "start": "nw ."
   },

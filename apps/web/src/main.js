@@ -51,7 +51,13 @@ const puzzleLoaders = {
 // today, auto-clicks the requested mode after render, and the puzzle's
 // constructor receives the per-mode override (gridOverride /
 // shardOverride / targetCellsOverride) from demo-config.json.
-const __xefigDemo = (() => {
+//
+// `let` because we wipe it after the first auto-click — the demo
+// harness is one-shot per launch, and a persistent global would let
+// later launcher re-renders (e.g. after dismissing the completion
+// overlay) re-trigger the auto-click in a loop. Press the demo harness
+// button again to choose a different puzzle.
+let __xefigDemo = (() => {
   if (typeof window === 'undefined') return null
   const params = new URLSearchParams(window.location.search)
   const slug = params.get('demo')
@@ -2369,11 +2375,34 @@ function renderLauncher() {
 
       if (demo?.area && demo.modeSlug) {
         // Defer to the next tick so bindSliceEvents has wired up its
-        // listeners before we dispatch the synthetic click.
+        // listeners before we dispatch the synthetic click. The
+        // __xefigDemo wipe happens at the puzzleConfig assembly site
+        // (inside renderGame's async flow) — clearing here would race
+        // the override application, because slice.click() returns
+        // synchronously while the puzzle constructor runs after an
+        // await on the dynamic import.
         requestAnimationFrame(() => {
           const slice = container.querySelector(`.slice[data-mode="${demo.modeSlug}"]`)
-          if (slice) slice.click()
-          else console.warn('[demo] no slice for mode', demo.modeSlug)
+          if (!slice) {
+            console.warn('[demo] no slice for mode', demo.modeSlug)
+          } else {
+            // The launcher's click handler is two-stage: a click on an
+            // inactive slice expands it; a click on an *active* slice
+            // launches the game. Always click twice from the demo path
+            // so we land on "launch" regardless of which slice happens
+            // to be the initial active one.
+            if (!slice.classList.contains('active')) slice.click()
+            slice.click()
+          }
+          // Strip the URL param so a refresh doesn't re-launch via
+          // the demo path. The in-memory wipe is downstream.
+          try {
+            const url = new URL(window.location.href)
+            url.searchParams.delete('demo')
+            window.history.replaceState(window.history.state, '', url.toString())
+          } catch {
+            // history API unavailable — non-fatal, just leaves the URL.
+          }
         })
       }
 
@@ -6589,7 +6618,13 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
               : gameMode === GAME_MODE_DIAMOND ? 'diamond'
                 : 'jigsaw'
         const PuzzleClass = await puzzleLoaders[loaderKey]()
+        // Read + consume the demo override in one breath — we want the
+        // launch to apply the right grid/shard/cells, AND we want
+        // subsequent puzzle launches (after a back-from-completion or
+        // a restart from the menu) to behave normally without the
+        // override re-firing.
         const demoOverrides = __xefigDemo && __xefigDemo.modeSlug === loaderKey ? demoOverrideArgs(loaderKey, __xefigDemo.overrides) : {}
+        if (Object.keys(demoOverrides).length > 0) __xefigDemo = null
         const puzzleConfig = {
           container: mount,
           imageUrl: state.imageUrl,

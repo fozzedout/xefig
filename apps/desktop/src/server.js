@@ -105,8 +105,16 @@ function handleApi(req, res) {
   if (lookup && fs.existsSync(lookup)) {
     return sendFile(lookup, res)
   }
-  // Special case: /api/puzzles/today falls back to whatever date is
-  // staged as today.json.
+  // Fall back to today.json for any unknown /api/puzzles/<date>.
+  // The bundle fetches the actual calendar date (e.g. /api/puzzles/2026-05-23)
+  // and our pack only holds the dates we've pulled — so on any new day
+  // the request would 404 and the launcher would wedge on "Failed to
+  // load today's puzzles". The today.json alias was put there by
+  // pull-puzzles.mjs precisely for this; route to it now.
+  if (req.url.startsWith('/api/puzzles/')) {
+    const todayAlias = path.join(PACK, 'api', 'puzzles', 'today.json')
+    if (fs.existsSync(todayAlias)) return sendFile(todayAlias, res)
+  }
   send(res, 404, JSON.stringify({ error: 'not in offline pack', path: req.url }), MIME['.json'])
 }
 
