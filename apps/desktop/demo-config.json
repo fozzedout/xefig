@@ -1,16 +1,18 @@
 {
   "//": "Demo content + difficulty definitions for the Steam Next Fest build. Read by the desktop shell to drive area progression, puzzle list, and per-puzzle difficulty overrides. Placeholder images use the existing daily-puzzle dates from production; once themed artwork is ready, swap puzzleDate for the new dates (or change the resolver to read from a different path entirely).",
+  "//curve": "Four-tier difficulty: Classroom -> School -> Outside -> Online (production daily). Each demo tier is ~1.5x the previous in piece count; the online daily is the implicit fourth tier (~100% of production) that demo owners graduate into via the lighthouse landmark on the world map. Sizes here are 25% / 50% / 75% of production hard, leaving the daily as the real challenge.",
+  "//status": "Classroom diamond locked at 4000c/16p after timing (8:59 actual). Other classroom sizes locked from user-pace timing. School + Outside values are predicted from the 1.5x curve and PENDING TIMING verification with the eventual specialist artwork; expect to tweak after the next two rounds of timing data.",
   "areas": [
     {
       "id": "classroom",
       "title": "Classroom",
       "subtitle": "Easy",
       "puzzleDate": "2026-03-17",
-      "estimatedMinutes": 30,
+      "estimatedMinutes": 18,
       "difficulties": {
-        "jigsaw":   { "cols": 6,  "rows": 4 },
-        "sliding": { "cols": 4,  "rows": 3 },
-        "swap":     { "cols": 4,  "rows": 3 },
+        "jigsaw":   { "cols": 6, "rows": 4 },
+        "sliding":  { "cols": 4, "rows": 3 },
+        "swap":     { "cols": 4, "rows": 3 },
         "polygram": { "shards": 24 },
         "diamond":  { "targetCells": 4000, "paletteSize": 16 }
       }
@@ -20,13 +22,13 @@
       "title": "School",
       "subtitle": "Medium",
       "puzzleDate": "2026-03-18",
-      "estimatedMinutes": 60,
+      "estimatedMinutes": 25,
       "difficulties": {
-        "jigsaw":   { "cols": 8,  "rows": 7 },
-        "sliding":  { "cols": 7,  "rows": 4 },
-        "swap":     { "cols": 7,  "rows": 4 },
-        "polygram": { "shards": 48 },
-        "diamond":  { "targetCells": 10000 }
+        "jigsaw":   { "cols": 6, "rows": 6 },
+        "sliding":  { "cols": 5, "rows": 4 },
+        "swap":     { "cols": 5, "rows": 4 },
+        "polygram": { "shards": 36 },
+        "diamond":  { "targetCells": 6000, "paletteSize": 18 }
       }
     },
     {
@@ -34,13 +36,13 @@
       "title": "Outside",
       "subtitle": "Hard",
       "puzzleDate": "2026-03-19",
-      "estimatedMinutes": 110,
+      "estimatedMinutes": 39,
       "difficulties": {
-        "jigsaw":   { "cols": 10, "rows": 10 },
-        "sliding":  { "cols": 10, "rows": 5 },
-        "swap":     { "cols": 10, "rows": 5 },
-        "polygram": { "shards": 80 },
-        "diamond":  { "targetCells": 15000 }
+        "jigsaw":   { "cols": 8, "rows": 7 },
+        "sliding":  { "cols": 6, "rows": 5 },
+        "swap":     { "cols": 6, "rows": 5 },
+        "polygram": { "shards": 56 },
+        "diamond":  { "targetCells": 9000, "paletteSize": 20 }
       }
     }
   ]
