@@ -1,0 +1,47 @@
+{
+  "//": "Demo content + difficulty definitions for the Steam Next Fest build. Read by the desktop shell to drive area progression, puzzle list, and per-puzzle difficulty overrides. Placeholder images use the existing daily-puzzle dates from production; once themed artwork is ready, swap puzzleDate for the new dates (or change the resolver to read from a different path entirely).",
+  "areas": [
+    {
+      "id": "classroom",
+      "title": "Classroom",
+      "subtitle": "Easy",
+      "puzzleDate": "2026-03-17",
+      "estimatedMinutes": 30,
+      "difficulties": {
+        "jigsaw":   { "cols": 6,  "rows": 4 },
+        "slider":   { "cols": 4,  "rows": 3 },
+        "swap":     { "cols": 4,  "rows": 3 },
+        "polygram": { "shards": 24 },
+        "diamond":  { "targetCells": 5000 }
+      }
+    },
+    {
+      "id": "school",
+      "title": "School",
+      "subtitle": "Medium",
+      "puzzleDate": "2026-03-18",
+      "estimatedMinutes": 60,
+      "difficulties": {
+        "jigsaw":   { "cols": 8,  "rows": 7 },
+        "slider":   { "cols": 7,  "rows": 4 },
+        "swap":     { "cols": 7,  "rows": 4 },
+        "polygram": { "shards": 48 },
+        "diamond":  { "targetCells": 10000 }
+      }
+    },
+    {
+      "id": "outside",
+      "title": "Outside",
+      "subtitle": "Hard",
+      "puzzleDate": "2026-03-19",
+      "estimatedMinutes": 110,
+      "difficulties": {
+        "jigsaw":   { "cols": 10, "rows": 10 },
+        "slider":   { "cols": 10, "rows": 5 },
+        "swap":     { "cols": 10, "rows": 5 },
+        "polygram": { "shards": 80 },
+        "diamond":  { "targetCells": 15000 }
+      }
+    }
+  ]
+}
