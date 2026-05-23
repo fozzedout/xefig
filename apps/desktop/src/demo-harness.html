@@ -63,6 +63,11 @@
           btn.dataset.accent = modeSlug
           btn.innerHTML = `<span class="label">${MODE_LABEL[modeSlug]}</span><span class="params">${params}</span>`
           btn.addEventListener('click', () => {
+            // Flag the bundle that we came from the harness, so when
+            // the player exits a puzzle back to the launcher the
+            // bundle redirects to /demo-harness instead of showing
+            // the normal day menu they didn't ask for.
+            try { sessionStorage.setItem('xefig:demo-session', '1') } catch {}
             window.location.href = `/?demo=${encodeURIComponent(area.id)}-${encodeURIComponent(modeSlug)}`
           })
           grid.append(btn)

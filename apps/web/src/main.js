@@ -2362,6 +2362,18 @@ function renderLauncher() {
 
   ; (async () => {
     try {
+      // Demo-harness back-loop: when the player exits a puzzle (or
+      // the launcher is otherwise re-rendered) and a sessionStorage
+      // flag from /demo-harness is present without an active ?demo=
+      // param, bounce back to the harness — that's the navigation hub
+      // for the timing run, not the production day menu.
+      try {
+        if (sessionStorage.getItem('xefig:demo-session') === '1' && !new URLSearchParams(window.location.search).has('demo')) {
+          window.location.href = '/demo-harness'
+          return
+        }
+      } catch { /* sessionStorage may be unavailable — fall through. */ }
+
       // In demo mode we swap "today's puzzle" for the area's pinned
       // date and then synthesise a click on the requested mode slice
       // — so the launcher is the only entry point that touches this.

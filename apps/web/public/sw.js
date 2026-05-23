@@ -1,4 +1,4 @@
-const CACHE_NAME = 'xefig-v10'
+const CACHE_NAME = 'xefig-v11'
 
 const PRECACHE_URLS = ['/', '/favicon.svg', '/icons.svg']
 
