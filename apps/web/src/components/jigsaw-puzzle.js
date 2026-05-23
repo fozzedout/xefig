@@ -29,7 +29,7 @@ const MAX_BOARD_RATIO = 16 / 10
 const MAX_SIDEBAR_BOARD_RATIO = 2.1
 
 export class JigsawPuzzle {
-  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'easy', snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'easy', gridOverride, snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
     if (!container) {
       throw new Error('JigsawPuzzle requires a container element.')
     }
@@ -38,6 +38,12 @@ export class JigsawPuzzle {
     this.imageUrl = imageUrl
     this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
+    // Optional asymmetric grid override (e.g. { cols: 6, rows: 4 }).
+    // When set, takes precedence over the symmetric difficulty mapping
+    // — the demo's per-area tiers use this for non-square boards.
+    this.gridOverride = gridOverride && Number.isFinite(gridOverride.cols) && Number.isFinite(gridOverride.rows)
+      ? { cols: Math.max(2, gridOverride.cols | 0), rows: Math.max(2, gridOverride.rows | 0) }
+      : null
     this.snapDistance = snapDistance
     this.onComplete = onComplete
     this.onProgress = onProgress
@@ -92,9 +98,19 @@ export class JigsawPuzzle {
     const { image, isThumbnail } = await loadImageThumbFirst(this.thumbnailUrl, this.imageUrl, { onProgress: this.onLoadProgress })
     this.image = image
     this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
-    this.gridSize = this.resolveGridSize(this.difficulty)
-    this.rows = this.gridSize
-    this.cols = this.gridSize
+    if (this.gridOverride) {
+      this.cols = this.gridOverride.cols
+      this.rows = this.gridOverride.rows
+      // gridSize is still consulted in a few branches (board sizing,
+      // piece-shape RNG seeding) — keep it as the *larger* dimension so
+      // the asymmetric case degrades gracefully into the existing
+      // square-board layout heuristics.
+      this.gridSize = Math.max(this.cols, this.rows)
+    } else {
+      this.gridSize = this.resolveGridSize(this.difficulty)
+      this.rows = this.gridSize
+      this.cols = this.gridSize
+    }
 
     this.setupLayout()
     this.generateEdgeMaps()

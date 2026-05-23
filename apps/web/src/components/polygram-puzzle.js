@@ -14,7 +14,7 @@ const MAX_BOARD_SIZE = 1400
 const WHEEL_ROTATION_DEG = 15
 
 export class PolygramPuzzle {
-  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', shardOverride, onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PolygramPuzzle requires a container element.')
     }
@@ -23,6 +23,11 @@ export class PolygramPuzzle {
     this.imageUrl = imageUrl
     this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
+    // Explicit shard-count override for demo tiers; bypasses the
+    // difficulty→range lookup in resolveShardCount when set.
+    this.shardOverride = Number.isFinite(shardOverride) && shardOverride > 0
+      ? Math.round(shardOverride)
+      : null
     this.onComplete = onComplete
     this.onProgress = onProgress
     this.onLoadProgress = onLoadProgress
@@ -80,7 +85,7 @@ export class PolygramPuzzle {
     this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
 
     const rng = createSeededRng(`${this.imageUrl}|${String(this.difficulty || 'medium')}`)
-    this.shardCount = resolveShardCount(this.difficulty, rng)
+    this.shardCount = this.shardOverride ?? resolveShardCount(this.difficulty, rng)
     this.blueprints = buildVoronoiBlueprints(this.shardCount, rng)
     this.shardCount = this.blueprints.length
 

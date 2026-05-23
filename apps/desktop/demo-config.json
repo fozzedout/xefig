@@ -9,7 +9,7 @@
       "estimatedMinutes": 30,
       "difficulties": {
         "jigsaw":   { "cols": 6,  "rows": 4 },
-        "slider":   { "cols": 4,  "rows": 3 },
+        "sliding": { "cols": 4,  "rows": 3 },
         "swap":     { "cols": 4,  "rows": 3 },
         "polygram": { "shards": 24 },
         "diamond":  { "targetCells": 5000 }
@@ -23,7 +23,7 @@
       "estimatedMinutes": 60,
       "difficulties": {
         "jigsaw":   { "cols": 8,  "rows": 7 },
-        "slider":   { "cols": 7,  "rows": 4 },
+        "sliding":  { "cols": 7,  "rows": 4 },
         "swap":     { "cols": 7,  "rows": 4 },
         "polygram": { "shards": 48 },
         "diamond":  { "targetCells": 10000 }
@@ -37,7 +37,7 @@
       "estimatedMinutes": 110,
       "difficulties": {
         "jigsaw":   { "cols": 10, "rows": 10 },
-        "slider":   { "cols": 10, "rows": 5 },
+        "sliding":  { "cols": 10, "rows": 5 },
         "swap":     { "cols": 10, "rows": 5 },
         "polygram": { "shards": 80 },
         "diamond":  { "targetCells": 15000 }

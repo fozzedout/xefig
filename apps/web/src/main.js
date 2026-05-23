@@ -45,6 +45,57 @@ const puzzleLoaders = {
   diamond: () => import('./components/diamond-painting-puzzle.js').then((m) => m.DiamondPaintingPuzzle),
 }
 
+// Demo-mode hook for the Steam desktop harness. Production users never
+// hit this path (no ?demo= param, no /demo-config.json shipped). When
+// active, the launcher uses the demo area's puzzle date instead of
+// today, auto-clicks the requested mode after render, and the puzzle's
+// constructor receives the per-mode override (gridOverride /
+// shardOverride / targetCellsOverride) from demo-config.json.
+const __xefigDemo = (() => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const slug = params.get('demo')
+  if (!slug) return null
+  const dash = slug.indexOf('-')
+  if (dash < 0) return null
+  return {
+    areaId: slug.slice(0, dash),
+    modeSlug: slug.slice(dash + 1),
+    // config + puzzle payload are filled in asynchronously by loadDemoConfig().
+    area: null,
+    overrides: null,
+  }
+})()
+
+async function loadDemoConfig() {
+  if (!__xefigDemo || __xefigDemo.area) return __xefigDemo
+  try {
+    const res = await fetch('/demo-config.json', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`demo-config ${res.status}`)
+    const cfg = await res.json()
+    const area = (cfg.areas || []).find((a) => a.id === __xefigDemo.areaId)
+    if (!area) throw new Error(`demo area not found: ${__xefigDemo.areaId}`)
+    __xefigDemo.area = area
+    __xefigDemo.overrides = area.difficulties?.[__xefigDemo.modeSlug] || null
+    return __xefigDemo
+  } catch (err) {
+    console.error('[demo] config load failed', err)
+    return null
+  }
+}
+
+// Map a constructor's per-mode override (from demo-config.json) onto the
+// argument name each puzzle expects. Centralised so the puzzleConfig
+// assembly stays a single one-line spread.
+function demoOverrideArgs(modeSlug, raw) {
+  if (!raw) return {}
+  if (modeSlug === 'jigsaw' && raw.cols && raw.rows) return { gridOverride: { cols: raw.cols, rows: raw.rows } }
+  if ((modeSlug === 'sliding' || modeSlug === 'slider' || modeSlug === 'swap') && raw.cols && raw.rows) return { gridOverride: { cols: raw.cols, rows: raw.rows } }
+  if (modeSlug === 'polygram' && Number.isFinite(raw.shards)) return { shardOverride: raw.shards }
+  if (modeSlug === 'diamond' && Number.isFinite(raw.targetCells)) return { targetCellsOverride: raw.targetCells }
+  return {}
+}
+
 // In-game helper. Loaded on demand alongside the puzzle engine so the
 // homepage bundle stays small. The same module powers every mode's
 // tutorial / hint flow.
@@ -2305,12 +2356,26 @@ function renderLauncher() {
 
   ; (async () => {
     try {
-      const payload = await fetchPuzzlePayload()
+      // In demo mode we swap "today's puzzle" for the area's pinned
+      // date and then synthesise a click on the requested mode slice
+      // — so the launcher is the only entry point that touches this.
+      const demo = await loadDemoConfig()
+      const payload = await fetchPuzzlePayload(demo?.area?.puzzleDate ? { date: demo.area.puzzleDate } : undefined)
       state.puzzle = payload
       container.innerHTML = renderSlices(payload)
       bindSliceEvents()
       computeSliceCenter(container)
       upgradeSliceImagesToFull(container)
+
+      if (demo?.area && demo.modeSlug) {
+        // Defer to the next tick so bindSliceEvents has wired up its
+        // listeners before we dispatch the synthetic click.
+        requestAnimationFrame(() => {
+          const slice = container.querySelector(`.slice[data-mode="${demo.modeSlug}"]`)
+          if (slice) slice.click()
+          else console.warn('[demo] no slice for mode', demo.modeSlug)
+        })
+      }
 
       // Recompute on any container resize so --slice-center / --slice-middle /
       // --info-width track the live geometry (window resize, devtools dock,
@@ -6524,11 +6589,13 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
               : gameMode === GAME_MODE_DIAMOND ? 'diamond'
                 : 'jigsaw'
         const PuzzleClass = await puzzleLoaders[loaderKey]()
+        const demoOverrides = __xefigDemo && __xefigDemo.modeSlug === loaderKey ? demoOverrideArgs(loaderKey, __xefigDemo.overrides) : {}
         const puzzleConfig = {
           container: mount,
           imageUrl: state.imageUrl,
           thumbnailUrl,
           difficulty: state.difficulty,
+          ...demoOverrides,
           boardColorIndex: getGlobalBoardColorIndex(),
           muted: gameMode === GAME_MODE_DIAMOND ? getDiamondSfxMuted() : false,
           onLoadProgress: (progress) => updatePuzzleLoadingOverlay(loadingOverlay, progress),

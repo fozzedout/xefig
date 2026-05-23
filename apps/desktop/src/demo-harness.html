@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Xefig — demo timing harness</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; min-height: 100%; background: #0a0a0f; color: #eee; font-family: system-ui, sans-serif; }
+    main { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    h1 { font-weight: 500; margin: 0 0 0.5rem; }
+    .lede { opacity: 0.7; margin: 0 0 2rem; font-size: 0.95rem; line-height: 1.4; }
+    .area { margin-bottom: 2rem; padding: 1rem 1.25rem; border-radius: 12px; background: rgba(255,255,255,0.04); }
+    .area h2 { font-weight: 500; margin: 0 0 0.25rem; }
+    .area .meta { opacity: 0.6; font-size: 0.85rem; margin-bottom: 0.75rem; }
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; }
+    button.mode {
+      appearance: none; border: 0; border-radius: 8px; padding: 0.75rem 0.5rem;
+      background: rgba(255,255,255,0.08); color: #eee; cursor: pointer;
+      font-family: inherit; font-size: 0.85rem;
+      transition: background 120ms ease, transform 120ms ease;
+      display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+    }
+    button.mode:hover { background: rgba(255,255,255,0.14); transform: translateY(-1px); }
+    button.mode .label { font-weight: 600; }
+    button.mode .params { font-size: 0.72rem; opacity: 0.65; }
+    button.mode[data-accent="jigsaw"]   { box-shadow: inset 0 -3px 0 #f0c040; }
+    button.mode[data-accent="sliding"]  { box-shadow: inset 0 -3px 0 #40d0f0; }
+    button.mode[data-accent="swap"]     { box-shadow: inset 0 -3px 0 #50d070; }
+    button.mode[data-accent="polygram"] { box-shadow: inset 0 -3px 0 #a060f0; }
+    button.mode[data-accent="diamond"]  { box-shadow: inset 0 -3px 0 #e070a0; }
+    footer { margin-top: 2rem; opacity: 0.5; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Demo timing harness</h1>
+    <p class="lede">Each button launches one of the 15 demo configurations with explicit difficulty overrides from <code>demo-config.json</code>. Used for timing — not the real demo UI.</p>
+    <div id="areas"></div>
+    <footer>Estimated total: <span id="total"></span></footer>
+  </main>
+  <script>
+    const MODE_LABEL = { jigsaw: 'Jigsaw', sliding: 'Slider', swap: 'Swap', polygram: 'Polygram', diamond: 'Diamond' }
+    function paramsFor(modeSlug, raw) {
+      if (!raw) return ''
+      if (raw.cols && raw.rows) return `${raw.cols}×${raw.rows}`
+      if (raw.shards) return `${raw.shards} shards`
+      if (raw.targetCells) return `${raw.targetCells} cells`
+      return ''
+    }
+    fetch('/demo-config.json').then((r) => r.json()).then((cfg) => {
+      const root = document.getElementById('areas')
+      let total = 0
+      for (const area of cfg.areas) {
+        total += area.estimatedMinutes || 0
+        const html = document.createElement('section')
+        html.className = 'area'
+        const grid = document.createElement('div')
+        grid.className = 'grid'
+        for (const modeSlug of ['jigsaw', 'sliding', 'swap', 'polygram', 'diamond']) {
+          const params = paramsFor(modeSlug, area.difficulties?.[modeSlug])
+          const btn = document.createElement('button')
+          btn.className = 'mode'
+          btn.dataset.accent = modeSlug
+          btn.innerHTML = `<span class="label">${MODE_LABEL[modeSlug]}</span><span class="params">${params}</span>`
+          btn.addEventListener('click', () => {
+            window.location.href = `/?demo=${encodeURIComponent(area.id)}-${encodeURIComponent(modeSlug)}`
+          })
+          grid.append(btn)
+        }
+        html.innerHTML = `<h2>${area.title} <small style="opacity:0.6;font-weight:400">— ${area.subtitle}</small></h2>
+          <div class="meta">Date: ${area.puzzleDate} · est. ${area.estimatedMinutes} min for all 5</div>`
+        html.append(grid)
+        root.append(html)
+      }
+      document.getElementById('total').textContent = `~${total} min across all 15 puzzles`
+    }).catch((err) => {
+      document.body.insertAdjacentHTML('beforeend', `<p style="color:#f88;padding:2rem">Failed to load demo-config.json: ${err.message}</p>`)
+    })
+  </script>
+</body>
+</html>

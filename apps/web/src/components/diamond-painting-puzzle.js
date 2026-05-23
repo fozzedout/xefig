@@ -15,7 +15,7 @@ const MAX_CANVAS_DIMENSION = 4096
 const MAX_CANVAS_PIXELS = 4096 * 4096
 
 export class DiamondPaintingPuzzle {
-  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress, muted = false }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', targetCellsOverride, onComplete, onProgress, onLoadProgress, muted = false }) {
     if (!container) {
       throw new Error('DiamondPaintingPuzzle requires a container element.')
     }
@@ -24,6 +24,12 @@ export class DiamondPaintingPuzzle {
     this.imageUrl = imageUrl
     this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
+    // Explicit target-cell override for demo tiers; bypasses the
+    // module-level TARGET_CELLS const when set. Clamped to a sane
+    // range so the canvas doesn't try to allocate a million cells.
+    this.targetCellsOverride = Number.isFinite(targetCellsOverride) && targetCellsOverride > 0
+      ? Math.max(500, Math.min(30000, Math.round(targetCellsOverride)))
+      : null
     this.onComplete = onComplete
     this.onProgress = onProgress
     this.onLoadProgress = onLoadProgress
@@ -114,8 +120,9 @@ export class DiamondPaintingPuzzle {
     this.displayImageUrl = this.image.currentSrc || this.image.src || (isThumbnail ? this.thumbnailUrl : this.imageUrl)
 
     const aspect = this.image.naturalWidth / this.image.naturalHeight
-    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(TARGET_CELLS * aspect)))
-    this.rows = Math.max(MIN_ROWS, Math.round(TARGET_CELLS / this.cols))
+    const targetCells = this.targetCellsOverride ?? TARGET_CELLS
+    this.cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetCells * aspect)))
+    this.rows = Math.max(MIN_ROWS, Math.round(targetCells / this.cols))
     this.totalCells = this.cols * this.rows
 
     const cellSamples = sampleCellRegions(this.image, this.cols, this.rows, CELL_SAMPLE_GRID)

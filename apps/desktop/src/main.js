@@ -54,7 +54,13 @@ async function boot() {
   // Hand off to the bundled web app via http://127.0.0.1:<port>/ so the
   // bundle's relative /api/* fetches and service worker registration
   // both resolve against a real same-origin server.
-  window.location.href = url
+  //
+  // Demo timing harness: when XEFIG_DEMO_HARNESS=1 in the env, land on
+  // the 15-button difficulty matrix instead of the normal launcher.
+  // Each button on the harness navigates to /?demo=area-mode which
+  // main.js then resolves to a specific puzzle + overrides.
+  const landing = process.env.XEFIG_DEMO_HARNESS ? `${url}demo-harness` : url
+  window.location.href = landing
 }
 
 window.addEventListener('error', (e) => {

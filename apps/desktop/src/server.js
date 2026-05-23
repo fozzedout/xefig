@@ -127,6 +127,31 @@ function handleStatic(req, res) {
   sendFile(path.join(DIST, 'index.html'), res)
 }
 
+// Files in apps/desktop/src/ that the harness serves to the renderer.
+// They live next to this module rather than in dist-runtime/ so they're
+// edited directly without a web-build round-trip.
+const SRC = __dirname
+const DESKTOP = path.join(__dirname, '..')
+const DEMO_CONFIG = path.join(DESKTOP, 'demo-config.json')
+
+// Serve a small allowlist of files from apps/desktop/ — the demo
+// harness page, the demo config JSON, etc. Returns true if the
+// request was handled here so the main router can short-circuit;
+// false otherwise.
+function handleDesktopAsset(req, res) {
+  const map = {
+    '/demo-harness': path.join(SRC, 'demo-harness.html'),
+    '/demo-harness.html': path.join(SRC, 'demo-harness.html'),
+    '/demo-config.json': DEMO_CONFIG,
+  }
+  const target = map[req.url.split('?')[0]]
+  if (target && fs.existsSync(target)) {
+    sendFile(target, res)
+    return true
+  }
+  return false
+}
+
 function start() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
@@ -139,6 +164,7 @@ function start() {
         return origWrite(status, ...rest)
       }
       try {
+        if (handleDesktopAsset(req, res)) return
         if (req.url.startsWith('/api/')) return handleApi(req, res)
         if (req.url.startsWith('/cdn/')) return handleCdn(req, res)
         return handleStatic(req, res)

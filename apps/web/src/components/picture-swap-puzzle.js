@@ -33,7 +33,7 @@ function pickBestGrid(availW, availH, targetTotal) {
 }
 
 export class PictureSwapPuzzle {
-  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', onComplete, onProgress, onLoadProgress }) {
+  constructor({ container, imageUrl, thumbnailUrl, difficulty = 'medium', gridOverride, onComplete, onProgress, onLoadProgress }) {
     if (!container) {
       throw new Error('PictureSwapPuzzle requires a container element.')
     }
@@ -42,6 +42,11 @@ export class PictureSwapPuzzle {
     this.imageUrl = imageUrl
     this.thumbnailUrl = thumbnailUrl
     this.difficulty = difficulty
+    // Explicit { cols, rows } override for demo tiers; bypasses the
+    // TARGET_TILE_COUNTS auto-fit when set.
+    this.gridOverride = gridOverride && Number.isFinite(gridOverride.cols) && Number.isFinite(gridOverride.rows)
+      ? { cols: Math.max(2, gridOverride.cols | 0), rows: Math.max(2, gridOverride.rows | 0) }
+      : null
     this.onComplete = onComplete
     this.onProgress = onProgress
     this.onLoadProgress = onLoadProgress
@@ -195,10 +200,15 @@ export class PictureSwapPuzzle {
     // Only pick cols/rows on a fresh puzzle. After tiles exist the grid
     // shape is fixed except for transpose-on-rotation.
     if (!this.tiles || this.tiles.length === 0) {
-      const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-      const picked = pickBestGrid(availW, availH, targetTotal)
-      this.cols = picked.cols
-      this.rows = picked.rows
+      if (this.gridOverride) {
+        this.cols = this.gridOverride.cols
+        this.rows = this.gridOverride.rows
+      } else {
+        const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
+        const picked = pickBestGrid(availW, availH, targetTotal)
+        this.cols = picked.cols
+        this.rows = picked.rows
+      }
     }
 
     // Tile size is uniform square — sized to fit the narrower axis
