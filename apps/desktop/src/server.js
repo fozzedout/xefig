@@ -66,20 +66,27 @@ function mimeFor(filePath) {
   return MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream'
 }
 
-function send(res, status, body, contentType) {
+function send(res, status, body, contentType, cacheHeader) {
   res.writeHead(status, {
     'Content-Type': contentType || 'application/octet-stream',
-    'Cache-Control': 'no-store',
+    'Cache-Control': cacheHeader || 'no-store',
   })
   res.end(body)
 }
 
-function sendFile(filePath, res) {
+function sendFile(filePath, res, cacheHeader) {
   fs.readFile(filePath, (err, data) => {
     if (err) return send(res, 404, 'Not Found', 'text/plain')
-    send(res, 200, data, mimeFor(filePath))
+    send(res, 200, data, mimeFor(filePath), cacheHeader)
   })
 }
+
+// Cache /cdn assets aggressively in the browser — the bundle's puzzle
+// JSON carries a ?v=<timestamp> on every image URL that already busts
+// on regeneration, so the browser-cached copy is always content-true.
+// Without this, the inject-end shim's img.src reassignment on every
+// DOM mutation costs a real network round-trip per redraw.
+const CDN_CACHE = 'public, max-age=31536000, immutable'
 
 // Strip query string + leading slash so we don't get tripped up by the
 // ?v=cachebust suffix the API attaches to image URLs.
@@ -152,7 +159,7 @@ function handleApi(req, res) {
 function handleCdn(req, res) {
   const lookup = safeJoin(PACK, req.url)
   if (lookup && fs.existsSync(lookup)) {
-    return sendFile(lookup, res)
+    return sendFile(lookup, res, CDN_CACHE)
   }
   send(res, 404, 'asset not staged', 'text/plain')
 }
