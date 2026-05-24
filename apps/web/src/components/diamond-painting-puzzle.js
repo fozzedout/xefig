@@ -1,5 +1,10 @@
 import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
+// Bump per deploy when iterating on a bug — lets the user verify in
+// the debug HUD that the bundle they're testing is the one we just
+// shipped, vs a stale SW-cached version.
+const DIAMOND_DEBUG_BUILD = '2026-05-24-12'
+
 const TARGET_CELLS = 15000
 const NUM_COLORS = 24
 const MIN_COLS = 20
@@ -159,6 +164,11 @@ export class DiamondPaintingPuzzle {
 
   destroy() {
     clearTimeout(this._fillTimer)
+    if (this._healthCheckTimer) {
+      clearInterval(this._healthCheckTimer)
+      this._healthCheckTimer = null
+    }
+    this._everDrew = false
     this.filling = false
     window.removeEventListener('resize', this.handleWindowResize)
     window.removeEventListener('focus', this.handleWindowResume)
@@ -260,6 +270,7 @@ export class DiamondPaintingPuzzle {
 
     configureCanvas(this.canvas, fullW, fullH)
     this.ctx = this.canvas.getContext('2d')
+    this.bindCanvasContextLossRecovery()
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'diamond-reference'
@@ -285,7 +296,213 @@ export class DiamondPaintingPuzzle {
     if (showDetail !== this._showDetail) {
       this._showDetail = showDetail
       if (this.grid) this.drawGrid()
+    } else if (this.grid && showDetail) {
+      // GPU tile-cache trap: above zoom=1 the CSS-scaled boardContent
+      // is composited from cached tiles. If we never call drawGrid the
+      // browser may keep showing a stale low-res tile from a previous
+      // state (typically init's "all unpainted" snapshot) — the
+      // backing store is current, just the displayed composite isn't.
+      // Verified via the debug HUD: state correct, drawGrids count
+      // unchanged, visual shows unpainted cells; cells return the
+      // instant a fresh drawGrid runs (showDetail crossing or here).
+      //
+      // Schedule a single deduplicated RAF redraw per zoom event so
+      // each new zoom level invalidates the tile cache. Pan-only
+      // applyTransform calls (no zoom change) also redraw, which is
+      // wasted work but bounded — pan events fire at pointer rate and
+      // drawGrid is ~5ms for the ~15k-cell production board.
+      this.scheduleTileInvalidationRedraw()
     }
+  }
+
+  scheduleTileInvalidationRedraw() {
+    if (this._pendingTileRedraw) return
+    this._pendingTileRedraw = true
+    requestAnimationFrame(() => {
+      this._pendingTileRedraw = false
+      if (this.grid && this._showDetail) this.drawGrid()
+    })
+  }
+
+  // The canvas backing store gets cleared by Chromium / Safari under
+  // graphics-memory pressure (a second browser, a screen recorder, a
+  // local LLM eating VRAM). Symptom: painted cells vanish on zoom and
+  // a tab-switch fixes it (forces a recomposite + onWindowResume
+  // calls drawGrid).
+  //
+  // The canvas2d spec exposes `contextlost` / `contextrestored` for
+  // this, but Chromium currently doesn't fire either reliably for the
+  // partial backing-store wipes that cause the visible failure — it
+  // only fires them on a full GPU reset. So we belt-and-braces both:
+  // listen for the events AND poll a known pixel on a slow interval.
+  // If the sentinel pixel reads as transparent when we know we drew
+  // over it, the backing store has been wiped and we redraw + count
+  // the failure toward the banner threshold.
+  bindCanvasContextLossRecovery() {
+    if (!this.canvas) return
+    this._contextLossEvents = []
+    this._totalCanvasFailures = 0
+    this._totalCanvasPolls = 0
+    const handleLost = (e) => {
+      e.preventDefault()
+      this.recordCanvasFailure()
+    }
+    const handleRestored = () => {
+      if (this.grid) this.drawGrid()
+    }
+    this.canvas.addEventListener('contextlost', handleLost)
+    this.canvas.addEventListener('contextrestored', handleRestored)
+    // 750ms compromise: fast enough that the player rarely sees a
+    // blank canvas for more than a frame or two after recovery, slow
+    // enough that one 1×1 getImageData per tick is negligible. Cleared
+    // in destroy().
+    this._healthCheckTimer = setInterval(() => this.runCanvasHealthCheck(), 750)
+    // Optional debug HUD: opt in via ?diamond-debug=1. Sits in the
+    // boardFrame corner; updates after each poll so we can verify the
+    // recovery path under real VRAM pressure without trusting the
+    // banner (the banner threshold is 2-in-20s; isolated wipes that
+    // recover instantly never surface it).
+    try {
+      if (new URLSearchParams(window.location.search).get('diamond-debug') === '1') {
+        this.installDebugHud()
+      }
+    } catch { /* SSR / sandboxed contexts — skip. */ }
+  }
+
+  installDebugHud() {
+    if (this._debugHud || !this.boardFrame) return
+    const wrap = document.createElement('div')
+    wrap.style.cssText = [
+      'position:absolute', 'bottom:0.5rem', 'right:0.5rem',
+      'z-index:60', 'display:flex', 'flex-direction:column',
+      'gap:0.35rem', 'align-items:flex-end',
+    ].join(';')
+
+    const el = document.createElement('div')
+    el.className = 'diamond-debug-hud'
+    el.style.cssText = [
+      'padding:0.35rem 0.55rem',
+      'background:rgba(10,10,15,0.7)',
+      'color:#cfd0d3', 'font:11px/1.3 ui-monospace,monospace',
+      'border-radius:5px', 'cursor:pointer',
+      'border:1px solid rgba(255,255,255,0.1)',
+      'user-select:none',
+    ].join(';')
+    el.title = 'Click to copy debug state'
+    el.addEventListener('click', async () => {
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim()
+      try {
+        await navigator.clipboard.writeText(text)
+        const prev = el.style.borderColor
+        el.style.borderColor = '#50d070'
+        setTimeout(() => { el.style.borderColor = prev }, 400)
+      } catch {
+        console.log('[diamond-debug]', text)
+      }
+    })
+
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.textContent = 'Force redraw'
+    btn.style.cssText = [
+      'background:#f0c040', 'color:#111', 'border:0',
+      'padding:0.35rem 0.7rem', 'border-radius:5px',
+      'font:11px/1.3 ui-monospace,monospace', 'cursor:pointer',
+      'font-weight:600',
+    ].join(';')
+    btn.addEventListener('click', () => {
+      // Skip the RAF chain — call the body directly so user sees
+      // immediate result, regardless of whether the auto-scheduled
+      // forceCompositorRefresh ever caught the right moment.
+      if (this.grid) this.drawGrid()
+      if (this.boardContent) {
+        const realScale = this.zoom
+        this.boardContent.style.transform = `translate(${this.panX}px,${this.panY}px) scale(${realScale * 1.005})`
+        requestAnimationFrame(() => {
+          if (this.boardContent) {
+            this.boardContent.style.transform = `translate(${this.panX}px,${this.panY}px) scale(${realScale})`
+          }
+        })
+      }
+    })
+
+    wrap.append(el, btn)
+    this.boardFrame.append(wrap)
+    this._debugHud = el
+    this._debugHudWrap = wrap
+    this.refreshDebugHud()
+  }
+
+  refreshDebugHud() {
+    if (!this._debugHud) return
+    const recent = (this._contextLossEvents || []).length
+    let painted = 0
+    let unfilled = 0
+    let total = 0
+    if (this.fills && this.grid) {
+      total = this.fills.length
+      for (let i = 0; i < total; i++) {
+        if (this.fills[i] === -1) unfilled++
+        else if (this.fills[i] === this.grid[i]) painted++
+      }
+    }
+    const draws = this._totalDrawGrids || 0
+    const lastDraw = this._lastDrawGridAt
+      ? `${Math.round((performance.now() - this._lastDrawGridAt) / 100) / 10}s ago`
+      : 'never'
+    this._debugHud.innerHTML = [
+      `build: ${DIAMOND_DEBUG_BUILD}`,
+      `polls: ${this._totalCanvasPolls} · wipes: ${this._totalCanvasFailures} (${recent}/20s)`,
+      `zoom: ${this.zoom?.toFixed(2)} · detail: ${this._showDetail ? 'on' : 'off'}`,
+      `fills: ${painted}/${total} painted · ${unfilled} unfilled · ref ${this._fillsArrayId || '–'}`,
+      `drawGrids: ${draws} · last: ${lastDraw}`,
+      `pan: ${Math.round(this.panX)},${Math.round(this.panY)}`,
+    ].join('<br>')
+  }
+
+  runCanvasHealthCheck() {
+    if (!this.ctx || !this.canvas || !this.grid || !this._everDrew) return
+    this._totalCanvasPolls = (this._totalCanvasPolls || 0) + 1
+    try {
+      // After drawGrid, the centre of cell (0,0) is always opaque —
+      // either the unfilled background fill or a palette colour. If
+      // alpha=0, the backing store was cleared without us asking.
+      const data = this.ctx.getImageData(CELL_PX / 2, CELL_PX / 2, 1, 1).data
+      if (data[3] === 0) this.recordCanvasFailure()
+      else this.refreshDebugHud()
+    } catch {
+      // getImageData throws on a tainted canvas; we draw everything
+      // ourselves so this branch shouldn't fire — kept as belt-and-
+      // braces so a future cross-origin image swap doesn't crash.
+    }
+  }
+
+  recordCanvasFailure() {
+    const now = performance.now()
+    this._contextLossEvents = this._contextLossEvents.filter((t) => now - t < 20000)
+    this._contextLossEvents.push(now)
+    this._totalCanvasFailures = (this._totalCanvasFailures || 0) + 1
+    if (this.grid) this.drawGrid()
+    if (this._contextLossEvents.length >= 2) this.showVramWarning()
+    this.refreshDebugHud()
+  }
+
+  showVramWarning() {
+    if (this._vramWarningEl || !this.boardFrame) return
+    const el = document.createElement('div')
+    el.className = 'diamond-vram-warning'
+    el.innerHTML = `
+      <strong>Graphics memory is low.</strong>
+      The painting keeps blanking out because another program is using your GPU memory — common culprits are a second browser window, a screen recorder, or a local AI model. Close one and zoom in again to restore the cells.
+    `
+    this.boardFrame.append(el)
+    this._vramWarningEl = el
+  }
+
+  hideVramWarning() {
+    if (!this._vramWarningEl) return
+    this._vramWarningEl.remove()
+    this._vramWarningEl = null
   }
 
   clampPan() {
@@ -777,6 +994,26 @@ export class DiamondPaintingPuzzle {
     }
 
     this.redrawGridLines()
+    // Flag the canvas-health poller: it should now expect cell (0,0)
+    // to read as an opaque pixel. Before the first drawGrid the canvas
+    // is legitimately blank and we should NOT raise a false alarm.
+    this._everDrew = true
+    this._totalDrawGrids = (this._totalDrawGrids || 0) + 1
+    this._lastDrawGridAt = performance.now()
+    // Tag the live fills array with a sequence id whenever drawGrid
+    // runs — lets the debug HUD show whether the same array instance
+    // is in use across draws, or whether something has replaced it.
+    // WeakMap, not a property assignment, because TypedArray instances
+    // are not always property-extensible across engines.
+    if (this.fills) {
+      if (!this._fillsIds) this._fillsIds = new WeakMap()
+      if (!this._fillsIds.has(this.fills)) {
+        this._nextFillsId = (this._nextFillsId || 0) + 1
+        this._fillsIds.set(this.fills, this._nextFillsId)
+      }
+      this._fillsArrayId = this._fillsIds.get(this.fills)
+    }
+    this.refreshDebugHud()
   }
 
   redrawGridLines() {
@@ -917,15 +1154,21 @@ export class DiamondPaintingPuzzle {
     const sel = Number(state.selectedColor)
     this.selectedColor = Number.isFinite(sel) && sel >= 0 && sel < this.palette.length ? sel : 0
 
-    // Restore zoom/pan or fit
-    if (Number.isFinite(state.zoom)) {
-      this.zoom = clamp(state.zoom, this.getMinZoom(), MAX_ZOOM)
-      this.panX = Number(state.panX) || 0
-      this.panY = Number(state.panY) || 0
-      this.clampPan()
-    } else {
-      this.fitZoom()
-    }
+    // Always resume at the fit-to-frame zoom regardless of the saved
+    // zoom. Two reasons:
+    //
+    // 1. Sidesteps the GPU tile-cache bug that only manifests at
+    //    zoom > 1: above 100% the browser composites the canvas via
+    //    a cached scaled-up texture that doesn't invalidate when the
+    //    backing store changes. Resuming at fit zoom (zoom <= 1) hits
+    //    the native-resolution composite path so the painted state
+    //    shows immediately. Once the player zooms in themselves it's
+    //    a real user gesture that does invalidate the cached texture.
+    //
+    // 2. Better UX: the player sees their whole painting at a glance
+    //    on return and can choose where to continue rather than
+    //    landing wherever they last left off.
+    this.fitZoom()
 
     // Resize canvas to match restored grid
     const fullW = this.cols * CELL_PX

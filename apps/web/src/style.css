@@ -7467,6 +7467,29 @@ canvas.slice-image {
   display: block;
 }
 
+/* Banner shown when the canvas2d context drops repeatedly — almost
+   always means GPU memory pressure from another app (LLM, second
+   browser, screen recorder). Sits over the board so the player can't
+   miss it; clears itself the moment a recovery render succeeds. */
+.diamond-vram-warning {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(420px, calc(100% - 2rem));
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(40, 16, 24, 0.94);
+  border: 1px solid rgba(224, 112, 160, 0.4);
+  color: #f4d9e3;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+}
+.diamond-vram-warning strong { color: #f0c040; }
+
 .diamond-reference {
   position: absolute;
   inset: 0;
