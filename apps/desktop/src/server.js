@@ -189,6 +189,8 @@ function handleDesktopAsset(req, res) {
     '/demo-harness': path.join(SRC, 'demo-harness.html'),
     '/demo-harness.html': path.join(SRC, 'demo-harness.html'),
     '/demo-config.json': DEMO_CONFIG,
+    '/paint-preview': path.join(SRC, 'paint-preview.html'),
+    '/paint-preview.html': path.join(SRC, 'paint-preview.html'),
   }
   const target = map[req.url.split('?')[0]]
   if (target && fs.existsSync(target)) {

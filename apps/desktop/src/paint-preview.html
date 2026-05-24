@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Paint preview — predict timing before commit</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; min-height: 100%; background: #0a0a0f; color: #eee; font-family: system-ui, sans-serif; }
+    main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; }
+    h1 { font-weight: 500; margin: 0 0 0.25rem; }
+    .lede { opacity: 0.7; margin: 0 0 1.25rem; font-size: 0.9rem; line-height: 1.4; }
+
+    .drop {
+      border: 2px dashed rgba(255,255,255,0.18);
+      border-radius: 12px; padding: 1.25rem 1.25rem 1.25rem;
+      text-align: center; cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .drop.active { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.35); }
+    .drop input { display: none; }
+    .drop .hint { opacity: 0.6; font-size: 0.85rem; }
+
+    .controls { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0.75rem; margin: 1.25rem 0; }
+    .ctrl { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 0.75rem 1rem; }
+    .ctrl label { display:block; font-size:0.8rem; opacity:0.75; margin-bottom:0.25rem; }
+    .ctrl input[type=number] {
+      width: 100%; background:#181820; color:#eee; border:1px solid rgba(255,255,255,0.15);
+      border-radius:5px; padding:0.4rem 0.5rem; font:inherit;
+    }
+    .presets { display:flex; gap:0.5rem; flex-wrap:wrap; }
+    .preset {
+      background:rgba(255,255,255,0.08); color:#eee; border:0; border-radius:6px;
+      padding:0.45rem 0.7rem; font:inherit; font-size:0.85rem; cursor:pointer;
+    }
+    .preset:hover { background:rgba(255,255,255,0.16); }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .panel { background:rgba(255,255,255,0.04); border-radius:8px; padding:1rem; }
+    .panel h2 { margin: 0 0 0.5rem; font-size:0.95rem; font-weight:600; opacity:0.85; }
+    canvas { display:block; max-width:100%; height:auto; background:#1a1a22; border-radius:6px; image-rendering: pixelated; }
+
+    .metrics { font-size:0.9rem; line-height:1.7; }
+    .metrics .row { display:flex; justify-content:space-between; }
+    .metrics .row .k { opacity:0.65; }
+    .metrics .row .v { font-variant-numeric: tabular-nums; }
+    .pred {
+      margin-top:0.75rem; padding:0.75rem 1rem; border-radius:8px;
+      background:linear-gradient(180deg, rgba(240,192,64,0.12), rgba(240,192,64,0.04));
+      border:1px solid rgba(240,192,64,0.25);
+    }
+    .pred .big { font-size:1.6rem; font-weight:600; font-variant-numeric: tabular-nums; color:#f0c040; }
+    .pred .note { opacity:0.7; font-size:0.8rem; line-height:1.4; margin-top:0.35rem; }
+
+    .judgement {
+      margin-top:0.6rem; padding:0.5rem 0.75rem; border-radius:6px;
+      font-size:0.85rem; line-height:1.45;
+    }
+    .judgement.good { background:rgba(80,208,112,0.12); border:1px solid rgba(80,208,112,0.3); }
+    .judgement.ok   { background:rgba(240,192,64,0.10); border:1px solid rgba(240,192,64,0.3); }
+    .judgement.bad  { background:rgba(224,112,160,0.12); border:1px solid rgba(224,112,160,0.3); }
+
+    .legend { font-size:0.75rem; opacity:0.55; margin-top:0.35rem; line-height:1.4; }
+    .placeholder { padding:2.5rem 0; text-align:center; opacity:0.45; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Paint preview</h1>
+  <p class="lede">Drag in a candidate paint image. The tool runs an approximation of the bundle's quantisation and reports the metrics that drive solve time — so you can iterate against the numbers before committing to a 10-minute test play.</p>
+
+  <label class="drop" id="drop">
+    <div><strong>Drop an image here</strong> or click to pick one</div>
+    <div class="hint">PNG/JPG/WebP. Pixel art works best when authored at an integer multiple of the cell grid.</div>
+    <input type="file" id="file" accept="image/*" />
+  </label>
+
+  <div class="controls">
+    <div class="ctrl">
+      <label for="cells">Target cells</label>
+      <input type="number" id="cells" value="4000" min="500" max="30000" step="500" />
+    </div>
+    <div class="ctrl">
+      <label for="palette">Palette size</label>
+      <input type="number" id="palette" value="16" min="4" max="32" step="1" />
+    </div>
+    <div class="ctrl">
+      <label>Tier presets</label>
+      <div class="presets">
+        <button class="preset" data-cells="4000" data-palette="16">Classroom</button>
+        <button class="preset" data-cells="6000" data-palette="18">School</button>
+        <button class="preset" data-cells="9000" data-palette="20">Outside</button>
+        <button class="preset" data-cells="15000" data-palette="24">Online (prod)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Source</h2>
+      <canvas id="source" width="400" height="300"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Quantised preview</h2>
+      <canvas id="quantised" width="400" height="300"></canvas>
+      <div class="placeholder" id="placeholder">Drop an image to begin.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    <h2>Metrics</h2>
+    <div id="metrics" class="metrics"><div class="placeholder" style="padding:1rem 0">Awaiting image…</div></div>
+    <div class="pred" id="pred" style="display:none">
+      <div class="row"><span class="k">Predicted solve time</span><span class="v big" id="predTime">—</span></div>
+      <div class="note" id="predNote"></div>
+    </div>
+    <div class="legend">
+      Formula: regions × (2.0s + paletteSize × 0.05s). Derived from timed plays. Real-image variance is ±15%; pixel-art shading discipline matters more than style class.
+    </div>
+  </div>
+</main>
+
+<script>
+// ---------------------------------------------------------------------
+// Quantisation — approximation of apps/web/src/components/diamond-
+// painting-puzzle.js. Same shape (farthest-first palette, 8-connected
+// region count) so predicted metrics match the bundle's gridStats to
+// within a few percent.
+// ---------------------------------------------------------------------
+
+// Sample N random pixels from an image's full-resolution data.
+function samplePixels(imageData, n) {
+  const data = imageData.data
+  const total = data.length / 4
+  const out = []
+  for (let i = 0; i < n; i++) {
+    const idx = (Math.random() * total) | 0
+    const p = idx * 4
+    out.push([data[p], data[p + 1], data[p + 2]])
+  }
+  return out
+}
+
+function colourDistSq(a, b) {
+  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2]
+  return dr * dr + dg * dg + db * db
+}
+
+// Farthest-first palette extraction: seed with first pixel, then each
+// subsequent colour is the pixel furthest from any already-picked one.
+// Matches the bundle's createDistinctPalette in shape (same algorithm
+// family). Deterministic given the sample order.
+function createPalette(pixels, target) {
+  if (!pixels.length) return []
+  const palette = [pixels[0]]
+  while (palette.length < target) {
+    let bestIdx = 0
+    let bestDist = -1
+    for (let i = 0; i < pixels.length; i++) {
+      let nearest = Infinity
+      for (const p of palette) {
+        const d = colourDistSq(pixels[i], p)
+        if (d < nearest) nearest = d
+      }
+      if (nearest > bestDist) {
+        bestDist = nearest
+        bestIdx = i
+      }
+    }
+    palette.push(pixels[bestIdx])
+  }
+  return palette
+}
+
+// For each cell: average the pixels in that cell's footprint, then
+// pick the nearest palette colour.
+function buildGrid(imageData, cols, rows, palette) {
+  const data = imageData.data
+  const W = imageData.width
+  const H = imageData.height
+  const grid = new Uint8Array(cols * rows)
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x0 = (c * W / cols) | 0
+      const x1 = ((c + 1) * W / cols) | 0
+      const y0 = (r * H / rows) | 0
+      const y1 = ((r + 1) * H / rows) | 0
+      let rs = 0, gs = 0, bs = 0, n = 0
+      for (let y = y0; y < y1; y++) {
+        const row = y * W * 4
+        for (let x = x0; x < x1; x++) {
+          const p = row + x * 4
+          rs += data[p]; gs += data[p + 1]; bs += data[p + 2]
+          n++
+        }
+      }
+      const mean = n > 0 ? [rs / n, gs / n, bs / n] : [0, 0, 0]
+      let best = 0, bestD = Infinity
+      for (let i = 0; i < palette.length; i++) {
+        const d = colourDistSq(mean, palette[i])
+        if (d < bestD) { bestD = d; best = i }
+      }
+      grid[r * cols + c] = best
+    }
+  }
+  return grid
+}
+
+// 8-connected flood fill, counts regions + records sizes + flags
+// singletons. Matches the bundle's region-walk in computeGridStats.
+function analyseRegions(grid, cols, rows) {
+  const total = cols * rows
+  const visited = new Uint8Array(total)
+  const stack = []
+  const sizes = []
+  let largest = 0
+  let singletons = 0
+  let diffPairs = 0
+  let totalPairs = 0
+
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue
+    const colour = grid[start]
+    stack.length = 0
+    stack.push(start)
+    visited[start] = 1
+    let size = 0
+    while (stack.length) {
+      const idx = stack.pop()
+      size++
+      const r = (idx / cols) | 0
+      const c = idx - r * cols
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue
+          const nr = r + dr, nc = c + dc
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue
+          const n = nr * cols + nc
+          if (!visited[n] && grid[n] === colour) { visited[n] = 1; stack.push(n) }
+        }
+      }
+    }
+    sizes.push(size)
+    if (size > largest) largest = size
+    if (size === 1) singletons++
+  }
+
+  // Adjacency diff rate: fraction of horizontal/vertical neighbour
+  // pairs that don't share a colour. Lower = chunkier image.
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c
+      if (c + 1 < cols) { totalPairs++; if (grid[idx] !== grid[idx + 1]) diffPairs++ }
+      if (r + 1 < rows) { totalPairs++; if (grid[idx] !== grid[idx + cols]) diffPairs++ }
+    }
+  }
+
+  return {
+    regionCount: sizes.length,
+    largest, largestFraction: largest / total,
+    singletons,
+    adjacencyDiffRate: totalPairs > 0 ? diffPairs / totalPairs : 0,
+  }
+}
+
+// ---------------------------------------------------------------------
+// UI plumbing
+// ---------------------------------------------------------------------
+
+const sourceCanvas = document.getElementById('source')
+const quantCanvas = document.getElementById('quantised')
+const placeholder = document.getElementById('placeholder')
+const metricsEl = document.getElementById('metrics')
+const predEl = document.getElementById('pred')
+const predTimeEl = document.getElementById('predTime')
+const predNoteEl = document.getElementById('predNote')
+const cellsInput = document.getElementById('cells')
+const paletteInput = document.getElementById('palette')
+
+let currentImage = null
+
+document.querySelectorAll('.preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    cellsInput.value = btn.dataset.cells
+    paletteInput.value = btn.dataset.palette
+    if (currentImage) run()
+  })
+})
+
+cellsInput.addEventListener('change', () => currentImage && run())
+paletteInput.addEventListener('change', () => currentImage && run())
+
+const drop = document.getElementById('drop')
+const fileInput = document.getElementById('file')
+drop.addEventListener('click', () => fileInput.click())
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('active') })
+drop.addEventListener('dragleave', () => drop.classList.remove('active'))
+drop.addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('active')
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0])
+})
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0])
+})
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file)
+  const img = new Image()
+  img.onload = () => {
+    currentImage = img
+    URL.revokeObjectURL(url)
+    run()
+  }
+  img.onerror = () => alert('Could not load image — is it a supported format?')
+  img.src = url
+}
+
+function fmtTime(s) {
+  if (!Number.isFinite(s)) return '—'
+  const m = Math.floor(s / 60)
+  const r = Math.round(s - m * 60)
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
+function judge(metrics, time) {
+  // Heuristics derived from timed-play data. Updated as more sessions
+  // come in.
+  const flags = []
+  if (metrics.singletons > 10) flags.push({ kind: 'bad', text: `${metrics.singletons} isolated singleton regions — these force colour-switches for 1-cell payoffs. Authoring fix: avoid stray pixels of background-colour inside foreground objects.` })
+  if (metrics.largestFraction < 0.05) flags.push({ kind: 'bad', text: `Largest region is only ${(metrics.largestFraction * 100).toFixed(1)}% of the board — no satisfying "big fill" moment. Authoring fix: leave a big flat area (sky / wall / background).` })
+  else if (metrics.largestFraction > 0.20) flags.push({ kind: 'good', text: `Largest region is ${(metrics.largestFraction * 100).toFixed(1)}% of the board — one tap will give a huge satisfying fill.` })
+  if (metrics.adjacencyDiffRate > 0.50) flags.push({ kind: 'bad', text: `${(metrics.adjacencyDiffRate * 100).toFixed(0)}% of adjacent cell pairs differ in colour — image is too busy. Bigger flat areas would speed it up dramatically.` })
+  else if (metrics.adjacencyDiffRate < 0.30) flags.push({ kind: 'good', text: `Only ${(metrics.adjacencyDiffRate * 100).toFixed(0)}% of adjacent pairs differ — chunky, paint-friendly composition.` })
+  if (metrics.regionCount < 180) flags.push({ kind: 'good', text: `${metrics.regionCount} regions — a brisk, focused paint. Fits the "introductory tier" target.` })
+  else if (metrics.regionCount > 300) flags.push({ kind: 'bad', text: `${metrics.regionCount} regions — this is on the long side. Consider reducing the source palette or simplifying detail.` })
+  return flags
+}
+
+function run() {
+  const cells = Math.max(500, Math.min(30000, parseInt(cellsInput.value, 10) || 4000))
+  const palette = Math.max(4, Math.min(32, parseInt(paletteInput.value, 10) || 16))
+
+  // Draw source onto its canvas at native size (capped) for visual
+  // reference. Pixel-art looks correct because of image-rendering:pixelated.
+  const srcMaxDim = 600
+  const ratio = Math.min(srcMaxDim / currentImage.naturalWidth, srcMaxDim / currentImage.naturalHeight, 1)
+  sourceCanvas.width = Math.round(currentImage.naturalWidth * ratio)
+  sourceCanvas.height = Math.round(currentImage.naturalHeight * ratio)
+  const sctx = sourceCanvas.getContext('2d')
+  sctx.imageSmoothingEnabled = false
+  sctx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height)
+  sctx.drawImage(currentImage, 0, 0, sourceCanvas.width, sourceCanvas.height)
+
+  // Build an image-data buffer at native source resolution for sampling.
+  const sampleCanvas = document.createElement('canvas')
+  sampleCanvas.width = currentImage.naturalWidth
+  sampleCanvas.height = currentImage.naturalHeight
+  const sampleCtx = sampleCanvas.getContext('2d')
+  sampleCtx.imageSmoothingEnabled = false
+  sampleCtx.drawImage(currentImage, 0, 0)
+  const imageData = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height)
+
+  // Pick cols/rows from target cell count + image aspect, same rule
+  // as diamond-painting-puzzle.js.
+  const aspect = currentImage.naturalWidth / currentImage.naturalHeight
+  const cols = Math.max(8, Math.round(Math.sqrt(cells * aspect)))
+  const rows = Math.max(8, Math.round(cells / cols))
+
+  // Quantise.
+  const samples = samplePixels(imageData, Math.min(8000, (imageData.data.length / 4) | 0))
+  const pal = createPalette(samples, palette)
+  const grid = buildGrid(imageData, cols, rows, pal)
+  const metrics = analyseRegions(grid, cols, rows)
+
+  // Render quantised preview at the cell grid resolution (no smoothing)
+  // so the player can see what they'd actually be painting.
+  placeholder.style.display = 'none'
+  quantCanvas.width = cols
+  quantCanvas.height = rows
+  const qctx = quantCanvas.getContext('2d')
+  const qData = qctx.createImageData(cols, rows)
+  for (let i = 0; i < cols * rows; i++) {
+    const p = pal[grid[i]]
+    qData.data[i * 4] = p[0]
+    qData.data[i * 4 + 1] = p[1]
+    qData.data[i * 4 + 2] = p[2]
+    qData.data[i * 4 + 3] = 255
+  }
+  qctx.putImageData(qData, 0, 0)
+  // Stretch the canvas display so the cells are visible.
+  quantCanvas.style.width = `${Math.min(sourceCanvas.width, 600)}px`
+  quantCanvas.style.height = 'auto'
+
+  // Predicted time.
+  const tSeconds = metrics.regionCount * (2.0 + palette * 0.05)
+  const flags = judge(metrics, tSeconds)
+
+  // Render metrics.
+  metricsEl.innerHTML = `
+    <div class="row"><span class="k">Image</span><span class="v">${currentImage.naturalWidth}×${currentImage.naturalHeight} (${aspect.toFixed(2)} aspect)</span></div>
+    <div class="row"><span class="k">Cell grid</span><span class="v">${cols}×${rows} = ${cols * rows} cells</span></div>
+    <div class="row"><span class="k">Palette size</span><span class="v">${palette}</span></div>
+    <div class="row"><span class="k">Regions</span><span class="v">${metrics.regionCount}</span></div>
+    <div class="row"><span class="k">Largest region</span><span class="v">${metrics.largest} cells (${(metrics.largestFraction * 100).toFixed(1)}%)</span></div>
+    <div class="row"><span class="k">Isolated singletons</span><span class="v">${metrics.singletons}</span></div>
+    <div class="row"><span class="k">Adjacency diff rate</span><span class="v">${(metrics.adjacencyDiffRate * 100).toFixed(1)}%</span></div>
+  `
+
+  predEl.style.display = 'block'
+  predTimeEl.textContent = fmtTime(tSeconds)
+  predNoteEl.innerHTML = flags.length === 0
+    ? `<div class="judgement ok">No strong signals either way — image should play in the predicted range.</div>`
+    : flags.map((f) => `<div class="judgement ${f.kind}">${f.text}</div>`).join('')
+}
+</script>
+</body>
+</html>
