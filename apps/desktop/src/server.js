@@ -8,15 +8,23 @@
 // caches behave normally.
 //
 // Routes (in order of precedence per request):
-//   /api/*        -> offline-pack/api/<rest>.json (snapshot from xefig.com)
-//   /cdn/*        -> offline-pack/cdn/<rest>     (images pulled from R2)
+//   /api/puzzles/* -> offline-pack first; on a miss, proxy the live
+//                     origin (XEFIG_API, default xefig.com) and stage
+//                     the result into the pack. This is what lets the
+//                     desktop client play the full daily archive online
+//                     without a pre-pulled snapshot — and replay it
+//                     offline afterwards. Offline/down: falls back to
+//                     the today.json alias so the launcher never wedges.
+//   /api/*         -> offline-pack/api/<rest>.json (snapshot)
+//   /cdn/*         -> offline-pack first; on a miss, proxy + stage from
+//                     the live CDN, same as puzzles.
 //   /sw-*.js      -> stubbed empty SW so the bundle's registration call
 //                    doesn't 404 (real SW caching is unnecessary when
 //                    everything's already on localhost)
 //   /*            -> dist-runtime/<rest>          (built web app)
 //   404 fallback  -> dist-runtime/index.html      (SPA-style)
 //
-// Endpoints the snapshot doesn't cover (sync, leaderboard, telemetry,
+// Endpoints we deliberately don't proxy yet (sync, leaderboard, telemetry,
 // contact form) return 204 No Content so the bundle's "fire-and-forget"
 // calls don't error out and trigger retries.
 
@@ -27,6 +35,11 @@ const path = require('path')
 const DESKTOP_ROOT = path.join(__dirname, '..')
 const DIST = path.join(DESKTOP_ROOT, 'dist-runtime')
 const PACK = path.join(DESKTOP_ROOT, 'offline-pack')
+
+// Live origin to proxy pack-misses against. Mirrors pull-puzzles.mjs's
+// override (XEFIG_API / API) so a beta origin can be targeted the same
+// way. Pack-resident content never touches this — only misses do.
+const API = (process.env.XEFIG_API || process.env.API || 'https://xefig.com').replace(/\/+$/, '')
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -81,6 +94,30 @@ function sendFile(filePath, res, cacheHeader) {
   })
 }
 
+// Proxy a pack-miss to the live origin, stream it back to the renderer,
+// and stage it into offline-pack/ on the way through — the runtime
+// equivalent of scripts/pull-puzzles.mjs. The first online play of any
+// archive day or asset therefore makes it offline-replayable forever.
+// Throws on any network/upstream failure so the caller can run its own
+// fallback (today.json alias for puzzles, 404 for assets).
+async function proxyAndCache({ res, upstreamPath, cacheFile, contentType, cacheHeader }) {
+  const url = `${API}${upstreamPath}`
+  process.stderr.write(`[server] proxy -> ${url}\n`)
+  const upstream = await fetch(url)
+  if (!upstream.ok) throw new Error(`upstream ${upstream.status}`)
+  const buf = Buffer.from(await upstream.arrayBuffer())
+  // Stage before responding so the bytes we serve are exactly the bytes
+  // we persisted. A write failure (read-only install dir, full disk) is
+  // non-fatal — we still serve the freshly fetched copy this session.
+  try {
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
+    fs.writeFileSync(cacheFile, buf)
+  } catch (err) {
+    process.stderr.write(`[server] cache write failed for ${cacheFile}: ${err.message}\n`)
+  }
+  send(res, 200, buf, contentType, cacheHeader)
+}
+
 // Cache /cdn assets aggressively in the browser — the bundle's puzzle
 // JSON carries a ?v=<timestamp> on every image URL that already busts
 // on regeneration, so the browser-cached copy is always content-true.
@@ -121,7 +158,7 @@ function captureDiamondLog(req, res) {
   })
 }
 
-function handleApi(req, res) {
+async function handleApi(req, res) {
   // Capture diamond paint telemetry to local files for the demo
   // timing analysis. Same 204 behaviour the bundle expects; the body
   // just lands on disk instead of disappearing.
@@ -143,25 +180,44 @@ function handleApi(req, res) {
   if (lookup && fs.existsSync(lookup)) {
     return sendFile(lookup, res)
   }
-  // Fall back to today.json for any unknown /api/puzzles/<date>.
-  // The bundle fetches the actual calendar date (e.g. /api/puzzles/2026-05-23)
-  // and our pack only holds the dates we've pulled — so on any new day
-  // the request would 404 and the launcher would wedge on "Failed to
-  // load today's puzzles". The today.json alias was put there by
-  // pull-puzzles.mjs precisely for this; route to it now.
-  if (req.url.startsWith('/api/puzzles/')) {
-    const todayAlias = path.join(PACK, 'api', 'puzzles', 'today.json')
-    if (fs.existsSync(todayAlias)) return sendFile(todayAlias, res)
+
+  // Pack miss on a puzzle date: proxy the live origin and stage the
+  // result. This is what lets the desktop client play the full daily
+  // archive (and any not-yet-pulled day) without a pre-staged pack —
+  // the free online layer the Steam demo hands out. `lookup` is already
+  // the right on-disk target (offline-pack/api/puzzles/<date>.json).
+  if (lookup && req.url.startsWith('/api/puzzles/')) {
+    try {
+      await proxyAndCache({ res, upstreamPath: '/api/' + cleanPath(apiPath), cacheFile: lookup, contentType: MIME['.json'] })
+      return
+    } catch (err) {
+      // Offline or upstream down. Fall back to today.json — the newest
+      // pulled day — so the launcher always has something to show
+      // rather than wedging on "Failed to load today's puzzles".
+      process.stderr.write(`[server] puzzle proxy failed (${err.message}); falling back to today.json\n`)
+      const todayAlias = path.join(PACK, 'api', 'puzzles', 'today.json')
+      if (fs.existsSync(todayAlias)) return sendFile(todayAlias, res)
+    }
   }
   send(res, 404, JSON.stringify({ error: 'not in offline pack', path: req.url }), MIME['.json'])
 }
 
-function handleCdn(req, res) {
+async function handleCdn(req, res) {
   const lookup = safeJoin(PACK, req.url)
-  if (lookup && fs.existsSync(lookup)) {
+  if (!lookup) return send(res, 400, 'bad path', 'text/plain')
+  if (fs.existsSync(lookup)) {
     return sendFile(lookup, res, CDN_CACHE)
   }
-  send(res, 404, 'asset not staged', 'text/plain')
+  // Pack miss: proxy the asset from the live CDN and stage it under the
+  // same path. cleanPath strips the ?v= cachebust so the on-disk name is
+  // stable across redraws; `lookup` is the resolved, traversal-checked
+  // write target.
+  try {
+    await proxyAndCache({ res, upstreamPath: '/' + cleanPath(req.url), cacheFile: lookup, contentType: mimeFor(lookup), cacheHeader: CDN_CACHE })
+  } catch (err) {
+    process.stderr.write(`[server] cdn proxy failed for ${req.url}: ${err.message}\n`)
+    send(res, 404, 'asset not staged', 'text/plain')
+  }
 }
 
 function handleStatic(req, res) {
@@ -202,7 +258,7 @@ function handleDesktopAsset(req, res) {
 
 function start() {
   return new Promise((resolve) => {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       // Log every request through nw.js's stderr so we can grep
       // launch logs for "request not in pack" symptoms without
       // attaching a debugger.
@@ -213,8 +269,8 @@ function start() {
       }
       try {
         if (handleDesktopAsset(req, res)) return
-        if (req.url.startsWith('/api/')) return handleApi(req, res)
-        if (req.url.startsWith('/cdn/')) return handleCdn(req, res)
+        if (req.url.startsWith('/api/')) return await handleApi(req, res)
+        if (req.url.startsWith('/cdn/')) return await handleCdn(req, res)
         return handleStatic(req, res)
       } catch (err) {
         send(res, 500, String(err), 'text/plain')
