@@ -41,6 +41,12 @@ const PACK = path.join(DESKTOP_ROOT, 'offline-pack')
 // way. Pack-resident content never touches this — only misses do.
 const API = (process.env.XEFIG_API || process.env.API || 'https://xefig.com').replace(/\/+$/, '')
 
+// Bespoke curated content (the paid layer's hand-made themed areas).
+// Committed with the build, not gitignored like offline-pack/ — and
+// never proxied. A demo area points its puzzleDate at a curated id and
+// CURATED/<id>/puzzle.json shadows the daily pack/proxy for that id.
+const CURATED = path.join(DESKTOP_ROOT, 'curated')
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -174,8 +180,20 @@ async function handleApi(req, res) {
     }
   }
 
-  // Otherwise look up offline-pack/api/<rest>.json.
   const apiPath = req.url.slice('/api/'.length)
+
+  // Curated content shadows everything. When a demo area points its
+  // puzzleDate at a curated id, CURATED/<id>/puzzle.json wins over the
+  // daily pack/proxy — this is the path hand-made themed artwork drops
+  // into, decoupled from the daily LLM dates. (Authored via
+  // scripts/build-curated.mjs.)
+  if (req.url.startsWith('/api/puzzles/')) {
+    const id = cleanPath(req.url.slice('/api/puzzles/'.length))
+    const curatedJson = safeJoin(CURATED, `${id}/puzzle.json`)
+    if (curatedJson && fs.existsSync(curatedJson)) return sendFile(curatedJson, res)
+  }
+
+  // Otherwise look up offline-pack/api/<rest>.json.
   const lookup = safeJoin(path.join(PACK, 'api'), apiPath + '.json')
   if (lookup && fs.existsSync(lookup)) {
     return sendFile(lookup, res)
@@ -203,6 +221,16 @@ async function handleApi(req, res) {
 }
 
 async function handleCdn(req, res) {
+  // Curated assets live alongside their manifest in apps/desktop/curated/,
+  // committed with the build and never proxied. /cdn/curated/<id>/<file>
+  // maps straight onto curated/<id>/<file>.
+  if (req.url.startsWith('/cdn/curated/')) {
+    const rel = cleanPath(req.url).slice('cdn/'.length) // "curated/<id>/<file>"
+    const target = safeJoin(DESKTOP_ROOT, rel)
+    if (target && fs.existsSync(target)) return sendFile(target, res, CDN_CACHE)
+    return send(res, 404, 'curated asset missing', 'text/plain')
+  }
+
   const lookup = safeJoin(PACK, req.url)
   if (!lookup) return send(res, 400, 'bad path', 'text/plain')
   if (fs.existsSync(lookup)) {
