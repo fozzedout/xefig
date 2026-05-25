@@ -107,6 +107,40 @@ function demoOverrideArgs(modeSlug, raw) {
   return {}
 }
 
+// Desktop (nw.js Steam shell) detection. The shell lands the window on
+// /?shell=desktop; we persist it to sessionStorage so in-app navigations
+// and reloads keep the flag. The website never sets it, so every
+// shell-only branch below stays dormant in the browser.
+function isDesktopShell() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('shell') === 'desktop') {
+      sessionStorage.setItem('xefig:shell', 'desktop')
+      return true
+    }
+    return sessionStorage.getItem('xefig:shell') === 'desktop'
+  } catch {
+    return false
+  }
+}
+
+// Curated/demo areas for the desktop map rail, read once from the
+// embedded server's /demo-config.json. Only fetched in shell mode.
+let __xefigAreas = null
+async function fetchDemoAreas() {
+  if (__xefigAreas) return __xefigAreas
+  try {
+    const res = await fetch('/demo-config.json', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`demo-config ${res.status}`)
+    const cfg = await res.json()
+    __xefigAreas = Array.isArray(cfg.areas) ? cfg.areas : []
+  } catch (err) {
+    console.warn('[shell] demo-config load failed', err)
+    __xefigAreas = []
+  }
+  return __xefigAreas
+}
+
 // In-game helper. Loaded on demand alongside the puzzle engine so the
 // homepage bundle stays small. The same module powers every mode's
 // tutorial / hint flow.
@@ -317,6 +351,10 @@ const state = {
   sourceMode: 'today',
   archiveDate: getIsoDate(new Date()),
   puzzle: null,
+  // Desktop shell only: the curated area currently selected in the map
+  // rail ({ id, difficulties }) or null for the live daily (lighthouse).
+  // Drives the per-mode difficulty override at puzzle launch.
+  shellArea: null,
 }
 
 let puzzle = null
@@ -2132,6 +2170,11 @@ function renderLauncher() {
   const todayDate = getIsoDate(new Date())
   state.sourceMode = 'today'
   state.archiveDate = todayDate
+  // A fresh launcher entry always lands on the live daily (lighthouse),
+  // so clear any rail area selection — otherwise its difficulty override
+  // would leak onto today's puzzle. (Re-selecting an area in the rail
+  // sets it again; preserving the area across a return is increment 2.)
+  state.shellArea = null
   state.gameMode = getGameModeOfDay(todayDate)
   state.difficulty = state.difficulty || 'medium'
 
@@ -2238,13 +2281,19 @@ function renderLauncher() {
   const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#50d070', polygram: '#a060f0', diamond: '#e070a0' }
 
   const pageEl = document.querySelector('#page-play')
-  pageEl.innerHTML = `
-    <main class="slice-launcher">
-      <div id="slice-container" class="slice-container">
-        <div class="slice" style="--flex:1;opacity:0"></div>
-      </div>
-    </main>
-  `
+  const shell = isDesktopShell()
+  const launcherHtml = `
+      <main class="slice-launcher">
+        <div id="slice-container" class="slice-container">
+          <div class="slice" style="--flex:1;opacity:0"></div>
+        </div>
+      </main>`
+  // Desktop shell: the persistent map rail sits beside the slice stage.
+  // On the website `shell` is false and the launcher renders exactly as
+  // before.
+  pageEl.innerHTML = shell
+    ? `<div class="desktop-shell"><aside class="map-rail" id="map-rail"></aside>${launcherHtml}</div>`
+    : launcherHtml
 
   const container = pageEl.querySelector('#slice-container')
 
@@ -2365,6 +2414,74 @@ function renderLauncher() {
     })
   }
 
+  // Render one target's puzzle into the slice stage (used for the initial
+  // load and for every rail switch in desktop shell mode). Re-renders the
+  // slices in place; the container element, its ResizeObserver, and the
+  // one-time prefetch set up below all persist across switches.
+  const renderStage = (payload) => {
+    state.puzzle = payload
+    container.innerHTML = renderSlices(payload)
+    bindSliceEvents()
+    computeSliceCenter(container)
+    upgradeSliceImagesToFull(container)
+    renderDiamondGridThumbnails(container, payload?.date || todayDate)
+  }
+
+  // Desktop shell map rail: curated area pieces + the lighthouse/library/
+  // settings utility cluster. Areas come from the embedded server's
+  // demo-config. Selecting a target just re-stages the slices; the rail
+  // itself stays put, so it doubles as navigation, breadcrumb, and the
+  // always-available way home.
+  const buildRail = async () => {
+    const rail = pageEl.querySelector('#map-rail')
+    if (!rail) return
+    const areas = await fetchDemoAreas()
+    const TIER = { classroom: '#50d070', school: '#40d0f0', outside: '#f0a040' }
+    rail.innerHTML = `
+      <div class="rail-brand">Xefig</div>
+      <div class="rail-areas">
+        ${areas.map((a, i) => `
+          <button class="rail-piece" data-area="${a.id}" style="--accent:${TIER[a.id] || '#50d070'}">
+            <span class="rp-tier">Area ${i + 1}</span>
+            <span class="rp-title">${a.title}</span>
+            <span class="rp-sub">${a.subtitle || ''}</span>
+          </button>`).join('')}
+        <div class="rail-piece rail-locked" style="--accent:#5a5a66">
+          <span class="rp-tier">\u{1F512} Full game</span>
+          <span class="rp-title">More worlds</span>
+        </div>
+      </div>
+      <div class="rail-utils">
+        <button class="rail-util rail-util--sel" data-util="lighthouse"><span class="ru-ico">\u{1F5FC}</span><span>Lighthouse</span></button>
+        <button class="rail-util" data-util="library"><span class="ru-ico">\u{1F4DA}</span><span>Library</span></button>
+        <button class="rail-util" data-util="settings"><span class="ru-ico">⚙</span><span>Settings</span></button>
+      </div>`
+
+    const clearSel = () => rail.querySelectorAll('.rail-piece, .rail-util').forEach((b) => b.classList.remove('rail-sel', 'rail-util--sel'))
+    const lighthouseBtn = rail.querySelector('[data-util="lighthouse"]')
+
+    rail.querySelectorAll('.rail-piece[data-area]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const area = areas.find((a) => a.id === btn.dataset.area)
+        if (!area) return
+        state.shellArea = { id: area.id, difficulties: area.difficulties || {} }
+        clearSel(); btn.classList.add('rail-sel')
+        try { renderStage(await fetchPuzzlePayload({ date: area.puzzleDate })) }
+        catch (err) { console.warn('[shell] area load failed', err) }
+      })
+    })
+    lighthouseBtn.addEventListener('click', async () => {
+      state.shellArea = null
+      clearSel(); lighthouseBtn.classList.add('rail-util--sel')
+      try { renderStage(await fetchPuzzlePayload()) }
+      catch (err) { console.warn('[shell] today load failed', err) }
+    })
+    // Library + Settings reuse the app's existing pages for now; the
+    // in-stage (rail-stays) versions are the next increment.
+    rail.querySelector('[data-util="library"]').addEventListener('click', () => { if (window.switchToPage) window.switchToPage('archive') })
+    rail.querySelector('[data-util="settings"]').addEventListener('click', () => { if (window.switchToPage) window.switchToPage('settings') })
+  }
+
   ; (async () => {
     try {
       // Demo back-loop: when the player exits a puzzle (or the launcher
@@ -2386,11 +2503,10 @@ function renderLauncher() {
       // — so the launcher is the only entry point that touches this.
       const demo = await loadDemoConfig()
       const payload = await fetchPuzzlePayload(demo?.area?.puzzleDate ? { date: demo.area.puzzleDate } : undefined)
-      state.puzzle = payload
-      container.innerHTML = renderSlices(payload)
-      bindSliceEvents()
-      computeSliceCenter(container)
-      upgradeSliceImagesToFull(container)
+      renderStage(payload)
+
+      // Desktop shell: build the persistent map rail beside the stage.
+      if (shell) await buildRail()
 
       if (demo?.area && demo.modeSlug) {
         // Demo timing flow always starts fresh — wipe any persisted
@@ -2481,9 +2597,6 @@ function renderLauncher() {
       } else {
         setTimeout(triggerPrefetch, 800)
       }
-
-      // Render diamond grid thumbnails
-      renderDiamondGridThumbnails(container, payload?.date || todayDate)
     } catch {
       container.innerHTML = `
         <div style="flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;">
@@ -6660,13 +6773,20 @@ function renderGame({ resumeRun = null, testMode = false } = {}) {
               : gameMode === GAME_MODE_DIAMOND ? 'diamond'
                 : 'jigsaw'
         const PuzzleClass = await puzzleLoaders[loaderKey]()
-        // Read + consume the demo override in one breath — we want the
-        // launch to apply the right grid/shard/cells, AND we want
-        // subsequent puzzle launches (after a back-from-completion or
-        // a restart from the menu) to behave normally without the
-        // override re-firing.
-        const demoOverrides = __xefigDemo && __xefigDemo.modeSlug === loaderKey ? demoOverrideArgs(loaderKey, __xefigDemo.overrides) : {}
-        if (Object.keys(demoOverrides).length > 0) __xefigDemo = null
+        // Resolve the per-mode difficulty override. Two sources:
+        //   1. __xefigDemo — the one-shot ?demo= harness launch; consumed
+        //      (cleared) after firing so later launches behave normally.
+        //   2. state.shellArea — the desktop rail's selected area; PERSISTS
+        //      so every mode the player opens within that area gets its
+        //      override. On the website both are null, so no override.
+        let overrideRaw = null
+        if (__xefigDemo && __xefigDemo.modeSlug === loaderKey) {
+          overrideRaw = __xefigDemo.overrides
+          __xefigDemo = null
+        } else if (state.shellArea && state.shellArea.difficulties) {
+          overrideRaw = state.shellArea.difficulties[loaderKey]
+        }
+        const demoOverrides = overrideRaw ? demoOverrideArgs(loaderKey, overrideRaw) : {}
         const puzzleConfig = {
           container: mount,
           imageUrl: state.imageUrl,

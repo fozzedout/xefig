@@ -61,7 +61,10 @@ async function boot() {
   //                            (image/timing testing)
   // Each launches puzzles via /?demo=area-mode, which the web bundle
   // resolves to a specific puzzle + difficulty overrides.
-  let landing = url
+  // Default landing is the bundle in desktop shell-mode (?shell=desktop):
+  // the launcher renders the persistent map rail beside the slices. The
+  // standalone hub/harness pages remain available via their env switches.
+  let landing = `${url}?shell=desktop`
   if (process.env.XEFIG_HUB) landing = `${url}hub`
   else if (process.env.XEFIG_DEMO_HARNESS) landing = `${url}demo-harness`
   window.location.href = landing

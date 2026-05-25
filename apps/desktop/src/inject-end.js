@@ -84,9 +84,13 @@
 
   function sync() {
     const inLauncher = !!document.querySelector('.slice-launcher')
+    // The desktop shell-mode launcher carries its own persistent map rail,
+    // which is the navigation + way home — so this fallback button is
+    // redundant there and would just clutter the corner.
+    const hasRail = !!document.querySelector('.map-rail')
     let demoSession = false
     try { demoSession = sessionStorage.getItem('xefig:demo-session') === '1' } catch { /* unavailable */ }
-    const show = inLauncher && !demoSession
+    const show = inLauncher && !demoSession && !hasRail
     if (show) ensureBtn().style.display = 'block'
     else if (btn) btn.style.display = 'none'
   }

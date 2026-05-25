@@ -1939,6 +1939,113 @@ h1 {
   transition: flex 0.8s var(--ease-expo);
 }
 
+/* ============================================================
+   Desktop shell — persistent map rail beside the slice stage.
+   Only present in the nw.js Steam build (isDesktopShell()); the
+   website never renders .desktop-shell, so these rules lie dormant.
+   The rail is a flex child, so .slice-launcher is re-cast from its
+   absolute full-bleed fill into the flex remainder.
+   ============================================================ */
+.desktop-shell {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: #0a0a0f;
+}
+.desktop-shell .slice-launcher {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+.map-rail {
+  position: relative;
+  flex: 0 0 280px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.1rem 0.85rem;
+  overflow-y: auto;
+  background: rgba(8, 8, 12, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f0f0f4;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.rail-brand {
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.35rem 0.4rem;
+}
+.rail-areas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.rail-piece {
+  appearance: none;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0.7rem 0.8rem 0.7rem 0.95rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  transition: background 130ms ease, border-color 130ms ease, transform 130ms ease;
+}
+.rail-piece::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent, #50d070);
+}
+.rail-piece:hover { background: rgba(255, 255, 255, 0.09); transform: translateX(2px); }
+.rail-piece.rail-sel { border-color: var(--accent, #50d070); background: rgba(255, 255, 255, 0.11); }
+.rail-piece .rp-tier { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em; opacity: 0.55; }
+.rail-piece .rp-title { font-size: 1rem; font-weight: 600; }
+.rail-piece .rp-sub { font-size: 0.78rem; color: var(--accent, #50d070); font-weight: 500; }
+.rail-piece.rail-locked { cursor: default; opacity: 0.5; }
+.rail-piece.rail-locked:hover { background: rgba(255, 255, 255, 0.045); transform: none; }
+.rail-utils {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.rail-util {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  transition: background 120ms ease;
+}
+.rail-util:hover { background: rgba(255, 255, 255, 0.08); }
+.rail-util .ru-ico { width: 1.3rem; text-align: center; }
+.rail-util--sel { background: rgba(240, 208, 64, 0.14); color: #f5e6a0; }
+
 .slice-image {
   position: absolute;
   inset: 0;
