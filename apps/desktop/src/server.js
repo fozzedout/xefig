@@ -270,6 +270,10 @@ const DEMO_CONFIG = path.join(DESKTOP, 'demo-config.json')
 // false otherwise.
 function handleDesktopAsset(req, res) {
   const map = {
+    '/hub': path.join(SRC, 'world.html'),
+    '/hub.html': path.join(SRC, 'world.html'),
+    '/world': path.join(SRC, 'world.html'),
+    '/world.html': path.join(SRC, 'world.html'),
     '/demo-harness': path.join(SRC, 'demo-harness.html'),
     '/demo-harness.html': path.join(SRC, 'demo-harness.html'),
     '/demo-config.json': DEMO_CONFIG,

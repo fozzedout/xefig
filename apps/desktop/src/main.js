@@ -55,11 +55,15 @@ async function boot() {
   // bundle's relative /api/* fetches and service worker registration
   // both resolve against a real same-origin server.
   //
-  // Demo timing harness: when XEFIG_DEMO_HARNESS=1 in the env, land on
-  // the 15-button difficulty matrix instead of the normal launcher.
-  // Each button on the harness navigates to /?demo=area-mode which
-  // main.js then resolves to a specific puzzle + overrides.
-  const landing = process.env.XEFIG_DEMO_HARNESS ? `${url}demo-harness` : url
+  // Two demo entry points, both reachable in-app (they cross-link):
+  //   XEFIG_HUB=1           -> /hub, the world-map front door (gameplay)
+  //   XEFIG_DEMO_HARNESS=1  -> /demo-harness, the 15-button timing matrix
+  //                            (image/timing testing)
+  // Each launches puzzles via /?demo=area-mode, which the web bundle
+  // resolves to a specific puzzle + difficulty overrides.
+  let landing = url
+  if (process.env.XEFIG_HUB) landing = `${url}hub`
+  else if (process.env.XEFIG_DEMO_HARNESS) landing = `${url}demo-harness`
   window.location.href = landing
 }
 

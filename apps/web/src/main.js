@@ -2367,14 +2367,16 @@ function renderLauncher() {
 
   ; (async () => {
     try {
-      // Demo-harness back-loop: when the player exits a puzzle (or
-      // the launcher is otherwise re-rendered) and a sessionStorage
-      // flag from /demo-harness is present without an active ?demo=
-      // param, bounce back to the harness — that's the navigation hub
-      // for the timing run, not the production day menu.
+      // Demo back-loop: when the player exits a puzzle (or the launcher
+      // is otherwise re-rendered) and the demo-session flag is present
+      // without an active ?demo= param, bounce back to whichever demo
+      // front door launched this session — the world hub (/hub) or the
+      // timing harness — instead of the production day menu. The return
+      // target is set by the launching page; default is the harness so
+      // older launch paths keep working.
       try {
         if (sessionStorage.getItem('xefig:demo-session') === '1' && !new URLSearchParams(window.location.search).has('demo')) {
-          window.location.href = '/demo-harness'
+          window.location.href = sessionStorage.getItem('xefig:demo-return') || '/demo-harness'
           return
         }
       } catch { /* sessionStorage may be unavailable — fall through. */ }
