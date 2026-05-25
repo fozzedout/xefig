@@ -600,6 +600,23 @@ export class DiamondPaintingPuzzle {
       this.swatches.push(btn)
     }
 
+    // Threshold-based accumulator so trackpads (lots of small deltas)
+    // and mousewheels (one ~100px tick) both advance one colour per
+    // perceived scroll click.
+    this._paletteWheelAccum = 0
+    bar.addEventListener('wheel', (e) => {
+      if (!this.palette || this.palette.length === 0) return
+      e.preventDefault()
+      this._paletteWheelAccum += e.deltaY
+      const STEP = 40
+      if (Math.abs(this._paletteWheelAccum) < STEP) return
+      const dir = this._paletteWheelAccum > 0 ? 1 : -1
+      this._paletteWheelAccum = 0
+      const n = this.palette.length
+      const next = ((this.selectedColor + dir) % n + n) % n
+      this.selectColor(next)
+    }, { passive: false })
+
     return bar
   }
 
@@ -851,14 +868,12 @@ export class DiamondPaintingPuzzle {
         this.fills[idx] = this.selectedColor
         this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
       }
-      this.redrawGridLines()
       if (!this.muted) playBuzzer()
       setTimeout(() => {
         for (const idx of allIdx) {
           this.fills[idx] = currentFill
           this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
         }
-        this.redrawGridLines()
         this.filling = false
       }, 1000)
       return
@@ -883,7 +898,6 @@ export class DiamondPaintingPuzzle {
         this.fills[idx] = this.selectedColor
         this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
       }
-      this.redrawGridLines()
       this.finishFill()
       return
     }
@@ -959,7 +973,6 @@ export class DiamondPaintingPuzzle {
         this.fills[idx] = fillColor
         this.drawCell(idx % this.cols, Math.floor(idx / this.cols))
       }
-      this.redrawGridLines()
       i++
       const delay = Math.max(0, 100 - i * 5)
       this._fillTimer = setTimeout(step, delay)
@@ -1003,7 +1016,7 @@ export class DiamondPaintingPuzzle {
 
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
-        this.drawCell(col, row)
+        this.drawCell(col, row, false)
       }
     }
 
@@ -1050,7 +1063,7 @@ export class DiamondPaintingPuzzle {
     ctx.stroke()
   }
 
-  drawCell(col, row) {
+  drawCell(col, row, withBorder = true) {
     const ctx = this.ctx
     const cs = CELL_PX
     const x = col * cs
@@ -1098,6 +1111,24 @@ export class DiamondPaintingPuzzle {
       ctx.lineTo(x + m, y + cs - m)
       ctx.stroke()
       ctx.lineCap = 'butt'
+    }
+
+    // After an incremental fill, restore just this cell's gridline
+    // borders. Clip to the cell so the stroke only covers the inside
+    // half of each edge — the neighbour owns the outside half and its
+    // 0.12-alpha line from the initial drawGrid is untouched. Without
+    // the clip, each fill restrokes the neighbour's half too, stacking
+    // alpha and visibly darkening the grid until the next pan/zoom
+    // forces a full clearRect.
+    if (withBorder && this._showDetail) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(x, y, cs, cs)
+      ctx.clip()
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'
+      ctx.lineWidth = 0.5
+      ctx.strokeRect(x, y, cs, cs)
+      ctx.restore()
     }
   }
 
