@@ -2264,7 +2264,7 @@ function renderLauncher() {
           </div>
         `
       })
-      .join('') + `
+      .join('') + (shell ? '' : `
           <div class="slice slice-more" style="--flex: ${MORE_INACTIVE_FLEX};">
             <div class="slice-overlay"></div>
             <div class="slice-icon">
@@ -2275,7 +2275,7 @@ function renderLauncher() {
               </svg>
             </div>
             <div class="slice-title">More</div>
-          </div>`
+          </div>`)
   }
 
   const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#50d070', polygram: '#a060f0', diamond: '#e070a0' }
