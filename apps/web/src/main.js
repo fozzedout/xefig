@@ -156,10 +156,11 @@ async function buildRail() {
     <div class="rail-brand">Xefig</div>
     <div class="rail-areas">
       ${areas.map((a, i) => `
-        <button class="rail-piece" data-area="${a.id}" style="--accent:${TIER[a.id] || '#50d070'}">
+        <button class="rail-piece" data-area="${a.id}" data-area-date="${a.puzzleDate}" style="--accent:${TIER[a.id] || '#50d070'}">
           <span class="rp-tier">Area ${i + 1}</span>
           <span class="rp-title">${a.title}</span>
           <span class="rp-sub">${a.subtitle || ''}</span>
+          <span class="rp-pips">${['jigsaw', 'sliding', 'swap', 'polygram', 'diamond'].map((m) => `<i class="rp-pip" data-mode="${m}"></i>`).join('')}</span>
         </button>`).join('')}
       <div class="rail-piece rail-locked" style="--accent:#5a5a66">
         <span class="rp-tier">\u{1F512} Full game</span>
@@ -195,6 +196,7 @@ async function buildRail() {
 function updateRailSelection(pageName) {
   const rail = document.getElementById('map-rail')
   if (!rail) return
+  refreshRailPips()
   rail.querySelectorAll('.rail-piece, .rail-util').forEach((b) => b.classList.remove('rail-sel', 'rail-util--sel'))
   if (pageName === 'archive') { rail.querySelector('[data-util="library"]')?.classList.add('rail-util--sel'); return }
   if (pageName === 'settings') { rail.querySelector('[data-util="settings"]')?.classList.add('rail-util--sel'); return }
@@ -205,6 +207,19 @@ function updateRailSelection(pageName) {
     }
     rail.querySelector('[data-util="lighthouse"]')?.classList.add('rail-util--sel')
   }
+}
+
+// Light up each area piece's per-mode completion pips. Driven off the same
+// completed-runs store the launcher uses, and refreshed on every page
+// switch (updateRailSelection) so finishing a puzzle and returning shows
+// progress immediately.
+function refreshRailPips() {
+  const rail = document.getElementById('map-rail')
+  if (!rail) return
+  rail.querySelectorAll('.rail-piece[data-area-date]').forEach((piece) => {
+    const done = getCompletedModesForDate(piece.dataset.areaDate)
+    piece.querySelectorAll('.rp-pip').forEach((pip) => pip.classList.toggle('on', done.has(pip.dataset.mode)))
+  })
 }
 
 // In-game helper. Loaded on demand alongside the puzzle engine so the
