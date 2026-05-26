@@ -197,3 +197,45 @@ init runs first; the result is logged to the DevTools console.
   Steam listing is announced.
 - **Achievements / Cloud / DLC** — drop calls into `steam-bridge.js`
   with a default-false guard so they only fire on a real init.
+
+## Steam-native integration (bridge)
+
+Steam-native ops run in the **boot process** (where `SteamAPI_Init` ran),
+not the renderer. The web bundle can't reach `greenworks` directly, so it
+POSTs to the embedded server, which forwards to `steam-bridge.js`:
+
+| Bundle call (`notifySteam`) | Server route                  | Bridge op                |
+| --------------------------- | ----------------------------- | ------------------------ |
+| `presence {text}`           | `POST /api/steam/presence`    | `setRichPresence`        |
+| `achievement {id}`          | `POST /api/steam/achievement` | `unlockAchievement`      |
+| `leaderboard {name, score}` | `POST /api/steam/leaderboard` | `submitLeaderboardScore` |
+| —                           | `GET  /api/steam/status`      | `status` → `{ready,user}`|
+
+Every op no-ops without greenworks (and `notifySteam` is a no-op on the
+web / outside shell mode), so all calls are safe fire-and-forget.
+
+**Hooks already wired (bundle, shell mode only):**
+- Rich presence: `Solving <Mode>` on puzzle start; `Browsing puzzles` on
+  the launcher.
+- On completion (`recordCompletedRun`): unlock `complete_<mode>` and — for
+  the live daily only (not curated areas) — submit to the `daily_<mode>`
+  native leaderboard.
+
+**To activate with a real app, configure in the Steamworks partner site:**
+- Achievements `complete_jigsaw`, `complete_sliding`, `complete_swap`,
+  `complete_polygram`, `complete_diamond` (extend as needed).
+- Leaderboards `daily_jigsaw` … `daily_diamond` (faster is better; score
+  is elapsed **seconds**).
+- A rich-presence `status` token (or map `steam_display`).
+
+**Leaderboards (two populations).** The unified xefig daily board already
+works: the embedded server proxies `/api/leaderboard/*` live to the origin
+(desktop shares the website's board), and the Steam screen name is seeded
+into the xefig profile name on first launch. The `daily_<mode>` native
+Steam leaderboard is the second, in-client population.
+
+**Cloud saves.** Handled by xefig's existing server sync, not Steam Cloud:
+the embedded server now proxies `/api/sync/*` live, so enabling sync in
+Settings gives cross-device saves via the same mechanism the website uses.
+(Steam Auto-Cloud over the nw.js localStorage leveldb is fragile, so it's
+intentionally not used.)

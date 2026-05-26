@@ -141,6 +141,22 @@ async function fetchDemoAreas() {
   return __xefigAreas
 }
 
+// Fire-and-forget Steam-native op via the embedded server (desktop shell
+// only). The server forwards to greenworks, which runs in the boot
+// process; it no-ops without greenworks, and this is a no-op on the web.
+// keepalive so it survives the navigation into a puzzle.
+function notifySteam(op, body) {
+  if (!isDesktopShell()) return
+  try {
+    fetch(`/api/steam/${op}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+      keepalive: true,
+    }).catch(() => { })
+  } catch { /* non-fatal */ }
+}
+
 // Desktop shell map rail — app chrome built once by initAppShell in shell
 // mode. Curated area pieces + a locked full-game piece (upsell) + the
 // lighthouse/library/settings cluster. Area + lighthouse re-enter the play
@@ -1245,6 +1261,15 @@ function recordCompletedRun(run) {
     puzzleDate,
     gameMode: mode,
   })
+
+  // Steam-native (desktop shell): unlock a per-mode completion achievement,
+  // and mirror the score onto a native Steam leaderboard for the live daily
+  // only — curated areas (state.shellArea set) don't post, mirroring the
+  // server-side rule that rejects scores for dates with no daily puzzle.
+  notifySteam('achievement', { id: `complete_${mode}` })
+  if (!state.shellArea) {
+    notifySteam('leaderboard', { name: `daily_${mode}`, score: Math.round(elapsedMs / 1000) })
+  }
 
   // Evict the full image from the SW cache, but only for puzzles
   // whose date isn't today — the launcher reuses the cached full
@@ -2530,7 +2555,10 @@ function renderLauncher() {
         : (demo?.area?.puzzleDate ? { date: demo.area.puzzleDate } : undefined)
       const payload = await fetchPuzzlePayload(target)
       renderStage(payload)
-      if (shell) updateRailSelection('play')
+      if (shell) {
+        updateRailSelection('play')
+        notifySteam('presence', { text: state.shellArea ? 'Exploring an area' : 'Browsing puzzles' })
+      }
 
       if (demo?.area && demo.modeSlug) {
         // Demo timing flow always starts fresh — wipe any persisted
@@ -5056,6 +5084,8 @@ function renderPuzzleLoadError(overlay, { onRetry }) {
 function renderGame({ resumeRun = null, testMode = false } = {}) {
   const gameMode = normalizeGameMode(resumeRun?.gameMode || state.gameMode)
   state.gameMode = gameMode
+  // Steam rich presence (desktop shell): "Solving <Mode>".
+  notifySteam('presence', { text: `Solving ${MODE_LABELS[gameMode] || 'a puzzle'}` })
 
   // Test mode overrides image source and date with the bundled hero so
   // the run doesn't depend on the live puzzle pipeline. Persistence

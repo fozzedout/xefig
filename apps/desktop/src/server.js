@@ -31,6 +31,10 @@
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
+// Same module instance boot main.js init()'d, so greenworks state is
+// shared. The ops no-op when greenworks is absent (so this is safe to
+// require even in the web/test context).
+const steam = require('./steam-bridge')
 
 const DESKTOP_ROOT = path.join(__dirname, '..')
 const DIST = path.join(DESKTOP_ROOT, 'dist-runtime')
@@ -203,6 +207,23 @@ function captureDiamondLog(req, res) {
   })
 }
 
+// Steam-native ops bridge. The bundle (in shell mode) POSTs here on
+// completion / launch; we forward to greenworks, which runs in THIS (boot)
+// process where SteamAPI_Init ran. All no-op when greenworks is absent, so
+// the bundle's fire-and-forget calls are always safe.
+async function handleSteam(req, res) {
+  const op = cleanPath(req.url.slice('/api/steam/'.length))
+  if (op === 'status') return send(res, 200, JSON.stringify(steam.status()), MIME['.json'])
+  if (req.method !== 'POST') return send(res, 405, JSON.stringify({ ok: false }), MIME['.json'])
+  let body = {}
+  try { body = JSON.parse((await readBody(req)).toString('utf8') || '{}') } catch { /* tolerate */ }
+  let ok = false
+  if (op === 'achievement') ok = steam.unlockAchievement(body.id)
+  else if (op === 'presence') ok = steam.setRichPresence(body.text)
+  else if (op === 'leaderboard') ok = steam.submitLeaderboardScore(body.name, Number(body.score))
+  send(res, 200, JSON.stringify({ ok: !!ok }), MIME['.json'])
+}
+
 async function handleApi(req, res) {
   // Capture diamond paint telemetry to local files for the demo
   // timing analysis. Same 204 behaviour the bundle expects; the body
@@ -210,6 +231,9 @@ async function handleApi(req, res) {
   if (req.method === 'POST' && (req.url.startsWith('/api/diamond/session-log') || req.url.startsWith('/api/diamond/test-session-log'))) {
     return captureDiamondLog(req, res)
   }
+
+  // Steam-native ops (achievements, rich presence, native leaderboard).
+  if (req.url.startsWith('/api/steam/')) return handleSteam(req, res)
 
   // Live passthrough: leaderboard + sync go straight to the origin so the
   // desktop shares the website's unified boards and cross-device saves.

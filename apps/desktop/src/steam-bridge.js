@@ -60,6 +60,13 @@ function tryRequireGreenworks() {
   }
 }
 
+// Live handle set by init() on success. The ops below all no-op when
+// greenworks isn't loaded/initialised (degraded run, or the web build),
+// so callers never need to branch — they just fire and forget.
+let gw = null
+let ready = false
+let currentUser = null
+
 function init() {
   const appId = readAppId()
   writeAppIdFile(appId)
@@ -85,14 +92,15 @@ function init() {
         hint: 'Steam client not running, or steam_appid.txt mismatch.',
       }
     }
-    let user = null
+    gw = greenworks
+    ready = true
     try {
       const id = greenworks.getSteamId()
-      user = id?.screenName || id?.steamId || null
+      currentUser = id?.screenName || id?.steamId || null
     } catch {
       // Older greenworks builds expose this differently — non-fatal.
     }
-    return { ok: true, degraded: false, appId, user }
+    return { ok: true, degraded: false, appId, user: currentUser }
   } catch (err) {
     return {
       ok: false,
@@ -104,4 +112,51 @@ function init() {
   }
 }
 
-module.exports = { init, readAppId }
+function status() {
+  return { ready, user: currentUser }
+}
+
+// Unlock a Steam achievement by its API name (configured in the
+// Steamworks partner site). No-op until a real app + achievement exist.
+function unlockAchievement(id) {
+  if (!ready || !gw || !id || typeof gw.activateAchievement !== 'function') return false
+  try {
+    gw.activateAchievement(String(id), () => {}, () => {})
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Set the player's rich-presence status string (shown to Steam friends).
+function setRichPresence(text) {
+  if (!ready || !gw || !text || typeof gw.setRichPresence !== 'function') return false
+  try {
+    gw.setRichPresence('status', String(text).slice(0, 128))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Upload a score to a Steam leaderboard (created on demand). The greenworks
+// leaderboard API is multi-step and version-dependent, so every call is
+// feature-detected + guarded — a missing/legacy binding is a silent no-op
+// rather than a throw.
+function submitLeaderboardScore(name, score) {
+  if (!ready || !gw || !name || !Number.isFinite(score)) return false
+  if (typeof gw.findOrCreateLeaderboard !== 'function' || typeof gw.uploadLeaderboardScore !== 'function') return false
+  try {
+    const method = (gw.LeaderboardUploadScoreMethod && gw.LeaderboardUploadScoreMethod.KeepBest) || 0
+    gw.findOrCreateLeaderboard(
+      String(name), 0, 0,
+      (lb) => { try { gw.uploadLeaderboardScore(lb, method, Math.round(score), [], () => {}, () => {}) } catch { /* ignore */ } },
+      () => { /* find failed — ignore */ },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+module.exports = { init, readAppId, status, unlockAchievement, setRichPresence, submitLeaderboardScore }
