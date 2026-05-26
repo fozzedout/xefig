@@ -1940,24 +1940,28 @@ h1 {
 }
 
 /* ============================================================
-   Desktop shell — persistent map rail beside the slice stage.
-   Only present in the nw.js Steam build (isDesktopShell()); the
-   website never renders .desktop-shell, so these rules lie dormant.
-   The rail is a flex child, so .slice-launcher is re-cast from its
-   absolute full-bleed fill into the flex remainder.
+   Desktop shell — persistent map rail as app chrome. Only present
+   in the nw.js Steam build (isDesktopShell() adds .app-shell-desktop
+   to #app); the website never sets it, so these rules lie dormant.
+   #app becomes a flex row: [rail][.app-pages], with the existing
+   .app-page elements (play/archive/settings/game) rendering in the
+   pane beside the rail. The top nav is hidden — the rail replaces it.
    ============================================================ */
-.desktop-shell {
-  position: absolute;
-  inset: 0;
+#app.app-shell-desktop {
   display: flex;
-  background: #0a0a0f;
 }
-.desktop-shell .slice-launcher {
+#app.app-shell-desktop #topNav {
+  display: none;
+}
+#app.app-shell-desktop .app-pages {
   position: relative;
-  inset: auto;
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
+  height: 100vh;
+}
+/* Active puzzle play goes full-bleed; the rail returns on exit. */
+#app.app-shell-desktop.shell-game .map-rail {
+  display: none;
 }
 .map-rail {
   position: relative;

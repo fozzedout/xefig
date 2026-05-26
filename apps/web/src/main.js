@@ -141,6 +141,72 @@ async function fetchDemoAreas() {
   return __xefigAreas
 }
 
+// Desktop shell map rail — app chrome built once by initAppShell in shell
+// mode. Curated area pieces + a locked full-game piece (upsell) + the
+// lighthouse/library/settings cluster. Area + lighthouse re-enter the play
+// page (renderLauncher reads state.shellArea); library/settings switch to
+// their pages. The rail persists across all of them, so it's navigation,
+// breadcrumb, and the always-available way home in one.
+async function buildRail() {
+  const rail = document.getElementById('map-rail')
+  if (!rail) return
+  const areas = await fetchDemoAreas()
+  const TIER = { classroom: '#50d070', school: '#40d0f0', outside: '#f0a040' }
+  rail.innerHTML = `
+    <div class="rail-brand">Xefig</div>
+    <div class="rail-areas">
+      ${areas.map((a, i) => `
+        <button class="rail-piece" data-area="${a.id}" style="--accent:${TIER[a.id] || '#50d070'}">
+          <span class="rp-tier">Area ${i + 1}</span>
+          <span class="rp-title">${a.title}</span>
+          <span class="rp-sub">${a.subtitle || ''}</span>
+        </button>`).join('')}
+      <div class="rail-piece rail-locked" style="--accent:#5a5a66">
+        <span class="rp-tier">\u{1F512} Full game</span>
+        <span class="rp-title">More worlds</span>
+      </div>
+    </div>
+    <div class="rail-utils">
+      <button class="rail-util" data-util="lighthouse"><span class="ru-ico">\u{1F5FC}</span><span>Lighthouse</span></button>
+      <button class="rail-util" data-util="library"><span class="ru-ico">\u{1F4DA}</span><span>Library</span></button>
+      <button class="rail-util" data-util="settings"><span class="ru-ico">⚙</span><span>Settings</span></button>
+    </div>`
+
+  const goToPlay = () => {
+    if (currentPage === 'play') renderLauncher()
+    else window.switchToPage('play')
+    updateRailSelection('play')
+  }
+  rail.querySelectorAll('.rail-piece[data-area]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const area = areas.find((a) => a.id === btn.dataset.area)
+      if (!area) return
+      state.shellArea = { id: area.id, puzzleDate: area.puzzleDate, difficulties: area.difficulties || {} }
+      goToPlay()
+    })
+  })
+  rail.querySelector('[data-util="lighthouse"]').addEventListener('click', () => { state.shellArea = null; goToPlay() })
+  rail.querySelector('[data-util="library"]').addEventListener('click', () => window.switchToPage('archive'))
+  rail.querySelector('[data-util="settings"]').addEventListener('click', () => window.switchToPage('settings'))
+  updateRailSelection(currentPage)
+}
+
+// Sync the rail's highlighted target to the visible page (+ selected area).
+function updateRailSelection(pageName) {
+  const rail = document.getElementById('map-rail')
+  if (!rail) return
+  rail.querySelectorAll('.rail-piece, .rail-util').forEach((b) => b.classList.remove('rail-sel', 'rail-util--sel'))
+  if (pageName === 'archive') { rail.querySelector('[data-util="library"]')?.classList.add('rail-util--sel'); return }
+  if (pageName === 'settings') { rail.querySelector('[data-util="settings"]')?.classList.add('rail-util--sel'); return }
+  if (pageName === 'play') {
+    if (state.shellArea?.id) {
+      const piece = rail.querySelector(`.rail-piece[data-area="${state.shellArea.id}"]`)
+      if (piece) { piece.classList.add('rail-sel'); return }
+    }
+    rail.querySelector('[data-util="lighthouse"]')?.classList.add('rail-util--sel')
+  }
+}
+
 // In-game helper. Loaded on demand alongside the puzzle engine so the
 // homepage bundle stays small. The same module powers every mode's
 // tutorial / hint flow.
@@ -2170,11 +2236,9 @@ function renderLauncher() {
   const todayDate = getIsoDate(new Date())
   state.sourceMode = 'today'
   state.archiveDate = todayDate
-  // A fresh launcher entry always lands on the live daily (lighthouse),
-  // so clear any rail area selection — otherwise its difficulty override
-  // would leak onto today's puzzle. (Re-selecting an area in the rail
-  // sets it again; preserving the area across a return is increment 2.)
-  state.shellArea = null
+  // state.shellArea persists across launcher entries in desktop mode, so
+  // exiting an area puzzle returns to that area. The live daily is reached
+  // by clicking Lighthouse, which clears it. (Null on the website.)
   state.gameMode = getGameModeOfDay(todayDate)
   state.difficulty = state.difficulty || 'medium'
 
@@ -2281,19 +2345,17 @@ function renderLauncher() {
   const ACCENT_MAP_FULL = { jigsaw: '#f0c040', sliding: '#40d0f0', swap: '#50d070', polygram: '#a060f0', diamond: '#e070a0' }
 
   const pageEl = document.querySelector('#page-play')
+  // `shell` only gates the desktop-only tweaks below (no More slice). The
+  // map rail itself is app-shell chrome rendered once by initAppShell —
+  // #page-play just holds the slice stage, same markup as the website.
   const shell = isDesktopShell()
-  const launcherHtml = `
-      <main class="slice-launcher">
-        <div id="slice-container" class="slice-container">
-          <div class="slice" style="--flex:1;opacity:0"></div>
-        </div>
-      </main>`
-  // Desktop shell: the persistent map rail sits beside the slice stage.
-  // On the website `shell` is false and the launcher renders exactly as
-  // before.
-  pageEl.innerHTML = shell
-    ? `<div class="desktop-shell"><aside class="map-rail" id="map-rail"></aside>${launcherHtml}</div>`
-    : launcherHtml
+  pageEl.innerHTML = `
+    <main class="slice-launcher">
+      <div id="slice-container" class="slice-container">
+        <div class="slice" style="--flex:1;opacity:0"></div>
+      </div>
+    </main>
+  `
 
   const container = pageEl.querySelector('#slice-container')
 
@@ -2427,61 +2489,6 @@ function renderLauncher() {
     renderDiamondGridThumbnails(container, payload?.date || todayDate)
   }
 
-  // Desktop shell map rail: curated area pieces + the lighthouse/library/
-  // settings utility cluster. Areas come from the embedded server's
-  // demo-config. Selecting a target just re-stages the slices; the rail
-  // itself stays put, so it doubles as navigation, breadcrumb, and the
-  // always-available way home.
-  const buildRail = async () => {
-    const rail = pageEl.querySelector('#map-rail')
-    if (!rail) return
-    const areas = await fetchDemoAreas()
-    const TIER = { classroom: '#50d070', school: '#40d0f0', outside: '#f0a040' }
-    rail.innerHTML = `
-      <div class="rail-brand">Xefig</div>
-      <div class="rail-areas">
-        ${areas.map((a, i) => `
-          <button class="rail-piece" data-area="${a.id}" style="--accent:${TIER[a.id] || '#50d070'}">
-            <span class="rp-tier">Area ${i + 1}</span>
-            <span class="rp-title">${a.title}</span>
-            <span class="rp-sub">${a.subtitle || ''}</span>
-          </button>`).join('')}
-        <div class="rail-piece rail-locked" style="--accent:#5a5a66">
-          <span class="rp-tier">\u{1F512} Full game</span>
-          <span class="rp-title">More worlds</span>
-        </div>
-      </div>
-      <div class="rail-utils">
-        <button class="rail-util rail-util--sel" data-util="lighthouse"><span class="ru-ico">\u{1F5FC}</span><span>Lighthouse</span></button>
-        <button class="rail-util" data-util="library"><span class="ru-ico">\u{1F4DA}</span><span>Library</span></button>
-        <button class="rail-util" data-util="settings"><span class="ru-ico">⚙</span><span>Settings</span></button>
-      </div>`
-
-    const clearSel = () => rail.querySelectorAll('.rail-piece, .rail-util').forEach((b) => b.classList.remove('rail-sel', 'rail-util--sel'))
-    const lighthouseBtn = rail.querySelector('[data-util="lighthouse"]')
-
-    rail.querySelectorAll('.rail-piece[data-area]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const area = areas.find((a) => a.id === btn.dataset.area)
-        if (!area) return
-        state.shellArea = { id: area.id, difficulties: area.difficulties || {} }
-        clearSel(); btn.classList.add('rail-sel')
-        try { renderStage(await fetchPuzzlePayload({ date: area.puzzleDate })) }
-        catch (err) { console.warn('[shell] area load failed', err) }
-      })
-    })
-    lighthouseBtn.addEventListener('click', async () => {
-      state.shellArea = null
-      clearSel(); lighthouseBtn.classList.add('rail-util--sel')
-      try { renderStage(await fetchPuzzlePayload()) }
-      catch (err) { console.warn('[shell] today load failed', err) }
-    })
-    // Library + Settings reuse the app's existing pages for now; the
-    // in-stage (rail-stays) versions are the next increment.
-    rail.querySelector('[data-util="library"]').addEventListener('click', () => { if (window.switchToPage) window.switchToPage('archive') })
-    rail.querySelector('[data-util="settings"]').addEventListener('click', () => { if (window.switchToPage) window.switchToPage('settings') })
-  }
-
   ; (async () => {
     try {
       // Demo back-loop: when the player exits a puzzle (or the launcher
@@ -2502,11 +2509,15 @@ function renderLauncher() {
       // date and then synthesise a click on the requested mode slice
       // — so the launcher is the only entry point that touches this.
       const demo = await loadDemoConfig()
-      const payload = await fetchPuzzlePayload(demo?.area?.puzzleDate ? { date: demo.area.puzzleDate } : undefined)
+      // Desktop shell: a selected curated area pins the launcher to its
+      // date; otherwise load today (or the ?demo harness date). Then sync
+      // the rail's highlight to the play page + current area.
+      const target = state.shellArea?.puzzleDate
+        ? { date: state.shellArea.puzzleDate }
+        : (demo?.area?.puzzleDate ? { date: demo.area.puzzleDate } : undefined)
+      const payload = await fetchPuzzlePayload(target)
       renderStage(payload)
-
-      // Desktop shell: build the persistent map rail beside the stage.
-      if (shell) await buildRail()
+      if (shell) updateRailSelection('play')
 
       if (demo?.area && demo.modeSlug) {
         // Demo timing flow always starts fresh — wipe any persisted
@@ -7274,6 +7285,24 @@ function initAppShell() {
   watchSystemTheme()
   app.innerHTML = ARCHIVE_SVG_DEFS_HTML + NAV_HTML
 
+  // Desktop shell: promote to an app-shell layout — a persistent map rail
+  // (left) beside an .app-pages pane that holds the existing play/archive/
+  // settings/game pages. The rail is chrome, so it survives every page
+  // switch. The website skips all of this (isDesktopShell() is false).
+  const shell = isDesktopShell()
+  if (shell) {
+    app.classList.add('app-shell-desktop')
+    const pagesWrap = document.createElement('div')
+    pagesWrap.className = 'app-pages'
+    app.querySelectorAll('.app-page').forEach((p) => pagesWrap.appendChild(p))
+    const rail = document.createElement('aside')
+    rail.className = 'map-rail'
+    rail.id = 'map-rail'
+    app.appendChild(rail)
+    app.appendChild(pagesWrap)
+    buildRail()
+  }
+
   const topNav = document.querySelector('#topNav')
   const topTabs = [...document.querySelectorAll('#navTabs .nav-tab')]
 
@@ -7284,6 +7313,8 @@ function initAppShell() {
     // If coming back from game, clean up
     if (puzzle) destroyPuzzle()
     document.querySelector('#page-game').innerHTML = ''
+    // Coming back from a puzzle: restore the rail (hidden during play).
+    if (shell) app.classList.remove('shell-game')
 
     topTabs.forEach((t) => t.classList.toggle('active', t.dataset.page === pageName))
     document.querySelectorAll('.app-page').forEach((p) => {
@@ -7292,6 +7323,7 @@ function initAppShell() {
 
     topNav.classList.toggle('solid', pageName !== 'play')
     topNav.classList.remove('hidden')
+    if (shell) updateRailSelection(pageName)
 
     if (pageName === 'play') {
       renderLauncher()
@@ -7317,6 +7349,9 @@ function initAppShell() {
 function showGamePage() {
   currentPage = 'game'
   document.querySelector('#topNav').classList.add('hidden')
+  // Desktop shell: puzzles play full-bleed — hide the rail (it returns on
+  // exit, when switchPage clears shell-game).
+  if (isDesktopShell()) document.querySelector('#app')?.classList.add('shell-game')
   document.querySelectorAll('.app-page').forEach((p) => {
     p.classList.toggle('visible', p.id === 'page-game')
   })
