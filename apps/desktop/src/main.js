@@ -55,18 +55,12 @@ async function boot() {
   // bundle's relative /api/* fetches and service worker registration
   // both resolve against a real same-origin server.
   //
-  // Two demo entry points, both reachable in-app (they cross-link):
-  //   XEFIG_HUB=1           -> /hub, the world-map front door (gameplay)
-  //   XEFIG_DEMO_HARNESS=1  -> /demo-harness, the 15-button timing matrix
-  //                            (image/timing testing)
-  // Each launches puzzles via /?demo=area-mode, which the web bundle
-  // resolves to a specific puzzle + difficulty overrides.
   // Default landing is the bundle in desktop shell-mode (?shell=desktop):
-  // the launcher renders the persistent map rail beside the slices. The
-  // standalone hub/harness pages remain available via their env switches.
+  // the launcher renders the persistent map rail as app chrome. The timing
+  // harness (image/difficulty testing) stays reachable via its env switch;
+  // it launches puzzles through /?demo=area-mode.
   let landing = `${url}?shell=desktop`
-  if (process.env.XEFIG_HUB) landing = `${url}hub`
-  else if (process.env.XEFIG_DEMO_HARNESS) landing = `${url}demo-harness`
+  if (process.env.XEFIG_DEMO_HARNESS) landing = `${url}demo-harness`
   window.location.href = landing
 }
 
