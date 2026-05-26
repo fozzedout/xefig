@@ -1,14 +1,14 @@
 {
-  "//": "Demo content + difficulty definitions for the Steam Next Fest build. Read by the desktop shell to drive area progression, puzzle list, and per-puzzle difficulty overrides. Placeholder images use the existing daily-puzzle dates from production; once themed artwork is ready, swap puzzleDate for the new dates (or change the resolver to read from a different path entirely).",
+  "//": "Demo content + difficulty definitions for the Steam Next Fest build. Read by the desktop shell to drive area progression, puzzle list, and per-puzzle difficulty overrides. Each area's puzzleDate points at a curated reserved-date folder (curated/<id>/) holding one image per mode; see //curated.",
   "//curve": "Four-tier difficulty: Classroom -> School -> Outside -> Online (production daily). Each demo tier is ~1.5x the previous in piece count; the online daily is the implicit fourth tier (~100% of production) that demo owners graduate into via the lighthouse landmark on the world map. Sizes here are 25% / 50% / 75% of production hard, leaving the daily as the real challenge.",
   "//status": "Classroom diamond locked at 4000c/16p after timing (8:59 actual). Other classroom sizes locked from user-pace timing. School + Outside values are predicted from the 1.5x curve and PENDING TIMING verification with the eventual specialist artwork; expect to tweak after the next two rounds of timing data.",
-  "//curated": "To use bespoke themed artwork instead of a daily puzzle, author a folder under curated/<id>/ (id = a reserved ISO date before 2026-03-17), run `node scripts/build-curated.mjs`, then set that area's puzzleDate to the id. See curated/README.md. Daily dates below are kept for now so the demo-harness timing run keeps working until artwork lands.",
+  "//curated": "Areas now point at curated reserved-date ids (curated/<id>/). Each area was seeded with COPIES of its original daily images as placeholders (classroom<-2026-03-17, school<-2026-03-18, outside<-2026-03-19); bespoke finals replace them one MODE at a time. Done so far: school + outside diamond (painting). To replace a mode: drop <mode>.webp into curated/<id>/, run `node scripts/build-curated.mjs`. See curated/README.md.",
   "areas": [
     {
       "id": "classroom",
       "title": "Classroom",
       "subtitle": "Easy",
-      "puzzleDate": "2026-03-17",
+      "puzzleDate": "2026-01-01",
       "estimatedMinutes": 18,
       "difficulties": {
         "jigsaw":   { "cols": 6, "rows": 4 },
@@ -22,7 +22,7 @@
       "id": "school",
       "title": "School",
       "subtitle": "Medium",
-      "puzzleDate": "2026-03-18",
+      "puzzleDate": "2026-01-02",
       "estimatedMinutes": 25,
       "difficulties": {
         "jigsaw":   { "cols": 6, "rows": 6 },
@@ -36,7 +36,7 @@
       "id": "outside",
       "title": "Outside",
       "subtitle": "Hard",
-      "puzzleDate": "2026-03-19",
+      "puzzleDate": "2026-01-03",
       "estimatedMinutes": 39,
       "difficulties": {
         "jigsaw":   { "cols": 8, "rows": 7 },

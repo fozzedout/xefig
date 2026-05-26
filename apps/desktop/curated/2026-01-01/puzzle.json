@@ -1,0 +1,75 @@
+{
+  "date": "2026-01-01",
+  "difficulty": "adaptive",
+  "curated": true,
+  "title": "Classroom",
+  "categories": {
+    "jigsaw": {
+      "imageKey": "curated/2026-01-01/jigsaw.webp",
+      "imageUrl": "/cdn/curated/2026-01-01/jigsaw.webp",
+      "contentType": "image/webp",
+      "fileName": "jigsaw.webp",
+      "theme": "Classroom (placeholder art — awaiting bespoke images)",
+      "tags": [
+        "classroom",
+        "placeholder"
+      ],
+      "thumbnailKey": "curated/2026-01-01/jigsaw.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-01/jigsaw.webp"
+    },
+    "slider": {
+      "imageKey": "curated/2026-01-01/slider.webp",
+      "imageUrl": "/cdn/curated/2026-01-01/slider.webp",
+      "contentType": "image/webp",
+      "fileName": "slider.webp",
+      "theme": "Classroom (placeholder art — awaiting bespoke images)",
+      "tags": [
+        "classroom",
+        "placeholder"
+      ],
+      "thumbnailKey": "curated/2026-01-01/slider.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-01/slider.webp"
+    },
+    "swap": {
+      "imageKey": "curated/2026-01-01/swap.webp",
+      "imageUrl": "/cdn/curated/2026-01-01/swap.webp",
+      "contentType": "image/webp",
+      "fileName": "swap.webp",
+      "theme": "Classroom (placeholder art — awaiting bespoke images)",
+      "tags": [
+        "classroom",
+        "placeholder"
+      ],
+      "thumbnailKey": "curated/2026-01-01/swap.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-01/swap.webp"
+    },
+    "polygram": {
+      "imageKey": "curated/2026-01-01/polygram.webp",
+      "imageUrl": "/cdn/curated/2026-01-01/polygram.webp",
+      "contentType": "image/webp",
+      "fileName": "polygram.webp",
+      "theme": "Classroom (placeholder art — awaiting bespoke images)",
+      "tags": [
+        "classroom",
+        "placeholder"
+      ],
+      "thumbnailKey": "curated/2026-01-01/polygram.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-01/polygram.webp"
+    },
+    "diamond": {
+      "imageKey": "curated/2026-01-01/diamond.webp",
+      "imageUrl": "/cdn/curated/2026-01-01/diamond.webp",
+      "contentType": "image/webp",
+      "fileName": "diamond.webp",
+      "theme": "Classroom (placeholder art — awaiting bespoke images)",
+      "tags": [
+        "classroom",
+        "placeholder"
+      ],
+      "thumbnailKey": "curated/2026-01-01/diamond.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-01/diamond.webp"
+    }
+  },
+  "createdAt": "2026-05-26T23:00:46.369Z",
+  "updatedAt": "2026-05-26T23:00:46.369Z"
+}

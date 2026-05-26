@@ -1,0 +1,90 @@
+{
+  "date": "2026-01-03",
+  "difficulty": "adaptive",
+  "curated": true,
+  "title": "Outside",
+  "categories": {
+    "jigsaw": {
+      "imageKey": "curated/2026-01-03/jigsaw.webp",
+      "imageUrl": "/cdn/curated/2026-01-03/jigsaw.webp",
+      "contentType": "image/webp",
+      "fileName": "jigsaw.webp",
+      "theme": "Coastal lighthouse and harbour",
+      "tags": [
+        "lighthouse",
+        "coast",
+        "beach",
+        "harbour",
+        "flat illustration"
+      ],
+      "thumbnailKey": "curated/2026-01-03/jigsaw.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-03/jigsaw.webp"
+    },
+    "slider": {
+      "imageKey": "curated/2026-01-03/slider.webp",
+      "imageUrl": "/cdn/curated/2026-01-03/slider.webp",
+      "contentType": "image/webp",
+      "fileName": "slider.webp",
+      "theme": "Coastal lighthouse and harbour",
+      "tags": [
+        "lighthouse",
+        "coast",
+        "beach",
+        "harbour",
+        "flat illustration"
+      ],
+      "thumbnailKey": "curated/2026-01-03/slider.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-03/slider.webp"
+    },
+    "swap": {
+      "imageKey": "curated/2026-01-03/swap.webp",
+      "imageUrl": "/cdn/curated/2026-01-03/swap.webp",
+      "contentType": "image/webp",
+      "fileName": "swap.webp",
+      "theme": "Coastal lighthouse and harbour",
+      "tags": [
+        "lighthouse",
+        "coast",
+        "beach",
+        "harbour",
+        "flat illustration"
+      ],
+      "thumbnailKey": "curated/2026-01-03/swap.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-03/swap.webp"
+    },
+    "polygram": {
+      "imageKey": "curated/2026-01-03/polygram.webp",
+      "imageUrl": "/cdn/curated/2026-01-03/polygram.webp",
+      "contentType": "image/webp",
+      "fileName": "polygram.webp",
+      "theme": "Coastal lighthouse and harbour",
+      "tags": [
+        "lighthouse",
+        "coast",
+        "beach",
+        "harbour",
+        "flat illustration"
+      ],
+      "thumbnailKey": "curated/2026-01-03/polygram.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-03/polygram.webp"
+    },
+    "diamond": {
+      "imageKey": "curated/2026-01-03/diamond.webp",
+      "imageUrl": "/cdn/curated/2026-01-03/diamond.webp",
+      "contentType": "image/webp",
+      "fileName": "diamond.webp",
+      "theme": "Coastal lighthouse and harbour",
+      "tags": [
+        "lighthouse",
+        "coast",
+        "beach",
+        "harbour",
+        "flat illustration"
+      ],
+      "thumbnailKey": "curated/2026-01-03/diamond.webp",
+      "thumbnailUrl": "/cdn/curated/2026-01-03/diamond.webp"
+    }
+  },
+  "createdAt": "2026-05-26T23:00:46.371Z",
+  "updatedAt": "2026-05-26T23:00:46.371Z"
+}
