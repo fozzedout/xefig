@@ -56,10 +56,13 @@ async function boot() {
   // both resolve against a real same-origin server.
   //
   // Default landing is the bundle in desktop shell-mode (?shell=desktop):
-  // the launcher renders the persistent map rail as app chrome. The timing
-  // harness (image/difficulty testing) stays reachable via its env switch;
-  // it launches puzzles through /?demo=area-mode.
+  // the launcher renders the persistent map rail as app chrome. Pass the
+  // Steam screen name so the bundle can seed the leaderboard/profile name
+  // (real names on the unified board instead of an anonymous device id).
+  // The timing harness (image/difficulty testing) stays reachable via its
+  // env switch; it launches puzzles through /?demo=area-mode.
   let landing = `${url}?shell=desktop`
+  if (steamResult.ok && steamResult.user) landing += `&steamName=${encodeURIComponent(steamResult.user)}`
   if (process.env.XEFIG_DEMO_HARNESS) landing = `${url}demo-harness`
   window.location.href = landing
 }

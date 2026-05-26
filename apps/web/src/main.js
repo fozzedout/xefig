@@ -7304,6 +7304,14 @@ function initAppShell() {
   // switch. The website skips all of this (isDesktopShell() is false).
   const shell = isDesktopShell()
   if (shell) {
+    // Seed the display name from the Steam screen name (passed on the
+    // landing URL) so the unified leaderboard shows a real name instead
+    // of an anonymous device id. Only when the player hasn't already set
+    // one — never clobber a name they chose in settings.
+    try {
+      const steamName = new URLSearchParams(window.location.search).get('steamName')
+      if (steamName && !getProfileName().trim()) setProfileName(steamName)
+    } catch { /* non-fatal */ }
     app.classList.add('app-shell-desktop')
     const pagesWrap = document.createElement('div')
     pagesWrap.className = 'app-pages'

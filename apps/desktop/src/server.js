@@ -69,9 +69,16 @@ const MIME = {
 // data. Returning 204 lets the bundle's promises resolve without errors.
 // Order matters — prefix match, first hit wins.
 const NOOP_API_PREFIXES = [
-  '/api/sync/',
-  '/api/leaderboard/',
   '/api/contact',
+]
+
+// Endpoints proxied LIVE to the origin (not cached, GET + POST forwarded):
+// the unified daily leaderboard and cross-device sync, so the desktop
+// shares the same boards/saves as the website. Offline → 204, matching the
+// old no-op so the bundle's fire-and-forget calls don't error-loop.
+const LIVE_PROXY_PREFIXES = [
+  '/api/leaderboard/',
+  '/api/sync/',
 ]
 
 // Diamond paint logs are too useful to drop on the floor during the
@@ -124,6 +131,38 @@ async function proxyAndCache({ res, upstreamPath, cacheFile, contentType, cacheH
   send(res, 200, buf, contentType, cacheHeader)
 }
 
+function readBody(req) {
+  return new Promise((resolve) => {
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', () => resolve(Buffer.concat(chunks)))
+  })
+}
+
+// Forward a request verbatim to the live origin (method, body, content
+// type) and stream the response back — no caching. Used for the live
+// leaderboard + sync. On a network failure we fall back to 204 so the
+// bundle's fire-and-forget submits/pushes resolve quietly offline rather
+// than retry-looping.
+async function proxyLive(req, res) {
+  const target = `${API}${req.url}`
+  const headers = {}
+  if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
+  if (req.headers['accept']) headers['accept'] = req.headers['accept']
+  const hasBody = req.method !== 'GET' && req.method !== 'HEAD'
+  const body = hasBody ? await readBody(req) : undefined
+  process.stderr.write(`[server] live-proxy ${req.method} -> ${target}\n`)
+  try {
+    const upstream = await fetch(target, { method: req.method, headers, body })
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    send(res, upstream.status, buf, upstream.headers.get('content-type') || MIME['.json'])
+  } catch (err) {
+    process.stderr.write(`[server] live-proxy failed: ${err.message}\n`)
+    res.writeHead(204).end()
+  }
+}
+
 // Cache /cdn assets aggressively in the browser — the bundle's puzzle
 // JSON carries a ?v=<timestamp> on every image URL that already busts
 // on regeneration, so the browser-cached copy is always content-true.
@@ -170,6 +209,12 @@ async function handleApi(req, res) {
   // just lands on disk instead of disappearing.
   if (req.method === 'POST' && (req.url.startsWith('/api/diamond/session-log') || req.url.startsWith('/api/diamond/test-session-log'))) {
     return captureDiamondLog(req, res)
+  }
+
+  // Live passthrough: leaderboard + sync go straight to the origin so the
+  // desktop shares the website's unified boards and cross-device saves.
+  for (const prefix of LIVE_PROXY_PREFIXES) {
+    if (req.url.startsWith(prefix)) return proxyLive(req, res)
   }
 
   // No-op shortcuts for endpoints we deliberately don't snapshot.
