@@ -157,6 +157,25 @@ function notifySteam(op, body) {
   } catch { /* non-fatal */ }
 }
 
+// Timing-harness capture: log each completion's elapsed time to the
+// embedded server (appended to session-logs/timings.jsonl) so a whole
+// demo set can be compared to goal without reading times off-screen.
+// Only fires during a harness session (the demo-session flag the harness
+// sets); a no-op in normal play and on the web.
+function notifyDemoTiming(puzzleDate, gameMode, elapsedMs) {
+  try {
+    if (sessionStorage.getItem('xefig:demo-session') !== '1') return
+  } catch { return }
+  try {
+    fetch('/api/demo/timing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: puzzleDate, mode: gameMode, elapsedMs }),
+      keepalive: true,
+    }).catch(() => { })
+  } catch { /* non-fatal */ }
+}
+
 // Desktop shell map rail — app chrome built once by initAppShell in shell
 // mode. Curated area pieces + a locked full-game piece (upsell) + the
 // lighthouse/library/settings cluster. Area + lighthouse re-enter the play
@@ -1270,6 +1289,7 @@ function recordCompletedRun(run) {
   if (!state.shellArea) {
     notifySteam('leaderboard', { name: `daily_${mode}`, score: Math.round(elapsedMs / 1000) })
   }
+  notifyDemoTiming(puzzleDate, mode, elapsedMs)
 
   // Evict the full image from the SW cache, but only for puzzles
   // whose date isn't today — the launcher reuses the cached full

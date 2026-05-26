@@ -224,12 +224,37 @@ async function handleSteam(req, res) {
   send(res, 200, JSON.stringify({ ok: !!ok }), MIME['.json'])
 }
 
+async function captureTiming(req, res) {
+  try {
+    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      date: body.date || null,
+      mode: body.mode || null,
+      elapsedMs: Number(body.elapsedMs) || 0,
+    }) + '\n'
+    fs.mkdirSync(SESSION_LOG_DIR, { recursive: true })
+    fs.appendFileSync(path.join(SESSION_LOG_DIR, 'timings.jsonl'), line)
+    process.stderr.write(`[server] timing ${body.mode}@${body.date} ${body.elapsedMs}ms\n`)
+  } catch (err) {
+    process.stderr.write(`[server] timing save failed: ${err.message}\n`)
+  }
+  res.writeHead(204).end()
+}
+
 async function handleApi(req, res) {
   // Capture diamond paint telemetry to local files for the demo
   // timing analysis. Same 204 behaviour the bundle expects; the body
   // just lands on disk instead of disappearing.
   if (req.method === 'POST' && (req.url.startsWith('/api/diamond/session-log') || req.url.startsWith('/api/diamond/test-session-log'))) {
     return captureDiamondLog(req, res)
+  }
+
+  // Timing-harness capture: one line per puzzle completion, appended to
+  // session-logs/timings.jsonl. scripts/report-timings.mjs reads it to
+  // compare a whole demo set against the demo-config goals.
+  if (req.method === 'POST' && req.url.startsWith('/api/demo/timing')) {
+    return captureTiming(req, res)
   }
 
   // Steam-native ops (achievements, rich presence, native leaderboard).
