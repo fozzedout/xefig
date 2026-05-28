@@ -1055,6 +1055,22 @@ function removeStorage(key) {
   }
 }
 
+// Coarse pointer + small screen = mobile; coarse + large = tablet;
+// fine pointer = desktop. iPad-as-desktop ships with coarse pointer
+// even in desktop-Safari mode, so screen size is the disambiguator
+// rather than the UA string (which lies). Stored with the session log
+// so admin can normalise speed metrics (mobile is faster per region
+// than PC due to touch-sweep input vs mouse clicks).
+function detectPlatform() {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return 'unknown'
+  const coarsePointer = window.matchMedia?.('(pointer:coarse)').matches ?? false
+  const hasTouch = (navigator.maxTouchPoints || 0) > 0 || ('ontouchstart' in window)
+  if (!coarsePointer && !hasTouch) return 'desktop'
+  const minDim = Math.min(window.innerWidth || 0, window.innerHeight || 0)
+  if (minDim >= 600) return 'tablet'
+  return 'mobile'
+}
+
 function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs, { testMode = false } = {}) {
   if (!puzzleDate || !puzzle || typeof puzzle.getSessionLog !== 'function') return
   let log
@@ -1066,6 +1082,7 @@ function persistDiamondSessionLog(puzzleDate, puzzle, elapsedActiveMs, { testMod
   if (!log || !Array.isArray(log.events) || log.events.length === 0) return
   log.elapsedActiveMs = Number(elapsedActiveMs) || 0
   log.savedAt = new Date().toISOString()
+  log.platform = detectPlatform()
   if (testMode) {
     // Test runs live in their own localStorage namespace AND their own
     // worker table — they never share storage, retention, or uploads

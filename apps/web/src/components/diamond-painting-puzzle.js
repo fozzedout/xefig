@@ -114,6 +114,10 @@ export class DiamondPaintingPuzzle {
       // grid that was painted (rather than recomputing from the image,
       // which can differ subtly across devices).
       gridStats: this.gridStats || null,
+      // Whether the puzzle was finished at save time. Admin uses this
+      // to disambiguate "session feels short" (player abandoned mid-way)
+      // from "session was short because the puzzle was easy."
+      completed: this.completed === true,
     }
   }
 
@@ -2089,7 +2093,41 @@ function computeGridStats(grid, cols, rows, palette, cleanupLevelUsed) {
     minPalettePairDelta: minPalettePairDelta != null ? Math.round(minPalettePairDelta * 100) / 100 : null,
     closestPalettePairs,
     colorNearestNeighbour,
+    paletteHueSpread: paletteHueSpread(palette, activeIndices),
   }
+}
+
+// Circular variance of palette hue in Oklab a/b, chroma-weighted so
+// neutrals don't add noise. 0 means every colour shares a hue (narrow
+// warm arc, sunset-only palette); 1 means hue is uniformly distributed
+// (full-spectrum). Used by the low-aesthetic-payoff publish gate — a
+// long predicted session combined with a narrow palette is the
+// "wasted 40 minutes on monotone" failure mode the 2026-05-10 lighthouse
+// puzzle named.
+function paletteHueSpread(palette, activeIndices) {
+  if (!palette || palette.length === 0) return null
+  const indices = activeIndices && activeIndices.length > 0
+    ? activeIndices
+    : palette.map((_, i) => i)
+  let sumX = 0
+  let sumY = 0
+  let sumW = 0
+  for (const idx of indices) {
+    const rgb = palette[idx]
+    if (!rgb) continue
+    const lab = rgbToOklab(rgb)
+    const a = lab[1]
+    const b = lab[2]
+    const chroma = Math.sqrt(a * a + b * b)
+    if (chroma <= 0) continue
+    const hue = Math.atan2(b, a)
+    sumX += chroma * Math.cos(hue)
+    sumY += chroma * Math.sin(hue)
+    sumW += chroma
+  }
+  if (sumW === 0) return 0
+  const R = Math.sqrt(sumX * sumX + sumY * sumY) / sumW
+  return Math.round((1 - R) * 10000) / 10000
 }
 
 // Absorb connected regions smaller than `minRegion` (8-direction) into

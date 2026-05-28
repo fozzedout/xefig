@@ -1469,23 +1469,21 @@ function summariseSessionLog(log) {
   const median = validGaps.length ? validGaps[Math.floor(validGaps.length / 2)] : 0
   const max = validGaps.length ? validGaps[validGaps.length - 1] : 0
 
-  // Per-colour active time: sum of gaps where the prior event was a
-  // fill (or a select) of that colour. This attributes "scanning time"
-  // to whichever colour the player was actively trying to place.
-  const perColor = new Map()
-  let currentColor = null
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i]
-    if (e.k === 's' || e.k === 'f') currentColor = e.c
-    if (i === 0) continue
-    const gap = events[i].t - events[i - 1].t
-    if (currentColor != null && gap > 0) {
-      perColor.set(currentColor, (perColor.get(currentColor) || 0) + gap)
-    }
-  }
-  const perColorSorted = Array.from(perColor.entries()).sort((a, b) => b[1] - a[1])
+  // Per-colour active time + per-event active-time positions, computed
+  // by capping each inter-event gap so the totals fit within the
+  // puzzle's own activeMs timer. The naive "sum every gap" attributes
+  // long away-time (commute splits, overnight breaks) to whichever
+  // colour was selected when the player put the device down — which
+  // produces 10×+ per-colour outliers that are pure measurement
+  // artifacts. Water-fill threshold: find T such that
+  // sum(min(g_i, T)) = activeMs; gaps below T contribute their full
+  // value, gaps above T contribute exactly T.
+  const activeMs = Number(log.elapsedActiveMs) || 0
+  const timeline = computeActiveTimeline(events, activeMs)
 
-  // Largest 5 gaps for spotting "stuck" moments.
+  // Largest 5 gaps for spotting "stuck" moments. Use the raw (un-capped)
+  // values so reviewers can still see "you put it down for 12 hours
+  // here," even though the per-colour math ignores it.
   const topGaps = validGaps.slice(-5).reverse()
 
   return {
@@ -1493,14 +1491,78 @@ function summariseSessionLog(log) {
     wrong: wrong.length,
     selects: selects.length,
     totalEvents: events.length,
-    activeMs: log.elapsedActiveMs || 0,
+    activeMs,
     eventSpanMs: events[events.length - 1].t,
     meanGapMs: mean,
     medianGapMs: median,
     maxGapMs: max,
     topGaps,
-    perColor: perColorSorted,
+    perColor: timeline.perColorSorted,
+    activeEventTimes: timeline.activeEventTimes,
+    perColorGapCapMs: timeline.threshold,
   }
+}
+
+// Walk events once, computing both per-colour active-ms totals and
+// active-time positions for each event. The gap before event i is
+// attributed to event i's current colour (the colour the player was
+// hunting for or about to place); same convention the per-colour rule
+// has used since v1. Returns:
+//   perColorSorted — [[colorIdx, activeMs], ...] desc by ms
+//   activeEventTimes — parallel array; activeEventTimes[i] is event i's
+//     position on the active-time axis (sum of capped gaps so far)
+//   threshold — the gap cap that was applied (Infinity if no capping)
+function computeActiveTimeline(events, activeMs) {
+  const empty = { perColorSorted: [], activeEventTimes: [], threshold: Infinity }
+  if (!events || events.length === 0) return empty
+
+  const gaps = new Array(events.length - 1)
+  let rawTotal = 0
+  for (let i = 1; i < events.length; i++) {
+    const g = Math.max(0, events[i].t - events[i - 1].t)
+    gaps[i - 1] = g
+    rawTotal += g
+  }
+
+  let threshold = Infinity
+  if (activeMs > 0 && rawTotal > activeMs && gaps.length > 0) {
+    const sorted = gaps.slice().sort((a, b) => a - b)
+    let prefix = 0
+    let found = false
+    for (let i = 0; i < sorted.length; i++) {
+      const remaining = sorted.length - i
+      const candidate = (activeMs - prefix) / remaining
+      const prev = i > 0 ? sorted[i - 1] : 0
+      if (candidate >= prev && candidate <= sorted[i]) {
+        threshold = candidate
+        found = true
+        break
+      }
+      prefix += sorted[i]
+    }
+    if (!found) threshold = activeMs / sorted.length
+    if (threshold < 0) threshold = 0
+  }
+
+  const perColor = new Map()
+  const activeEventTimes = new Array(events.length).fill(0)
+  let currentColor = null
+  let cumActive = 0
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
+    if (e.k === 's' || e.k === 'f') currentColor = e.c
+    if (i === 0) continue
+    const gap = Math.max(0, events[i].t - events[i - 1].t)
+    const contribution = Math.min(gap, threshold)
+    cumActive += contribution
+    activeEventTimes[i] = cumActive
+    if (currentColor != null && contribution > 0) {
+      perColor.set(currentColor, (perColor.get(currentColor) || 0) + contribution)
+    }
+  }
+
+  const perColorSorted = Array.from(perColor.entries()).sort((a, b) => b[1] - a[1])
+  return { perColorSorted, activeEventTimes, threshold }
 }
 
 // Reconstruction sanity-check on the raw events. If the recording is
@@ -1683,16 +1745,20 @@ function buildSessionExport(log, dropdownLabel) {
     p99: pct(0.99),
   }
 
-  // ─── Fill rate over time — split the session into quarters and report
-  // fills per minute in each. Lets the reviewer see "player slowed in
-  // the back half" vs "consistent pace" at a glance.
+  // ─── Fill rate over time — split the session into quarters of
+  // ACTIVE time (not wall-clock event span) and report fills per minute
+  // in each. Bucketing by event-span makes a multi-commute session show
+  // fake-zero middle quarters because all events land before/after the
+  // long pause. Using active-time positions keeps the quartiles aligned
+  // with how the player actually experienced the session.
   let fillRateOverTimeFpm = null
-  if (events.length > 0 && eventSpanMs > 0) {
+  const activeEventTimes = stats.activeEventTimes || []
+  if (events.length > 0 && activeMs > 0 && activeEventTimes.length === events.length) {
     const quarters = [0, 0, 0, 0]
-    const quarterMs = eventSpanMs / 4
-    for (const e of events) {
-      if (e.k !== 'f') continue
-      const q = Math.min(3, Math.floor(e.t / quarterMs))
+    const quarterMs = activeMs / 4
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].k !== 'f') continue
+      const q = Math.min(3, Math.floor(activeEventTimes[i] / quarterMs))
       quarters[q]++
     }
     const minutesPerQuarter = quarterMs / 60000
@@ -1703,15 +1769,20 @@ function buildSessionExport(log, dropdownLabel) {
   // the player accidentally tap, and what was the cell's correct colour?
   // (`w` events carry the player's intended colour `c` and the cell `i`;
   // the correct colour for that cell is whatever the subsequent `f`
-  // event lands.) Cluster wrong-fill (intended, actual) pairs — repeat
-  // pairs point at palette-confusion hot spots.
-  const wrongFillPairs = new Map()  // key = `${intended}->${actual}` → count
+  // event lands.)
+  //
+  // Pairs are folded BIDIRECTIONALLY — `a→b` and `b→a` are the same
+  // visual confusion (player sees two near-identical chips and taps the
+  // wrong one half the time in each direction). The classifier rule
+  // ("any pair with count ≥ 3 → frustration regen") needs the summed
+  // count or it misses split pairs like 5-and-3 = 8 confusions on the
+  // 2026-05-21 olive 6↔8 case.
+  const wrongFillPairs = new Map()
   for (let i = 0; i < events.length; i++) {
     const e = events[i]
     if (e.k !== 'w') continue
     const intended = e.c
     if (intended == null) continue
-    // Find the next 'f' on the same cell to learn the correct colour.
     let actual = null
     for (let j = i + 1; j < events.length; j++) {
       const f = events[j]
@@ -1720,25 +1791,36 @@ function buildSessionExport(log, dropdownLabel) {
         break
       }
     }
-    if (actual == null) continue
-    const key = `${intended}->${actual}`
-    wrongFillPairs.set(key, (wrongFillPairs.get(key) || 0) + 1)
+    if (actual == null || intended === actual) continue
+    const lo = Math.min(intended, actual)
+    const hi = Math.max(intended, actual)
+    const key = `${lo}|${hi}`
+    let entry = wrongFillPairs.get(key)
+    if (!entry) {
+      entry = { a: lo, b: hi, a_to_b_count: 0, b_to_a_count: 0 }
+      wrongFillPairs.set(key, entry)
+    }
+    if (intended < actual) entry.a_to_b_count++
+    else entry.b_to_a_count++
   }
-  const wrongFillTopPairs = Array.from(wrongFillPairs.entries())
-    .map(([key, count]) => {
-      const [intendedStr, actualStr] = key.split('->')
-      const intended = +intendedStr
-      const actual = +actualStr
-      return {
-        intended_color: intended,
-        intended_display_label: intended + 1,
-        actual_color: actual,
-        actual_display_label: actual + 1,
-        count,
-      }
-    })
+  const wrongFillPairsAll = Array.from(wrongFillPairs.values())
+    .map((p) => ({
+      a_color: p.a,
+      a_display_label: p.a + 1,
+      b_color: p.b,
+      b_display_label: p.b + 1,
+      a_to_b_count: p.a_to_b_count,
+      b_to_a_count: p.b_to_a_count,
+      count: p.a_to_b_count + p.b_to_a_count,
+    }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
+  // Cap the surfaced list at 20 entries — anything deeper is noise for
+  // human review — and flag truncation so the reviewer knows whether
+  // the rate-vs-concentration question is answerable from this row.
+  const WRONG_FILL_PAIRS_EMIT_LIMIT = 20
+  const wrongFillTopPairs = wrongFillPairsAll.slice(0, WRONG_FILL_PAIRS_EMIT_LIMIT)
+  const wrongFillTopPairsTruncated = wrongFillPairsAll.length > WRONG_FILL_PAIRS_EMIT_LIMIT
+  const wrongFillDistinctPairs = wrongFillPairsAll.length
 
   return {
     label: dropdownLabel || null,
@@ -1766,6 +1848,14 @@ function buildSessionExport(log, dropdownLabel) {
         : null,
       isolated_cells: gs?.isolatedCount ?? null,
       min_palette_pair_delta: gs?.minPalettePairDelta ?? null,
+      // Circular variance of palette hue in Oklab a/b, chroma-weighted
+      // so neutrals (low chroma) don't add noise. Range 0..1; 0 means
+      // every palette colour shares one hue (the 2026-05-10 lighthouse
+      // warm arc), 1 means hue is uniformly distributed (the 2026-05-20
+      // full-spectrum peak). The low-payoff classifier rule pairs this
+      // with predicted_active_min to catch "long puzzle, nothing to
+      // look at" before publish.
+      palette_hue_spread: gs?.paletteHueSpread ?? null,
       // Both `a`/`b` keys are the 0-based color_index used elsewhere in
       // the export; `*_display_label` mirrors the in-game 1-based number
       // the player sees, so a confusion call-out reads as e.g. "16 ↔ 18"
@@ -1796,8 +1886,22 @@ function buildSessionExport(log, dropdownLabel) {
       gap_percentiles_sec: gapPercentilesSec,
       median_sec_per_region: medianSecPerRegion,
       fill_rate_over_time_fpm: fillRateOverTimeFpm,
+      // Per-event gap cap that was applied to keep per-colour active_sec
+      // honest (water-fill threshold). Infinity = no capping needed
+      // (raw sum already fit within activeMs). Lets a reviewer sanity-
+      // check whether a flagged per-colour outlier survives the bug
+      // correction or is just attribution noise from a long away-gap.
+      per_colour_gap_cap_sec: Number.isFinite(stats.perColorGapCapMs)
+        ? +(stats.perColorGapCapMs / 1000).toFixed(2)
+        : null,
       wrong_fill_top_pairs: wrongFillTopPairs,
+      wrong_fill_top_pairs_truncated: wrongFillTopPairsTruncated,
+      wrong_fill_distinct_pairs: wrongFillDistinctPairs,
     },
+    platform: log.platform || null,
+    session_state: log.completed === true
+      ? 'completed'
+      : log.completed === false ? 'in_progress' : null,
     reconstruction: recon ? {
       consistent: recon.consistent,
       f_events: recon.fCount,
