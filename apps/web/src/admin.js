@@ -1663,6 +1663,26 @@ function buildSessionExport(log, dropdownLabel) {
   // distances from rgb. Sorted by active_sec desc so the slowest
   // colours sit at the top.
   const perColorMs = new Map(stats.perColor || [])
+
+  // ─── Per-colour fill-order positions — WHERE in the fill sequence each
+  // colour's regions got placed, normalised to [0,1] (0 = filled first,
+  // 1 = filled last). Surfaces the "seeking-contrast-first" coping tell:
+  // when a palette is too samey, the player chases the few hue-distinct
+  // colours early for visual relief even though they're small regions —
+  // an inversion of the normal big-regions-first instinct. A low centroid
+  // on a small-region, hue-distant colour is the signal. Fill events only,
+  // in recorded order; normalising by sequence length keeps it comparable
+  // across sessions of different length/platform.
+  const fillSeq = events.filter((e) => e.k === 'f')
+  const fillOrderByColor = new Map()
+  for (let k = 0; k < fillSeq.length; k++) {
+    const c = fillSeq[k].c
+    if (c == null) continue
+    const pos = fillSeq.length > 1 ? k / (fillSeq.length - 1) : 0
+    if (!fillOrderByColor.has(c)) fillOrderByColor.set(c, [])
+    fillOrderByColor.get(c).push(pos)
+  }
+
   const perColor = []
   if (gs) {
     const cellsPerColor = gs.cellsPerColor || []
@@ -1674,6 +1694,14 @@ function buildSessionExport(log, dropdownLabel) {
       const regions = regionsPerColor[i] || 0
       const activeMs = perColorMs.get(i) || 0
       const nn = neighbours[i] || null
+      const fillPositions = fillOrderByColor.get(i) || []
+      const fillCentroid = fillPositions.length
+        ? +(fillPositions.reduce((a, b) => a + b, 0) / fillPositions.length).toFixed(3)
+        : null
+      const fillSorted = fillPositions.slice().sort((a, b) => a - b)
+      const fillMedian = fillSorted.length
+        ? +fillSorted[Math.floor(fillSorted.length / 2)].toFixed(3)
+        : null
       perColor.push({
         color_index: i,
         // 1-based label matching what the player sees on the in-game
@@ -1687,6 +1715,11 @@ function buildSessionExport(log, dropdownLabel) {
         mean_cells_per_region: regions ? +(cells / regions).toFixed(2) : 0,
         active_sec: +(activeMs / 1000).toFixed(2),
         sec_per_region: regions ? +((activeMs / 1000) / regions).toFixed(2) : 0,
+        // Normalised [0,1] position of this colour in the fill sequence —
+        // low centroid + small regions + hue-distant = contrast-seeking
+        // coping (see fillOrderByColor above).
+        fill_order_centroid: fillCentroid,
+        fill_order_median: fillMedian,
         nearest_palette_color: nn ? nn.index : null,
         nearest_palette_display_label: nn ? nn.index + 1 : null,
         nearest_palette_delta: nn ? nn.delta : null,
@@ -1878,6 +1911,14 @@ function buildSessionExport(log, dropdownLabel) {
         ? Math.round((stats.wrong / stats.fills) * 1000) / 10
         : 0,
       selects: stats.selects,
+      // Fills per colour pickup — flow-rhythm signal. High = long
+      // uninterrupted colour-sweeps (less hunting between switches),
+      // which reads as effortless/fast even on slow platforms; low =
+      // constant re-selecting. 05-30 (4.25) felt surprisingly fast vs
+      // 05-23/05-31 (~2.6).
+      fills_per_select: stats.selects > 0
+        ? +(stats.fills / stats.selects).toFixed(2)
+        : null,
       total_events: stats.totalEvents,
       mean_gap_sec: +(stats.meanGapMs / 1000).toFixed(2),
       median_gap_sec: +(stats.medianGapMs / 1000).toFixed(2),
