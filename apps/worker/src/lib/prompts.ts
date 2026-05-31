@@ -511,7 +511,7 @@ const CATEGORY_PROMPT_INTENTS: Record<
     composition:
       'Craft a busy scene populated with multiple distinct subjects rendered in vivid focal colours, set against a softly muted, atmospheric background that retains gentle colour but recedes so the focus stays firmly on the subjects, using these elements:',
     qualityTarget:
-      'style: busy composition with distinct subjects in vivid colour against a softly muted, atmospheric background that retains gentle colour. Wide variety of colours, every shape should be defined by colour rather than outlines',
+      'style: busy composition with distinct subjects in vivid colour against a softly muted, atmospheric background that retains gentle colour. Maximum of 24 colours, every shape should be defined by colour rather than outlines',
   },
 }
 
