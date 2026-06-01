@@ -1,33 +1,50 @@
 import { loadImage, loadImageThumbFirst, releaseLoadedImage } from './image-loader.js'
 
-const MIN_COLS = 5
-const MIN_ROWS = 5
-const TARGET_TILE_COUNTS = { easy: 30, medium: 45, hard: 70 }
+const MIN_COLS = 2
+const MIN_ROWS = 2
+// Single auto-fit target for the online/daily puzzles. There is no
+// easy/medium/hard ladder on this path any more — difficulty only exists
+// in the Steam demo, which ships exact dimensions via gridOverride and
+// never reaches pickBestGrid. ~50 tiles is the sweet spot: dense enough
+// to be a real puzzle, big enough that tiles stay above MIN_TILE_PX.
+const TARGET_TILE_COUNT = 50
+// Smallest comfortable tile edge, in CSS px. The fitter never produces
+// tiles below this: on small screens it backs off to fewer tiles rather
+// than shrinking them. Tuned so iPhone 15 lands ~50, iPhone SE ~45,
+// desktop ~49. (See picture-swap-puzzle.js — kept identical.)
+const MIN_TILE_PX = 68
+// Weight of screen-aspect match relative to hitting the target count.
+// Count is primary (its error is measured in whole tiles); aspect only
+// breaks ties between grids of similar count.
+const ASPECT_WEIGHT = 6
 
-// Pick the (cols, rows) shape near targetTotal that maximises the area
-// covered by square tiles in availW × availH. Square tiles always leave
-// some slack in one dimension (width or height); this picks the shape
-// that minimises that slack while staying close to the difficulty count.
-// The image is then cover-cropped to the chosen board rect by
-// getCoverMetrics, so no picture area is wasted.
-function pickBestGrid(availW, availH, targetTotal) {
-  const minTotal = Math.max(MIN_COLS * MIN_ROWS, Math.floor(targetTotal * 0.7))
-  const maxTotal = Math.ceil(targetTotal * 1.4)
+// Pick the (cols, rows) shape that lands as close as possible to the
+// target tile count while keeping every tile ≥ MIN_TILE_PX and matching
+// the screen aspect as well as that allows. The per-dimension caps
+// guarantee the size floor — any grid within colsCap × rowsCap has
+// tileSize = min(availW/cols, availH/rows) ≥ MIN_TILE_PX. On screens too
+// small to hold the target at the floor, `desired` collapses to the
+// capacity, so we fill to the densest comfortable grid instead of
+// overshrinking. The image is then cover-cropped to the chosen board
+// rect by getCoverMetrics, so no picture area is wasted.
+function pickBestGrid(availW, availH, targetTotal = TARGET_TILE_COUNT) {
+  const colsCap = Math.max(MIN_COLS, Math.floor(availW / MIN_TILE_PX))
+  const rowsCap = Math.max(MIN_ROWS, Math.floor(availH / MIN_TILE_PX))
+  const capacity = colsCap * rowsCap
+  const desired = Math.min(targetTotal, capacity)
+  const screenAspect = availW / availH
+
   let best = null
-  for (let cols = MIN_COLS; cols <= 24; cols += 1) {
-    for (let rows = MIN_ROWS; rows <= 24; rows += 1) {
+  for (let cols = MIN_COLS; cols <= colsCap; cols += 1) {
+    for (let rows = MIN_ROWS; rows <= rowsCap; rows += 1) {
       const total = cols * rows
-      if (total < minTotal || total > maxTotal) continue
-      const tileSize = Math.min(availW / cols, availH / rows)
-      const area = total * tileSize * tileSize
-      if (!best || area > best.area) best = { cols, rows, area }
+      const countErr = Math.abs(total - desired)
+      const aspectErr = Math.abs(cols / rows - screenAspect) / screenAspect
+      const score = countErr + aspectErr * ASPECT_WEIGHT
+      if (!best || score < best.score) best = { cols, rows, score }
     }
   }
-  if (best) return { cols: best.cols, rows: best.rows }
-  const aspect = availW / availH
-  const cols = Math.max(MIN_COLS, Math.round(Math.sqrt(targetTotal * aspect)))
-  const rows = Math.max(MIN_ROWS, Math.round(targetTotal / cols))
-  return { cols, rows }
+  return best ? { cols: best.cols, rows: best.rows } : { cols: 5, rows: 5 }
 }
 
 const SWIPE_MIN_DISTANCE = 22
@@ -209,8 +226,7 @@ export class SlidingTilePuzzle {
         this.cols = this.gridOverride.cols
         this.rows = this.gridOverride.rows
       } else {
-        const targetTotal = TARGET_TILE_COUNTS[this.difficulty] || TARGET_TILE_COUNTS.medium
-        const picked = pickBestGrid(availW, availH, targetTotal)
+        const picked = pickBestGrid(availW, availH, TARGET_TILE_COUNT)
         this.cols = picked.cols
         this.rows = picked.rows
       }
