@@ -877,9 +877,9 @@ export function createApp() {
       return c.json({ error: 'ADMIN_PASSWORD is not configured.' }, 500)
     }
 
-    let body: { category?: string } | null = null
+    let body: { category?: string; exclude?: unknown } | null = null
     try {
-      body = (await c.req.json()) as { category?: string }
+      body = (await c.req.json()) as { category?: string; exclude?: unknown }
     } catch {
       return c.json({ error: 'Invalid JSON body.' }, 400)
     }
@@ -889,8 +889,14 @@ export function createApp() {
       return c.json({ error: 'Invalid category.' }, 400)
     }
 
+    // The day's other-tile descriptors (sent by the admin from the live form)
+    // so a single-tile regen doesn't reproduce a sibling's setting/camera.
+    const exclude = Array.isArray(body?.exclude)
+      ? body.exclude.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).filter(Boolean)
+      : []
+
     try {
-      const details = await generateSingleCategoryPrompt(c.env.DB, category)
+      const details = await generateSingleCategoryPrompt(c.env.DB, category, undefined, exclude)
       return c.json({
         ok: true,
         category,

@@ -2793,11 +2793,22 @@ async function regenerateCategoryPrompt(category, triggerBtn) {
 
   triggerBtn.disabled = true
   setStatus(`Regenerating ${category} descriptors...`, 'working')
+  // Send the OTHER tiles' current descriptors (from their tags inputs) so the
+  // regen doesn't reproduce a sibling's setting / mood / framing motif.
+  const exclude = []
+  for (const other of ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']) {
+    if (other === category) continue
+    const raw = document.getElementById(`tags-${other}`)?.value || ''
+    for (const part of raw.split(',')) {
+      const v = part.trim()
+      if (v) exclude.push(v)
+    }
+  }
   try {
     const { response, payload } = await adminFetch('/api/admin/prompts/generate-one', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category }),
+      body: JSON.stringify({ category, exclude }),
     })
     if (response.status === 401) {
       setStatus(payload.error || 'Admin session expired. Sign in again.', 'error')

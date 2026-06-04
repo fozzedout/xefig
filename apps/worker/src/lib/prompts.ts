@@ -209,7 +209,7 @@ const DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 
   camera: [
     'wide-angle establishing shot', 'low-angle hero perspective',
-    "overhead bird's-eye view", 'close-up macro shot',
+    'close-up macro shot',
     'medium shot with foreground framing', "worm's-eye upward angle",
     'Dutch tilt dynamic angle', 'symmetrical frontal framing',
     'over-the-shoulder depth shot', 'panoramic wide shot',
@@ -386,7 +386,6 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'wide landscape framing with a clear horizon line',
     'gentle three-quarter angle with the subject off-centre',
     'low angle looking up at the subject against the sky',
-    'overhead view looking down on the scene',
     'panoramic wide shot with layered horizontal bands',
     'intimate close framing filling most of the canvas',
     'diagonal composition with the subject on a leading line',
@@ -586,13 +585,26 @@ export async function generateSingleCategoryPrompt(
   db: D1Database,
   category: PuzzleCategory,
   rewriter?: PromptRewriter,
+  excludeDescriptors: readonly string[] = [],
 ): Promise<{ prompt: string; theme: string; keywords: string[] }> {
   validatePoolSizes()
   await ensurePuzzleTables(db)
   const history = await getPromptHistoryD1(db)
 
-  const set = pickDescriptorSet(history, new Set(), category)
-  const accents = pickAccents(history, new Set(Object.values(set)), category)
+  // Exclude the day's OTHER tiles' descriptors so a single-tile regen doesn't
+  // reproduce a sibling's setting/mood/camera — and block cameras that share a
+  // framing motif with a sibling (the same archway/aerial collision the batch
+  // builder guards against). buildPromptPack does this implicitly via
+  // usedInPack; an individual regen has no pack, so the caller passes them in.
+  const excluded = new Set(excludeDescriptors)
+  const pool = category === 'diamond' ? DIAMOND_DESCRIPTOR_POOL : DESCRIPTOR_POOL
+  const excludedMotifs = new Set([...excluded].map(framingMotif))
+  for (const cam of pool.camera) {
+    if (excludedMotifs.has(framingMotif(cam))) excluded.add(cam)
+  }
+
+  const set = pickDescriptorSet(history, excluded, category)
+  const accents = pickAccents(history, new Set([...excluded, ...Object.values(set)]), category)
   const details = buildCategoryPromptDetails(category, set, accents)
 
   let prompt = details.prompt
@@ -668,7 +680,7 @@ async function applyRewriterToPack(pack: PromptPack, rewriter: PromptRewriter): 
 function framingMotif(camera: string): string {
   const c = camera.toLowerCase()
   if (/arch/.test(c)) return 'archway'
-  if (/overhead|aerial|drone|bird|top-down|looking down/.test(c)) return 'aerial'
+  if (/overhead|aerial|drone|bird|looking down/.test(c)) return 'aerial'
   if (/balcony/.test(c)) return 'balcony'
   if (/panoramic|wide-angle|wide landscape/.test(c)) return 'wide'
   if (/foliage/.test(c)) return 'foliage'
