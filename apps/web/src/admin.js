@@ -1785,17 +1785,36 @@ function buildSessionExport(log, dropdownLabel) {
   // long pause. Using active-time positions keeps the quartiles aligned
   // with how the player actually experienced the session.
   let fillRateOverTimeFpm = null
+  let largeFillShareOverTimePct = null
   const activeEventTimes = stats.activeEventTimes || []
   if (events.length > 0 && activeMs > 0 && activeEventTimes.length === events.length) {
     const quarters = [0, 0, 0, 0]
+    const quarterCells = [0, 0, 0, 0]
+    const quarterBigCells = [0, 0, 0, 0]
     const quarterMs = activeMs / 4
     for (let i = 0; i < events.length; i++) {
       if (events[i].k !== 'f') continue
       const q = Math.min(3, Math.floor(activeEventTimes[i] / quarterMs))
       quarters[q]++
+      const n = Number(events[i].n)
+      if (Number.isFinite(n)) {
+        quarterCells[q] += n
+        if (n >= 65) quarterBigCells[q] += n
+      }
     }
     const minutesPerQuarter = quarterMs / 60000
     fillRateOverTimeFpm = quarters.map((count) => +(count / minutesPerQuarter).toFixed(2))
+    // Large-region (65+, the histogram's top bin) cell share per active-time
+    // quarter. The AGGREGATE big-fill payoff (65+ share) can't tell a
+    // front-loaded session — big masses cleared early, then a scattered
+    // small-region grind ("slog at the end") — from one where large groups
+    // stay AVAILABLE THROUGHOUT (flat share = always a satisfying fill to
+    // reach for). 06-02 was a confirmed ACCEPT despite the lowest aggregate
+    // 65+ share in the set because the player reported large groups "at any
+    // point"; a flat curve here is the distinguisher from a true back-loaded
+    // low-payoff drag, and the aggregate share alone must NOT fire the gate.
+    largeFillShareOverTimePct = quarterCells.map((cells, q) =>
+      cells > 0 ? +((quarterBigCells[q] / cells) * 100).toFixed(1) : 0)
   }
 
   // ─── Wrong-fill diagnostics — for each wrong fill, what colour did
@@ -1854,6 +1873,16 @@ function buildSessionExport(log, dropdownLabel) {
   const wrongFillTopPairs = wrongFillPairsAll.slice(0, WRONG_FILL_PAIRS_EMIT_LIMIT)
   const wrongFillTopPairsTruncated = wrongFillPairsAll.length > WRONG_FILL_PAIRS_EMIT_LIMIT
   const wrongFillDistinctPairs = wrongFillPairsAll.length
+  // Paired vs unpaired split — the frustration-vs-environment discriminator.
+  // A `w` event is "paired" only when the player re-tapped the SAME cell with
+  // the correct colour (f.i === e.i): a confirmed near-colour confusion. The
+  // rest are wrong taps corrected by re-aiming to a different cell of the
+  // region — aim/precision errors (fat-finger, a jostling commute), NOT palette
+  // confusion. Without this split a reviewer sees only `wrong_fills` (total)
+  // and the pair list, and can't tell "18 confusions" from "7 confusions + 11
+  // mis-taps" — the difference between a bad palette and a bumpy bus.
+  const wrongFillPaired = wrongFillPairsAll.reduce((s, p) => s + p.count, 0)
+  const wrongFillUnpaired = Math.max(0, stats.wrong - wrongFillPaired)
 
   return {
     label: dropdownLabel || null,
@@ -1927,6 +1956,7 @@ function buildSessionExport(log, dropdownLabel) {
       gap_percentiles_sec: gapPercentilesSec,
       median_sec_per_region: medianSecPerRegion,
       fill_rate_over_time_fpm: fillRateOverTimeFpm,
+      large_fill_share_over_time_pct: largeFillShareOverTimePct,
       // Per-event gap cap that was applied to keep per-colour active_sec
       // honest (water-fill threshold). Infinity = no capping needed
       // (raw sum already fit within activeMs). Lets a reviewer sanity-
@@ -1938,6 +1968,8 @@ function buildSessionExport(log, dropdownLabel) {
       wrong_fill_top_pairs: wrongFillTopPairs,
       wrong_fill_top_pairs_truncated: wrongFillTopPairsTruncated,
       wrong_fill_distinct_pairs: wrongFillDistinctPairs,
+      wrong_fill_paired: wrongFillPaired,
+      wrong_fill_unpaired: wrongFillUnpaired,
     },
     platform: log.platform || null,
     session_state: log.completed === true
