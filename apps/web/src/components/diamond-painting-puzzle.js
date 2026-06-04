@@ -1495,7 +1495,7 @@ export function sampleCellRegions(image, cols, rows, sampleGrid, useMedian = fal
   return regions
 }
 
-export function createDistinctPalette(pixels, targetColors, chromaWeight = 0, chromaReserve = 0) {
+export function createDistinctPalette(pixels, targetColors, chromaWeight = 0, chromaReserve = 0, consolidateFloor = 0) {
   const boxes = medianCutBoxes(pixels, targetColors * 4)
   const candidates = boxes.map((box) => {
     const color = boxAvg(box)
@@ -1510,7 +1510,7 @@ export function createDistinctPalette(pixels, targetColors, chromaWeight = 0, ch
   // somewhere to live after the highest-weight greys are picked.
   const minKeep = Math.min(candidates.length, targetColors * 2)
   const merged = mergeNearbyCandidates(candidates, 0.05, minKeep)
-  const selected = selectDistinctCandidates(merged, targetColors, chromaWeight, chromaReserve)
+  const selected = selectDistinctCandidates(merged, targetColors, chromaWeight, chromaReserve, consolidateFloor)
   return selected.map((candidate) => candidate.color)
 }
 
@@ -1613,10 +1613,18 @@ function mergeNearbyCandidates(candidates, minDistance, minKeep = 0) {
   return items.sort((a, b) => b.weight - a.weight)
 }
 
-function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, chromaReserve = 0) {
+function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, chromaReserve = 0, consolidateFloor = 0) {
   if (candidates.length <= targetColors) {
     return candidates
   }
+  // Consolidation floor (oklab distance): once no remaining candidate sits
+  // farther than this from every already-selected colour, stop adding — so
+  // the palette SHRINKS below targetColors on monotone images instead of
+  // manufacturing near-duplicate colours to hit quota. Those near-dupes are
+  // what split one wall into small-region confetti (the fill "slog"), so
+  // dropping them merges the fragments into big regions AND raises minΔ.
+  // Compared in squared-oklab units to match oklabDistSq. 0 = off (default).
+  const floorSq = consolidateFloor > 0 ? consolidateFloor * consolidateFloor : 0
 
   const selected = []
   const remaining = candidates.slice()
@@ -1664,7 +1672,7 @@ function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, ch
   }
 
   while (selected.length < targetColors && remaining.length > 0) {
-    let bestIndex = 0
+    let bestIndex = -1
     let bestScore = -1
 
     for (let i = 0; i < remaining.length; i++) {
@@ -1672,6 +1680,10 @@ function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, ch
       for (const candidate of selected) {
         minDistance = Math.min(minDistance, oklabDistSq(candidate.lab, remaining[i].lab))
       }
+      // Below the consolidation floor → too close to an already-selected
+      // colour, never pick it. When every remaining candidate is filtered the
+      // loop ends early and the palette stays smaller than targetColors.
+      if (floorSq > 0 && minDistance < floorSq) continue
       const weightFactor = 0.7 + 0.3 * (remaining[i].weight / maxWeight)
       const a = remaining[i].lab[1]
       const b = remaining[i].lab[2]
@@ -1684,6 +1696,7 @@ function selectDistinctCandidates(candidates, targetColors, chromaWeight = 0, ch
       }
     }
 
+    if (bestIndex === -1) break
     selected.push(remaining.splice(bestIndex, 1)[0])
   }
 
