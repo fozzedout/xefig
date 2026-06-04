@@ -657,6 +657,27 @@ async function applyRewriterToPack(pack: PromptPack, rewriter: PromptRewriter): 
 // Pack builder
 // ---------------------------------------------------------------------------
 
+// Visually-collidable camera-framing families. Two cameras in one day's pack
+// that map to the same motif read as "samey" even when their descriptor
+// STRINGS differ — e.g. two "through an archway" shots, or the generic
+// "aerial drone perspective" next to the diamond "gentle aerial overhead".
+// Plain string-dedup can't catch these (different strings; diamond has its own
+// pool), so we dedup by motif within a pack. Anything outside a family returns
+// its own string, so it only blocks an exact repeat. (Measured over 27 days:
+// 6 had a same-motif within-day collision, aerial by far the worst.)
+function framingMotif(camera: string): string {
+  const c = camera.toLowerCase()
+  if (/arch/.test(c)) return 'archway'
+  if (/overhead|aerial|drone|bird|top-down|looking down/.test(c)) return 'aerial'
+  if (/balcony/.test(c)) return 'balcony'
+  if (/panoramic|wide-angle|wide landscape/.test(c)) return 'wide'
+  if (/foliage/.test(c)) return 'foliage'
+  if (/silhouette/.test(c)) return 'silhouette'
+  if (/reflection/.test(c)) return 'reflection'
+  if (/vanishing-point|corridor/.test(c)) return 'corridor'
+  return c
+}
+
 function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   const recent = history.slice(-PROMPT_HISTORY_LIMIT)
 
@@ -665,13 +686,25 @@ function buildPromptPack(history: PromptHistoryItem[]): PromptPack {
   const descriptorSetsByCategory = {} as Record<PuzzleCategory, DescriptorSet>
   const accentsByCategory = {} as Record<PuzzleCategory, readonly string[]>
   const usedInPack = new Set<string>()
+  const usedFramingMotifs = new Set<string>()
 
   for (const category of CATEGORIES) {
-    const set = pickDescriptorSet(recent, usedInPack, category)
+    // Block any camera whose framing motif already appeared today so the day's
+    // batch never ships two near-identical shots (across the generic+diamond
+    // pools too). pickOneDescriptor falls back to the full pool if this empties
+    // it, so it can't hard-fail.
+    const pool = category === 'diamond' ? DIAMOND_DESCRIPTOR_POOL : DESCRIPTOR_POOL
+    const excluded = new Set(usedInPack)
+    for (const cam of pool.camera) {
+      if (usedFramingMotifs.has(framingMotif(cam))) excluded.add(cam)
+    }
+
+    const set = pickDescriptorSet(recent, excluded, category)
     descriptorSetsByCategory[category] = set
     for (const value of Object.values(set)) {
       usedInPack.add(value)
     }
+    usedFramingMotifs.add(framingMotif(set.camera))
 
     const accents = pickAccents(recent, usedInPack, category)
     accentsByCategory[category] = accents
