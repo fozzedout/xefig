@@ -112,6 +112,13 @@
         </svg>
         <span>Review</span>
       </button>
+      <button type="button" class="page-nav-btn" data-page="lab" role="tab" aria-selected="false">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M7 1.5l5 4-5 7-5-7 5-4Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+          <path d="M2 5.5h10" stroke="currentColor" stroke-width="1.3" />
+        </svg>
+        <span>Diamond Lab</span>
+      </button>
       <button type="button" class="page-nav-btn" data-page="trigger" role="tab" aria-selected="false">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path d="M4 2v10l8-5-8-5Z" fill="currentColor" />
@@ -169,54 +176,58 @@
                 <div class="mode-tag">Jigsaw</div>
                 <span class="existing-indicator" id="indicator-jigsaw"></span>
               </div>
-              <div class="image-previews">
-                <div id="thumb-jigsaw" class="existing-thumb" hidden>
-                  <img alt="Current jigsaw image" />
-                  <div class="thumb-overlay">Full image</div>
-                </div>
-                <div id="thumbnail-jigsaw" class="existing-thumb thumbnail-preview" hidden>
-                  <img alt="Jigsaw thumbnail" />
-                  <div class="thumb-overlay">Thumbnail</div>
-                </div>
-              </div>
-              <button type="button" class="gen-thumb-btn btn-micro" data-mode="jigsaw" hidden>Generate
-                Thumbnail</button>
-              <label class="drop-zone" id="drop-jigsaw">
-                <input name="jigsaw" type="file" accept="image/*" class="drop-input" />
-                <div class="drop-inner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
-                      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span class="drop-label">Drop or <u>browse</u></span>
-                  <span class="drop-name"></span>
-                </div>
-              </label>
-              <div class="card-meta">
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Theme</span>
-                  <input id="theme-jigsaw" name="theme-jigsaw" form="admin-form" type="text" placeholder="Jigsaw Theme"
-                    class="field-input-micro" />
-                </div>
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Tags</span>
-                  <input id="tags-jigsaw" name="tags-jigsaw" form="admin-form" type="text" placeholder="jigsaw, tags"
-                    class="field-input-micro" />
-                </div>
-              </div>
-              <details class="prompt-detail">
-                <summary class="prompt-detail-toggle">Prompt</summary>
-                <div class="prompt-detail-body">
-                  <div class="prompt-detail-actions">
-                    <button type="button" class="regen-btn btn-micro" data-mode="jigsaw">Regenerate</button>
-                    <button type="button" class="rewrite-btn btn-micro" data-mode="jigsaw">Reword</button>
-                    <button type="button" class="copy-btn btn-micro" data-target="prompt-jigsaw">Copy</button>
-                    <button type="button" class="submit-single-btn btn-micro btn-accent"
-                      data-mode="jigsaw">Submit</button>
+              <div class="card-media">
+                <div class="image-previews">
+                  <div id="thumb-jigsaw" class="existing-thumb" hidden>
+                    <img alt="Current jigsaw image" />
+                    <div class="thumb-overlay">Full image</div>
                   </div>
-                  <textarea id="prompt-jigsaw" placeholder="Prompt will appear here after generation..."></textarea>
+                  <div id="thumbnail-jigsaw" class="existing-thumb thumbnail-preview" hidden>
+                    <img alt="Jigsaw thumbnail" />
+                    <div class="thumb-overlay">Thumbnail</div>
+                  </div>
                 </div>
-              </details>
+                <button type="button" class="gen-thumb-btn btn-micro" data-mode="jigsaw" hidden>Generate
+                  Thumbnail</button>
+                <label class="drop-zone" id="drop-jigsaw">
+                  <input name="jigsaw" type="file" accept="image/*" class="drop-input" />
+                  <div class="drop-inner">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
+                        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="drop-label">Drop or <u>browse</u></span>
+                    <span class="drop-name"></span>
+                  </div>
+                </label>
+              </div>
+              <div class="card-body">
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-jigsaw" name="theme-jigsaw" form="admin-form" type="text" placeholder="Jigsaw Theme"
+                      class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-jigsaw" name="tags-jigsaw" form="admin-form" type="text" placeholder="jigsaw, tags"
+                      class="field-input-micro" />
+                  </div>
+                </div>
+                <details class="prompt-detail">
+                  <summary class="prompt-detail-toggle">Prompt</summary>
+                  <div class="prompt-detail-body">
+                    <div class="prompt-detail-actions">
+                      <button type="button" class="regen-btn btn-micro" data-mode="jigsaw">Regenerate</button>
+                      <button type="button" class="rewrite-btn btn-micro" data-mode="jigsaw">Reword</button>
+                      <button type="button" class="copy-btn btn-micro" data-target="prompt-jigsaw">Copy</button>
+                      <button type="button" class="submit-single-btn btn-micro btn-accent"
+                        data-mode="jigsaw">Submit</button>
+                    </div>
+                    <textarea id="prompt-jigsaw" rows="15" placeholder="Prompt will appear here after generation..."></textarea>
+                  </div>
+                </details>
+              </div>
             </div>
 
             <div class="category-card" data-mode="slider">
@@ -224,54 +235,58 @@
                 <div class="mode-tag">Slider</div>
                 <span class="existing-indicator" id="indicator-slider"></span>
               </div>
-              <div class="image-previews">
-                <div id="thumb-slider" class="existing-thumb" hidden>
-                  <img alt="Current slider image" />
-                  <div class="thumb-overlay">Full image</div>
-                </div>
-                <div id="thumbnail-slider" class="existing-thumb thumbnail-preview" hidden>
-                  <img alt="Slider thumbnail" />
-                  <div class="thumb-overlay">Thumbnail</div>
-                </div>
-              </div>
-              <button type="button" class="gen-thumb-btn btn-micro" data-mode="slider" hidden>Generate
-                Thumbnail</button>
-              <label class="drop-zone" id="drop-slider">
-                <input name="slider" type="file" accept="image/*" class="drop-input" />
-                <div class="drop-inner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
-                      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span class="drop-label">Drop or <u>browse</u></span>
-                  <span class="drop-name"></span>
-                </div>
-              </label>
-              <div class="card-meta">
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Theme</span>
-                  <input id="theme-slider" name="theme-slider" form="admin-form" type="text" placeholder="Slider Theme"
-                    class="field-input-micro" />
-                </div>
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Tags</span>
-                  <input id="tags-slider" name="tags-slider" form="admin-form" type="text" placeholder="slider, tags"
-                    class="field-input-micro" />
-                </div>
-              </div>
-              <details class="prompt-detail">
-                <summary class="prompt-detail-toggle">Prompt</summary>
-                <div class="prompt-detail-body">
-                  <div class="prompt-detail-actions">
-                    <button type="button" class="regen-btn btn-micro" data-mode="slider">Regenerate</button>
-                    <button type="button" class="rewrite-btn btn-micro" data-mode="slider">Reword</button>
-                    <button type="button" class="copy-btn btn-micro" data-target="prompt-slider">Copy</button>
-                    <button type="button" class="submit-single-btn btn-micro btn-accent"
-                      data-mode="slider">Submit</button>
+              <div class="card-media">
+                <div class="image-previews">
+                  <div id="thumb-slider" class="existing-thumb" hidden>
+                    <img alt="Current slider image" />
+                    <div class="thumb-overlay">Full image</div>
                   </div>
-                  <textarea id="prompt-slider" placeholder="Prompt will appear here after generation..."></textarea>
+                  <div id="thumbnail-slider" class="existing-thumb thumbnail-preview" hidden>
+                    <img alt="Slider thumbnail" />
+                    <div class="thumb-overlay">Thumbnail</div>
+                  </div>
                 </div>
-              </details>
+                <button type="button" class="gen-thumb-btn btn-micro" data-mode="slider" hidden>Generate
+                  Thumbnail</button>
+                <label class="drop-zone" id="drop-slider">
+                  <input name="slider" type="file" accept="image/*" class="drop-input" />
+                  <div class="drop-inner">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
+                        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="drop-label">Drop or <u>browse</u></span>
+                    <span class="drop-name"></span>
+                  </div>
+                </label>
+              </div>
+              <div class="card-body">
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-slider" name="theme-slider" form="admin-form" type="text" placeholder="Slider Theme"
+                      class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-slider" name="tags-slider" form="admin-form" type="text" placeholder="slider, tags"
+                      class="field-input-micro" />
+                  </div>
+                </div>
+                <details class="prompt-detail">
+                  <summary class="prompt-detail-toggle">Prompt</summary>
+                  <div class="prompt-detail-body">
+                    <div class="prompt-detail-actions">
+                      <button type="button" class="regen-btn btn-micro" data-mode="slider">Regenerate</button>
+                      <button type="button" class="rewrite-btn btn-micro" data-mode="slider">Reword</button>
+                      <button type="button" class="copy-btn btn-micro" data-target="prompt-slider">Copy</button>
+                      <button type="button" class="submit-single-btn btn-micro btn-accent"
+                        data-mode="slider">Submit</button>
+                    </div>
+                    <textarea id="prompt-slider" rows="15" placeholder="Prompt will appear here after generation..."></textarea>
+                  </div>
+                </details>
+              </div>
             </div>
 
             <div class="category-card" data-mode="swap">
@@ -279,53 +294,57 @@
                 <div class="mode-tag">Swap</div>
                 <span class="existing-indicator" id="indicator-swap"></span>
               </div>
-              <div class="image-previews">
-                <div id="thumb-swap" class="existing-thumb" hidden>
-                  <img alt="Current swap image" />
-                  <div class="thumb-overlay">Full image</div>
-                </div>
-                <div id="thumbnail-swap" class="existing-thumb thumbnail-preview" hidden>
-                  <img alt="Swap thumbnail" />
-                  <div class="thumb-overlay">Thumbnail</div>
-                </div>
-              </div>
-              <button type="button" class="gen-thumb-btn btn-micro" data-mode="swap" hidden>Generate Thumbnail</button>
-              <label class="drop-zone" id="drop-swap">
-                <input name="swap" type="file" accept="image/*" class="drop-input" />
-                <div class="drop-inner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
-                      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span class="drop-label">Drop or <u>browse</u></span>
-                  <span class="drop-name"></span>
-                </div>
-              </label>
-              <div class="card-meta">
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Theme</span>
-                  <input id="theme-swap" name="theme-swap" form="admin-form" type="text" placeholder="Swap Theme"
-                    class="field-input-micro" />
-                </div>
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Tags</span>
-                  <input id="tags-swap" name="tags-swap" form="admin-form" type="text" placeholder="swap, tags"
-                    class="field-input-micro" />
-                </div>
-              </div>
-              <details class="prompt-detail">
-                <summary class="prompt-detail-toggle">Prompt</summary>
-                <div class="prompt-detail-body">
-                  <div class="prompt-detail-actions">
-                    <button type="button" class="regen-btn btn-micro" data-mode="swap">Regenerate</button>
-                    <button type="button" class="rewrite-btn btn-micro" data-mode="swap">Reword</button>
-                    <button type="button" class="copy-btn btn-micro" data-target="prompt-swap">Copy</button>
-                    <button type="button" class="submit-single-btn btn-micro btn-accent"
-                      data-mode="swap">Submit</button>
+              <div class="card-media">
+                <div class="image-previews">
+                  <div id="thumb-swap" class="existing-thumb" hidden>
+                    <img alt="Current swap image" />
+                    <div class="thumb-overlay">Full image</div>
                   </div>
-                  <textarea id="prompt-swap" placeholder="Prompt will appear here after generation..."></textarea>
+                  <div id="thumbnail-swap" class="existing-thumb thumbnail-preview" hidden>
+                    <img alt="Swap thumbnail" />
+                    <div class="thumb-overlay">Thumbnail</div>
+                  </div>
                 </div>
-              </details>
+                <button type="button" class="gen-thumb-btn btn-micro" data-mode="swap" hidden>Generate Thumbnail</button>
+                <label class="drop-zone" id="drop-swap">
+                  <input name="swap" type="file" accept="image/*" class="drop-input" />
+                  <div class="drop-inner">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
+                        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="drop-label">Drop or <u>browse</u></span>
+                    <span class="drop-name"></span>
+                  </div>
+                </label>
+              </div>
+              <div class="card-body">
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-swap" name="theme-swap" form="admin-form" type="text" placeholder="Swap Theme"
+                      class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-swap" name="tags-swap" form="admin-form" type="text" placeholder="swap, tags"
+                      class="field-input-micro" />
+                  </div>
+                </div>
+                <details class="prompt-detail">
+                  <summary class="prompt-detail-toggle">Prompt</summary>
+                  <div class="prompt-detail-body">
+                    <div class="prompt-detail-actions">
+                      <button type="button" class="regen-btn btn-micro" data-mode="swap">Regenerate</button>
+                      <button type="button" class="rewrite-btn btn-micro" data-mode="swap">Reword</button>
+                      <button type="button" class="copy-btn btn-micro" data-target="prompt-swap">Copy</button>
+                      <button type="button" class="submit-single-btn btn-micro btn-accent"
+                        data-mode="swap">Submit</button>
+                    </div>
+                    <textarea id="prompt-swap" rows="15" placeholder="Prompt will appear here after generation..."></textarea>
+                  </div>
+                </details>
+              </div>
             </div>
 
             <div class="category-card" data-mode="polygram">
@@ -333,54 +352,58 @@
                 <div class="mode-tag">Polygram</div>
                 <span class="existing-indicator" id="indicator-polygram"></span>
               </div>
-              <div class="image-previews">
-                <div id="thumb-polygram" class="existing-thumb" hidden>
-                  <img alt="Current polygram image" />
-                  <div class="thumb-overlay">Full image</div>
-                </div>
-                <div id="thumbnail-polygram" class="existing-thumb thumbnail-preview" hidden>
-                  <img alt="Polygram thumbnail" />
-                  <div class="thumb-overlay">Thumbnail</div>
-                </div>
-              </div>
-              <button type="button" class="gen-thumb-btn btn-micro" data-mode="polygram" hidden>Generate
-                Thumbnail</button>
-              <label class="drop-zone" id="drop-polygram">
-                <input name="polygram" type="file" accept="image/*" class="drop-input" />
-                <div class="drop-inner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
-                      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span class="drop-label">Drop or <u>browse</u></span>
-                  <span class="drop-name"></span>
-                </div>
-              </label>
-              <div class="card-meta">
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Theme</span>
-                  <input id="theme-polygram" name="theme-polygram" form="admin-form" type="text"
-                    placeholder="Polygram Theme" class="field-input-micro" />
-                </div>
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Tags</span>
-                  <input id="tags-polygram" name="tags-polygram" form="admin-form" type="text"
-                    placeholder="polygram, tags" class="field-input-micro" />
-                </div>
-              </div>
-              <details class="prompt-detail">
-                <summary class="prompt-detail-toggle">Prompt</summary>
-                <div class="prompt-detail-body">
-                  <div class="prompt-detail-actions">
-                    <button type="button" class="regen-btn btn-micro" data-mode="polygram">Regenerate</button>
-                    <button type="button" class="rewrite-btn btn-micro" data-mode="polygram">Reword</button>
-                    <button type="button" class="copy-btn btn-micro" data-target="prompt-polygram">Copy</button>
-                    <button type="button" class="submit-single-btn btn-micro btn-accent"
-                      data-mode="polygram">Submit</button>
+              <div class="card-media">
+                <div class="image-previews">
+                  <div id="thumb-polygram" class="existing-thumb" hidden>
+                    <img alt="Current polygram image" />
+                    <div class="thumb-overlay">Full image</div>
                   </div>
-                  <textarea id="prompt-polygram" placeholder="Prompt will appear here after generation..."></textarea>
+                  <div id="thumbnail-polygram" class="existing-thumb thumbnail-preview" hidden>
+                    <img alt="Polygram thumbnail" />
+                    <div class="thumb-overlay">Thumbnail</div>
+                  </div>
                 </div>
-              </details>
+                <button type="button" class="gen-thumb-btn btn-micro" data-mode="polygram" hidden>Generate
+                  Thumbnail</button>
+                <label class="drop-zone" id="drop-polygram">
+                  <input name="polygram" type="file" accept="image/*" class="drop-input" />
+                  <div class="drop-inner">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
+                        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="drop-label">Drop or <u>browse</u></span>
+                    <span class="drop-name"></span>
+                  </div>
+                </label>
+              </div>
+              <div class="card-body">
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-polygram" name="theme-polygram" form="admin-form" type="text"
+                      placeholder="Polygram Theme" class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-polygram" name="tags-polygram" form="admin-form" type="text"
+                      placeholder="polygram, tags" class="field-input-micro" />
+                  </div>
+                </div>
+                <details class="prompt-detail">
+                  <summary class="prompt-detail-toggle">Prompt</summary>
+                  <div class="prompt-detail-body">
+                    <div class="prompt-detail-actions">
+                      <button type="button" class="regen-btn btn-micro" data-mode="polygram">Regenerate</button>
+                      <button type="button" class="rewrite-btn btn-micro" data-mode="polygram">Reword</button>
+                      <button type="button" class="copy-btn btn-micro" data-target="prompt-polygram">Copy</button>
+                      <button type="button" class="submit-single-btn btn-micro btn-accent"
+                        data-mode="polygram">Submit</button>
+                    </div>
+                    <textarea id="prompt-polygram" rows="15" placeholder="Prompt will appear here after generation..."></textarea>
+                  </div>
+                </details>
+              </div>
             </div>
 
             <div class="category-card" data-mode="diamond">
@@ -388,92 +411,62 @@
                 <div class="mode-tag">Diamond Painting</div>
                 <span class="existing-indicator" id="indicator-diamond"></span>
               </div>
-              <div class="image-previews">
-                <div id="thumb-diamond" class="existing-thumb" hidden>
-                  <img alt="Current diamond painting image" />
-                  <div class="thumb-overlay">Full image</div>
-                </div>
-                <div id="thumbnail-diamond" class="existing-thumb thumbnail-preview thumbnail-preview--quantized"
-                  hidden>
-                  <canvas id="diamond-quantized-canvas" class="quantized-preview-canvas"
-                    aria-label="Quantized diamond preview"></canvas>
-                  <div class="thumb-overlay">Quantized 24 colours</div>
-                </div>
-              </div>
-              <button type="button" class="gen-thumb-btn btn-micro" data-mode="diamond" hidden>Generate
-                Thumbnail</button>
-              <div class="complexity-row" id="diamond-complexity-row">
-                <button type="button" id="diamond-complexity-btn" class="btn-micro">Check complexity</button>
-                <label class="complexity-toggle"><input type="checkbox" id="diamond-wide-palette-toggle" checked /> wide
-                  palette</label>
-                <label class="complexity-toggle">bias <input type="number" id="diamond-chroma-bias" value="0" min="0"
-                    max="10" /></label>
-                <label class="complexity-toggle"><input type="checkbox" id="diamond-median-toggle" /> median</label>
-                <label class="complexity-toggle"><input type="checkbox" id="diamond-dither-toggle" /> dither</label>
-                <label class="complexity-toggle">smooth <input type="number" id="diamond-bilateral-strength" value="0"
-                    min="0" max="8" /></label>
-                <label class="complexity-toggle">chroma <input type="number" id="diamond-chroma" value="0" min="0"
-                    max="20" /></label>
-                <label class="complexity-toggle">reserve <input type="number" id="diamond-chroma-reserve" value="0"
-                    min="0" max="16" /></label>
-                <label class="complexity-toggle">split ≥ <input type="number" id="diamond-split-max" value="0" min="0"
-                    max="50" />%</label>
-                <label class="complexity-toggle">cleanup ≤ <input type="number" id="diamond-cleanup-max" value="1"
-                    min="0" max="50" /></label>
-                <div id="diamond-complexity-result" class="complexity-result" hidden></div>
-              </div>
-              <div class="complexity-row" id="diamond-session-log-row">
-                <label class="complexity-toggle">session log
-                  <select id="diamond-session-log-select">
-                    <option value="">(no captured sessions yet)</option>
-                  </select>
-                </label>
-                <div id="diamond-session-log-result" class="complexity-result session-log-result" hidden></div>
-              </div>
-              <div class="complexity-row" id="diamond-test-log-row">
-                <label class="complexity-toggle">test log
-                  <select id="diamond-test-log-select">
-                    <option value="">(no captured test runs yet)</option>
-                  </select>
-                </label>
-                <div id="diamond-test-log-result" class="complexity-result session-log-result" hidden></div>
-              </div>
-              <label class="drop-zone" id="drop-diamond">
-                <input name="diamond" type="file" accept="image/*" class="drop-input" />
-                <div class="drop-inner">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
-                      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span class="drop-label">Drop or <u>browse</u></span>
-                  <span class="drop-name"></span>
-                </div>
-              </label>
-              <div class="card-meta">
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Theme</span>
-                  <input id="theme-diamond" name="theme-diamond" form="admin-form" type="text"
-                    placeholder="Diamond Painting Theme" class="field-input-micro" />
-                </div>
-                <div class="card-meta-group">
-                  <span class="card-meta-label">Tags</span>
-                  <input id="tags-diamond" name="tags-diamond" form="admin-form" type="text" placeholder="diamond, tags"
-                    class="field-input-micro" />
-                </div>
-              </div>
-              <details class="prompt-detail">
-                <summary class="prompt-detail-toggle">Prompt</summary>
-                <div class="prompt-detail-body">
-                  <div class="prompt-detail-actions">
-                    <button type="button" class="regen-btn btn-micro" data-mode="diamond">Regenerate</button>
-                    <button type="button" class="rewrite-btn btn-micro" data-mode="diamond">Reword</button>
-                    <button type="button" class="copy-btn btn-micro" data-target="prompt-diamond">Copy</button>
-                    <button type="button" class="submit-single-btn btn-micro btn-accent"
-                      data-mode="diamond">Submit</button>
+              <div class="card-media">
+                <div class="image-previews">
+                  <div id="thumb-diamond" class="existing-thumb" hidden>
+                    <img alt="Current diamond painting image" />
+                    <div class="thumb-overlay">Full image</div>
                   </div>
-                  <textarea id="prompt-diamond" placeholder="Prompt will appear here after generation..."></textarea>
+                  <div id="thumbnail-diamond" class="existing-thumb thumbnail-preview thumbnail-preview--quantized"
+                    hidden>
+                    <canvas id="diamond-quantized-canvas" class="quantized-preview-canvas"
+                      aria-label="Quantized diamond preview"></canvas>
+                    <div class="thumb-overlay">Quantized 24 colours</div>
+                  </div>
                 </div>
-              </details>
+                <button type="button" class="gen-thumb-btn btn-micro" data-mode="diamond" hidden>Generate
+                  Thumbnail</button>
+                <label class="drop-zone" id="drop-diamond">
+                  <input name="diamond" type="file" accept="image/*" class="drop-input" />
+                  <div class="drop-inner">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor"
+                        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="drop-label">Drop or <u>browse</u></span>
+                    <span class="drop-name"></span>
+                  </div>
+                </label>
+              </div>
+              <div class="card-body">
+                <div class="card-meta">
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Theme</span>
+                    <input id="theme-diamond" name="theme-diamond" form="admin-form" type="text"
+                      placeholder="Diamond Painting Theme" class="field-input-micro" />
+                  </div>
+                  <div class="card-meta-group">
+                    <span class="card-meta-label">Tags</span>
+                    <input id="tags-diamond" name="tags-diamond" form="admin-form" type="text"
+                      placeholder="diamond, tags" class="field-input-micro" />
+                  </div>
+                </div>
+                <a href="#lab" class="card-lab-link">Tune quantization &amp; review play sessions in <strong>Diamond
+                    Lab</strong> →</a>
+                <details class="prompt-detail">
+                  <summary class="prompt-detail-toggle">Prompt</summary>
+                  <div class="prompt-detail-body">
+                    <div class="prompt-detail-actions">
+                      <button type="button" class="regen-btn btn-micro" data-mode="diamond">Regenerate</button>
+                      <button type="button" class="rewrite-btn btn-micro" data-mode="diamond">Reword</button>
+                      <button type="button" class="copy-btn btn-micro" data-target="prompt-diamond">Copy</button>
+                      <button type="button" class="submit-single-btn btn-micro btn-accent"
+                        data-mode="diamond">Submit</button>
+                    </div>
+                    <textarea id="prompt-diamond" rows="15" placeholder="Prompt will appear here after generation..."></textarea>
+                  </div>
+                </details>
+              </div>
             </div>
 
           </div>
@@ -709,6 +702,82 @@
             </div>
             <div id="test-gemma-log" class="test-gemma-log">
               <div class="test-gemma-log-empty">No runs yet.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ DIAMOND LAB PAGE ═══ -->
+      <section class="admin-page admin-page--lab" id="page-lab" data-page="lab" role="tabpanel" hidden>
+        <header class="page-header">
+          <h1 class="page-header-title">Diamond Lab</h1>
+          <p class="page-header-sub">Tune the 24-colour quantization for the diamond image loaded in Review, and review
+            captured play sessions. Load a date and inspect the diamond image in the Review tab first, then run Check
+            complexity here.</p>
+        </header>
+        <div class="lab-layout">
+          <div class="lab-tune">
+            <div class="lab-preview">
+              <div id="diamond-lab-preview" class="existing-thumb thumbnail-preview thumbnail-preview--quantized"
+                hidden>
+                <canvas id="diamond-lab-canvas" class="quantized-preview-canvas"
+                  aria-label="Tuned quantized diamond preview"></canvas>
+                <div class="thumb-overlay">Tuned quantization</div>
+              </div>
+              <div class="lab-preview-empty">Run <strong>Check complexity</strong> to render the tuned quantization of
+                the diamond image loaded in Review.</div>
+            </div>
+            <div class="lab-controls">
+              <div class="lab-control-actions">
+                <button type="button" id="diamond-complexity-btn" class="btn-micro">Check complexity</button>
+              </div>
+              <fieldset class="lab-group">
+                <legend>Palette</legend>
+                <label class="complexity-toggle"><input type="checkbox" id="diamond-wide-palette-toggle" checked /> wide
+                  palette</label>
+                <label class="complexity-toggle">bias <input type="number" id="diamond-chroma-bias" value="0" min="0"
+                    max="10" /></label>
+                <label class="complexity-toggle">chroma <input type="number" id="diamond-chroma" value="0" min="0"
+                    max="20" /></label>
+                <label class="complexity-toggle">reserve <input type="number" id="diamond-chroma-reserve" value="0"
+                    min="0" max="16" /></label>
+                <label class="complexity-toggle"
+                  title="Consolidation floor (oklab×100). Drops near-duplicate colours closer than this, shrinking the palette below 24 to merge small-region confetti into big regions. 0 = off. Try 8–15.">consolidate
+                  <input type="number" id="diamond-consolidate-floor" value="0" min="0" max="40" /></label>
+              </fieldset>
+              <fieldset class="lab-group">
+                <legend>Sampling</legend>
+                <label class="complexity-toggle"><input type="checkbox" id="diamond-median-toggle" /> median</label>
+                <label class="complexity-toggle"><input type="checkbox" id="diamond-dither-toggle" /> dither</label>
+                <label class="complexity-toggle">smooth <input type="number" id="diamond-bilateral-strength" value="0"
+                    min="0" max="8" /></label>
+              </fieldset>
+              <fieldset class="lab-group">
+                <legend>Cleanup</legend>
+                <label class="complexity-toggle">split ≥ <input type="number" id="diamond-split-max" value="0" min="0"
+                    max="50" />%</label>
+                <label class="complexity-toggle">cleanup ≤ <input type="number" id="diamond-cleanup-max" value="1"
+                    min="0" max="50" /></label>
+              </fieldset>
+            </div>
+          </div>
+          <div id="diamond-complexity-result" class="complexity-result" hidden></div>
+          <div class="lab-logs">
+            <div class="lab-log-col" id="diamond-session-log-row">
+              <label class="complexity-toggle">session log
+                <select id="diamond-session-log-select">
+                  <option value="">(no captured sessions yet)</option>
+                </select>
+              </label>
+              <div id="diamond-session-log-result" class="complexity-result session-log-result" hidden></div>
+            </div>
+            <div class="lab-log-col" id="diamond-test-log-row">
+              <label class="complexity-toggle">test log
+                <select id="diamond-test-log-select">
+                  <option value="">(no captured test runs yet)</option>
+                </select>
+              </label>
+              <div id="diamond-test-log-result" class="complexity-result session-log-result" hidden></div>
             </div>
           </div>
         </div>

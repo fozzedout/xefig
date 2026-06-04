@@ -62,7 +62,7 @@ const ribbonCountEl = document.getElementById('ribbon-count')
 // ─── Admin page switching (Editor / Batch / Messages) ──
 const pageNavButtons = document.querySelectorAll('.page-nav-btn')
 const adminPages = document.querySelectorAll('.admin-page')
-const VALID_PAGES = new Set(['editor', 'trigger', 'messages', 'test'])
+const VALID_PAGES = new Set(['editor', 'lab', 'trigger', 'messages', 'test'])
 
 function switchAdminPage(name) {
   // Legacy alias: 'queue' was a separate tab before Trigger and Queue
@@ -905,7 +905,12 @@ async function checkDiamondComplexity() {
       : cellSamples.map((cell) => cell.representative)
     const chromaWeight = Math.max(0, parseInt(document.getElementById('diamond-chroma')?.value, 10) || 0)
     const chromaReserve = Math.max(0, parseInt(document.getElementById('diamond-chroma-reserve')?.value, 10) || 0)
-    const palette = createDistinctPalette(palettePixels, DIAMOND_NUM_COLORS, chromaWeight, chromaReserve)
+    // Consolidation floor: slider is oklab×100 (integer-friendly), the builder
+    // wants an oklab distance, so /100. >0 lets the palette shrink below 24 by
+    // dropping near-duplicate colours — watch `colors` and the small≤16/big65+
+    // shares move as you sweep it.
+    const consolidateFloor = Math.max(0, parseInt(document.getElementById('diamond-consolidate-floor')?.value, 10) || 0) / 100
+    const palette = createDistinctPalette(palettePixels, DIAMOND_NUM_COLORS, chromaWeight, chromaReserve, consolidateFloor)
     sortPaletteDarkToLight(palette)
     // Match the puzzle init pipeline: break label-silhouette collisions
     // for confusable colour pairs so the admin's "Check complexity" panel
@@ -927,10 +932,14 @@ async function checkDiamondComplexity() {
     const minPaletteDeltaE = computeMinPalettePairDistance(palette, activeIndices)
     const verdict = classifyDiamondComplexity(adjDiff, regionCount, largestRegionFraction)
 
-    // Re-paint the on-page preview using the (possibly dithered) grid we
-    // just computed so the visual matches the metrics the admin is reading.
-    const previewCanvas = document.getElementById('diamond-quantized-canvas')
+    // Re-paint the LAB's own tuned-preview canvas (separate from the Review
+    // card's production-quantization preview) so the lab shows the result of
+    // these tuning params without disturbing the source↔production compare in
+    // Review. Unhide the lab preview wrapper (hides the empty-state hint).
+    const previewCanvas = document.getElementById('diamond-lab-canvas')
     if (previewCanvas) {
+      const labWrap = document.getElementById('diamond-lab-preview')
+      if (labWrap) labWrap.hidden = false
       const completedFills = Array.from(grid)
       drawDiamondGrid(previewCanvas, cols, rows, palette, grid, completedFills)
     }
@@ -973,6 +982,24 @@ async function checkDiamondComplexity() {
     regPerColorEl.title = 'Mean regions per active colour — proxy for how much same-colour hunting the player does per colour switch'
     regPerColorEl.innerHTML = `reg/color <strong>${meanRegionsPerColor.toFixed(1)}</strong>`
     result.appendChild(regPerColorEl)
+
+    // Region-size shares — the flow proxy. small≤16 is the fill "slog"
+    // (near-duplicate colours fragment a wall into confetti); big65+ is the
+    // payoff. Raising the consolidate floor should push small↓ and big↑.
+    const totalGridCells = cols * rows
+    let smallRegionCells = 0
+    let bigRegionCells = 0
+    for (const s of sizes) {
+      if (s <= 16) smallRegionCells += s
+      else if (s >= 65) bigRegionCells += s
+    }
+    const smallSharePct = totalGridCells > 0 ? (smallRegionCells / totalGridCells) * 100 : 0
+    const bigSharePct = totalGridCells > 0 ? (bigRegionCells / totalGridCells) * 100 : 0
+    const sharesEl = document.createElement('span')
+    sharesEl.className = 'complexity-metric'
+    sharesEl.title = 'Cell-share in small regions (≤16 cells — the small-fill slog) vs large regions (65+ cells — the flow payoff). Raising the consolidate floor should move small↓ / big↑.'
+    sharesEl.innerHTML = `small≤16 <strong>${smallSharePct.toFixed(0)}%</strong> · big65+ <strong>${bigSharePct.toFixed(0)}%</strong>`
+    result.appendChild(sharesEl)
 
     const deltaEl = document.createElement('span')
     deltaEl.className = 'complexity-metric'

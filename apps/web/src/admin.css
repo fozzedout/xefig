@@ -2138,18 +2138,72 @@ details.trigger-card[open] > summary.trigger-card-header::after {
 
 /* ── Category grid ──────────────────────────────────── */
 .category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
   margin-bottom: 1.25rem;
 }
 
+/* Each category is a full-width ROW: header across the top, an image rail on
+   the left, theme/tags/prompt body on the right. */
 .category-card {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   transition: border-color 0.2s;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  grid-template-areas:
+    "header header"
+    "media  body";
+}
+.category-card-header { grid-area: header; }
+.card-media {
+  grid-area: media;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.card-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem 0.8rem;
+  min-width: 0;
+}
+/* Previews sit SIDE BY SIDE in the rail — full vs thumbnail (or, for diamond,
+   source vs quantized) compared at a glance to catch a storage/generation
+   mismatch; click either for the lightbox. Keeps each review row compact
+   instead of a tall stack of the same image twice. */
+.card-media .image-previews { flex-direction: row; }
+.card-media .existing-thumb { min-width: 0; }
+/* Theme + Tags share one row so they use the body width instead of two short
+   inputs floating in a wide void. */
+.card-body .card-meta {
+  flex-direction: row;
+  gap: 0.9rem;
+  padding: 0;
+  border-bottom: none;
+}
+.card-body .card-meta-group { flex: 1 1 0; min-width: 0; }
+.card-body .card-meta-group .field-input-micro { width: 100%; }
+.card-lab-link { margin: 0; }
+/* Prompt is collapsed by default; expanded, its textarea shows ~15 rows so the
+   13+-line prompt Regenerate produces is visible without scrolling. The `#id`
+   in the selector is deliberate — it must out-specify the global
+   `#admin-form textarea { min-height: 100px }` rule, which otherwise wins and
+   pins it back to ~5 rows. (`rows="15"` on the element sets the same height;
+   this is the belt-and-suspenders floor.) */
+#admin-form .card-body .prompt-detail textarea { min-height: 300px; }
+@media (max-width: 720px) {
+  .category-card {
+    grid-template-columns: 1fr;
+    grid-template-areas: "header" "media" "body";
+  }
+  .card-media { border-right: none; border-bottom: 1px solid var(--border); }
 }
 
 .category-card:hover { border-color: var(--border-hi); }
@@ -2437,6 +2491,137 @@ details.trigger-card[open] > summary.trigger-card-header::after {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
 }
+
+/* ── Diamond review card → Lab link ─────────────────── */
+.card-lab-link {
+  display: block;
+  margin: 0.1rem 0.75rem 0.45rem;
+  font-size: 0.72rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+.card-lab-link:hover { text-decoration: underline; }
+.card-lab-link strong { font-weight: 700; }
+
+/* ════ DIAMOND LAB PAGE ════════════════════════════════ */
+.admin-page--lab { overflow: hidden; }
+.lab-layout {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* Cap the lab to a focused, readable column instead of stretching controls
+   and the histogram across the full page (which reads as empty, not roomy). */
+.lab-tune,
+.lab-layout > #diamond-complexity-result,
+.lab-logs { max-width: 1080px; }
+
+/* Tuning row: tuned preview + grouped controls side by side */
+.lab-tune {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .lab-tune { grid-template-columns: 1fr; }
+}
+.lab-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.lab-preview .existing-thumb { border-bottom: none; }
+.lab-preview-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.lab-preview #diamond-lab-preview:not([hidden]) + .lab-preview-empty { display: none; }
+
+.lab-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem 0.8rem;
+  align-content: start;
+}
+.lab-control-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/* Palette (the first fieldset) spans both columns; Sampling + Cleanup pair up
+   below so the controls fill the row instead of trailing into empty space. */
+.lab-group:first-of-type { grid-column: 1 / -1; }
+.lab-controls .btn-micro:disabled { opacity: 0.55; cursor: progress; }
+.lab-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0;
+  padding: 0.55rem 0.85rem 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  background: var(--surface-1);
+}
+.lab-group legend {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 0 0.4rem;
+}
+
+/* Metrics result — full width so the 7-bucket histogram breathes */
+.lab-layout > #diamond-complexity-result {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 0;
+  padding: 0.8rem 0.95rem;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+.lab-layout > #diamond-complexity-result[hidden] { display: none; }
+/* Keep the 7-bucket histogram at a tight, chart-like width — full-page width
+   left tiny bars marooned in dead space. */
+.lab-layout .region-size-chart { max-width: 580px; gap: 0.5rem; }
+.lab-layout .region-size-bar { max-width: 100%; }
+
+/* Session + test log review, side by side */
+.lab-logs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+@media (max-width: 880px) { .lab-logs { grid-template-columns: 1fr; } }
+.lab-log-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.75rem 0.9rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+}
+.lab-log-col > .complexity-toggle { font-size: 0.76rem; color: var(--text-2); }
+.lab-log-col select { margin-left: 0.4rem; max-width: 100%; }
+.lab-log-col .complexity-result { width: 100%; }
+.lab-log-col .complexity-result[hidden] { display: none; }
 .region-size-cells {
   font-size: 0.6rem;
   color: var(--text-3);
