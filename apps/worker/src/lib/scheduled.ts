@@ -15,6 +15,7 @@ import {
   saveBatchJob,
   deleteBatchJob,
   getAppSetting,
+  setAppSetting,
   type PendingBatchJob,
 } from './puzzle-db'
 
@@ -23,6 +24,40 @@ export const PIPELINE_PAUSED_KEY = 'pipeline_paused'
 export async function isPipelinePaused(db: D1Database): Promise<boolean> {
   const value = await getAppSetting(db, PIPELINE_PAUSED_KEY)
   return value === '1'
+}
+
+// A batch normally starts within minutes; if Gemini has queued it but
+// completed ZERO of its requests after this many hours it's wedged, not slow,
+// so we drop it and resubmit the same date instead of waiting out the 24h SLA.
+const STUCK_NO_PROGRESS_HOURS = 6
+// Per-date count of consecutive stuck-and-resubmitted batches (reset when the
+// puzzle finally saves). Only alert once a *resubmit* also sticks — a one-off
+// Gemini hiccup self-heals silently.
+const STUCK_RETRY_KEY = 'batch_stuck_retries'
+const STUCK_RETRY_ALERT = 2
+
+async function readStuckRetries(db: D1Database): Promise<Record<string, number>> {
+  try {
+    return JSON.parse((await getAppSetting(db, STUCK_RETRY_KEY)) || '{}') as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
+async function bumpStuckRetry(db: D1Database, date: string): Promise<number> {
+  const map = await readStuckRetries(db)
+  const next = (map[date] ?? 0) + 1
+  map[date] = next
+  await setAppSetting(db, STUCK_RETRY_KEY, JSON.stringify(map))
+  return next
+}
+
+async function clearStuckRetry(db: D1Database, date: string): Promise<void> {
+  const map = await readStuckRetries(db)
+  if (map[date] != null) {
+    delete map[date]
+    await setAppSetting(db, STUCK_RETRY_KEY, JSON.stringify(map))
+  }
 }
 
 export type BatchSubmitResult = {
@@ -48,6 +83,12 @@ export type BatchPollResult = {
   // Set when handleBatchPoll runs in skipProcess mode and a job has
   // PNGs sitting in R2 temp ready for the client to encode locally.
   remainingCategories?: PuzzleCategory[]
+  // Stuck-batch auto-recovery: state==='stuck' means a wedged batch was
+  // dropped + resubmitted; stuckAlert flags that a retry ALSO stuck (worth an
+  // email), retryCount is the consecutive-stuck count for the date.
+  stuckAlert?: boolean
+  retryCount?: number
+  resubmitted?: boolean
 }
 
 export type BatchPollOptions = {
@@ -336,6 +377,30 @@ export async function handleBatchPoll(
 
     if (result.state === 'pending' || result.state === 'running') {
       const stats = result.stats
+      const succeeded = Number(stats?.succeededRequestCount ?? stats?.successfulRequestCount ?? 0)
+      const ageHours = (Date.now() - new Date(job.submittedAt).getTime()) / 3_600_000
+
+      // Wedged: Gemini has queued it for hours but completed ZERO requests
+      // (a healthy batch starts within minutes). Drop it and resubmit the same
+      // date immediately rather than waiting out the 24h SLA. Only escalate to
+      // an email once a resubmit ALSO sticks — a one-off hiccup self-heals.
+      if (succeeded === 0 && ageHours > STUCK_NO_PROGRESS_HOURS) {
+        const retryCount = await bumpStuckRetry(env.DB, job.targetDate)
+        await deleteBatchJob(env.DB, job.batchName)
+        const resub = await handleBatchSubmit(env, { date: job.targetDate, force: true })
+        return {
+          found: true,
+          state: 'stuck',
+          stuckAlert: retryCount >= STUCK_RETRY_ALERT,
+          retryCount,
+          resubmitted: resub.submitted,
+          batchName: job.batchName,
+          targetDate: job.targetDate,
+          submittedAt: job.submittedAt,
+          message: `Batch for ${job.targetDate} wedged at Gemini (0 done after ${Math.round(ageHours)}h) — dropped and ${resub.submitted ? 'resubmitted' : `resubmit skipped: ${resub.message}`} (attempt ${retryCount}).`,
+        }
+      }
+
       const statsMsg = stats
         ? ` [${stats.succeededRequestCount ?? stats.successfulRequestCount ?? 0}/${stats.requestCount ?? '?'} done, ${stats.pendingRequestCount ?? 0} pending]`
         : ''
@@ -723,6 +788,8 @@ async function finalizeRecord(env: Bindings, job: PendingBatchJob): Promise<Batc
   }
 
   await savePuzzleRecord(env.DB, record)
+  // The date finally produced a puzzle — clear any stuck-retry tally for it.
+  await clearStuckRetry(env.DB, targetDate)
   await deleteBatchJob(env.DB, batchName)
 
   const catLabel = jobCategories.length === 1 ? jobCategories[0] : `${jobCategories.length} categories`

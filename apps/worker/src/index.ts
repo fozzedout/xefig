@@ -1,5 +1,5 @@
 import { createApp } from './app'
-import { handleBatchSubmit, handleBatchPoll, getBatchJobStatus } from './lib/scheduled'
+import { handleBatchSubmit, handleBatchPoll } from './lib/scheduled'
 import type { Bindings } from './types'
 
 const app = createApp()
@@ -47,6 +47,17 @@ export default {
           ctx.waitUntil(sendAlert(env, `Xefig: Batch failed for ${result.targetDate}`, `Batch job for ${result.targetDate} failed.\n\nError: ${result.error || 'Unknown'}\nBatch: ${result.batchName}\nSubmitted: ${result.submittedAt}`))
         }
 
+        // A batch wedged at Gemini (queued, 0 done for hours) was auto-dropped
+        // and resubmitted. Stay silent on the first recovery; only email once a
+        // resubmit ALSO sticks — the retries aren't clearing and a human should
+        // look.
+        if (result.state === 'stuck') {
+          console.warn(`Stuck batch auto-recovered: ${result.message}`)
+          if (result.stuckAlert) {
+            ctx.waitUntil(sendAlert(env, `Xefig: Batch keeps getting stuck for ${result.targetDate}`, `A batch for ${result.targetDate} has now wedged at Gemini and been auto-resubmitted ${result.retryCount} times — the retries aren't clearing, so batch image generation likely needs attention.\n\nLast batch: ${result.batchName}\nResubmitted: ${result.resubmitted ? 'yes' : 'no'}\nTime: ${new Date().toISOString()}`))
+          }
+        }
+
         if (result.found && result.savedDate) {
           console.log(`Puzzle saved for ${result.savedDate}`)
         }
@@ -54,20 +65,6 @@ export default {
         const msg = error instanceof Error ? error.message : String(error)
         console.error('Batch poll failed', error)
         ctx.waitUntil(sendAlert(env, 'Xefig: Batch processing error', `The hourly batch poll/processing failed.\n\nError: ${msg}\n\nTime: ${new Date().toISOString()}`))
-      }
-
-      // Check for stuck jobs (submitted > 24h ago, still not done)
-      try {
-        const status = await getBatchJobStatus(env)
-        if (status.active && status.submittedAt) {
-          const ageMs = Date.now() - new Date(status.submittedAt).getTime()
-          const ageHours = ageMs / (1000 * 60 * 60)
-          if (ageHours > 24) {
-            ctx.waitUntil(sendAlert(env, `Xefig: Batch stuck for ${status.targetDate}`, `Batch job has been active for ${Math.round(ageHours)}h without completing.\n\nTarget: ${status.targetDate}\nPhase: ${status.phase}\nBatch: ${status.batchName}\nSubmitted: ${status.submittedAt}\nProcessed: ${(status.processedCategories || []).join(', ') || 'none'}\nRemaining: ${(status.remainingCategories || []).join(', ') || 'none'}`))
-          }
-        }
-      } catch {
-        // Non-fatal
       }
     }
   },
