@@ -286,7 +286,7 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'village market square', 'circus tent in a town square',
     'harvest festival', 'canal town', 'seaside promenade',
     'old town plaza', 'carnival parade', 'alpine chalet in snow',
-    'botanical glasshouse', 'desert caravan with camels', 'monsoon street scene',
+    'walled cottage garden in bloom', 'desert caravan with camels', 'monsoon street scene',
     'rooftop view across a tiled city',
     'botanical scene with layered plants',
     'forest clearing with animals around a stream',
