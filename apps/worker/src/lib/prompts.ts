@@ -290,12 +290,14 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'rooftop view across a tiled city',
     'botanical scene with layered plants',
     'forest clearing with animals around a stream',
-    // folk-art / decorative patterns (each is one composition, no accents)
-    'stained glass flower panel', 'mandala with 8-fold symmetry',
+    // folk-art / decorative focal subjects (each is one composition, no
+    // accents). Dense lattice/mosaic/fine-repeat patterns (stained glass,
+    // quilts, pysanka, suzani embroidery) are kept OUT of the diamond pool —
+    // they quantize into incoherent noise; the vision gate is the backstop.
+    'mandala with 8-fold symmetry',
     'folk-art tree of life with birds and fruit',
     'talavera plate pattern with central motif',
-    'paper-cut bird and flower motif', 'quilted heart block',
-    'pysanka egg pattern', 'suzani embroidery panel',
+    'paper-cut bird and flower motif',
     // architectural focal subjects
     'windmill at sunset', 'lighthouse at night',
     'church steeple with cottages', 'a coastal village at dusk',
@@ -327,7 +329,7 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
     'layered flat shapes', 'richly patterned', 'hand-crafted',
     'retro-styled', 'folk-inspired', 'whimsical', 'ornamental',
     'jewel-toned',
-    'paint-thick', 'silkscreen-flat', 'mosaic-clean', 'tile-bordered',
+    'paint-thick', 'silkscreen-flat',
     'lacquer-bright', 'enamel-rich', 'broad-stroked', 'block-printed',
     'banner-bold', 'tapestry-like',
   ],
@@ -356,7 +358,7 @@ const DIAMOND_DESCRIPTOR_POOL: Record<DescriptorRole, readonly string[]> = {
 
   palette: [
     'jewel tones laid down in large flat panels with clean boundaries',
-    'stained-glass palette: a dozen saturated flat panels separated by bold dark leading',
+    'jewel-bright palette: a handful of rich saturated colours in large clean shapes',
     'folk-art palette: primaries, earth tones and one accent in simple, bold shapes',
     'mid-century poster palette: a set of bold flat colours in strong silhouettes',
     'tropical flat palette: turquoise, coral, green, sand, magenta — each as broad zones',

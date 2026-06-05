@@ -1,14 +1,14 @@
 import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
-import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
+import { submitImageBatch, pollImageBatch, judgeDiamondCoherence, type BatchRequest } from './gemini'
 import { makeGemmaRewriter } from './gemma-rewriter'
 import { detectBorder, processPngImage } from './image'
-import { detectTooSimpleDiamond } from './diamond-quant'
+import { detectTooSimpleDiamond, renderQuantizedPng } from './diamond-quant'
 
 const BORDER_PROMPT_ADDENDUM =
   'Critical: the image must be full-bleed. Content extends completely to all four edges — no white frame, no coloured border, no paper texture, no torn or deckled edges, no vignette, no matting.'
 const COMPLEXITY_PROMPT_ADDENDUM =
-  'Critical: pack the whole frame with many distinct, differently-coloured regions and fine detail — multiple subjects, layered foreground/middle/background, varied textures. Avoid large flat areas of a single colour (no big empty sky, water, or wall dominating the frame).'
+  'Critical: the scene must read as a clear, recognisable picture made of distinct, recognisable shapes with moderate detail. Avoid BOTH extremes — no single large flat area dominating the frame (big empty sky/water/wall), and no dense busy repeating detail that dissolves into noise (stained glass, mosaics, intricate lattices, tile grids, fine repeating patterns).'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
 import {
   ensurePuzzleTables,
@@ -474,16 +474,29 @@ export async function handleBatchPoll(
         const cAttempts = complexityFailures[image.category] ?? 0
         if (cAttempts < COMPLEXITY_REGEN_LIMIT) {
           try {
-            const verdict = detectTooSimpleDiamond(image.imageBytes)
-            if (verdict.tooSimple) {
+            const analysis = detectTooSimpleDiamond(image.imageBytes)
+            if (analysis.tooSimple) {
               complexityFailures[image.category] = cAttempts + 1
               skipForComplexity = true
               console.warn(
-                `[complexity] ${job.targetDate}/diamond too simple (largest ${(verdict.largestRegionFraction * 100).toFixed(0)}%, ${verdict.regionCount} regions, big65 ${(verdict.bigRegionShare * 100).toFixed(0)}%) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
+                `[complexity] ${job.targetDate}/diamond too simple (largest ${(analysis.largestRegionFraction * 100).toFixed(0)}%, ${analysis.regionCount} regions, big65 ${(analysis.bigRegionShare * 100).toFixed(0)}%) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
               )
+            } else if (env.GOOGLE_AI_API_KEY) {
+              // Metrics pass — but does the quantized result actually look like a
+              // coherent picture, or did it dissolve into mosaic/lattice noise?
+              // Region stats can't tell; ask Gemini vision about the render.
+              const png = renderQuantizedPng(analysis.grid, analysis.palette, analysis.cols, analysis.rows)
+              const verdict = await judgeDiamondCoherence(env.GOOGLE_AI_API_KEY, png, env.DIAMOND_VISION_MODEL || undefined)
+              if (verdict.regen) {
+                complexityFailures[image.category] = cAttempts + 1
+                skipForComplexity = true
+                console.warn(
+                  `[complexity] ${job.targetDate}/diamond looks incoherent (vision ${verdict.score}/10: ${verdict.reason}) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
+                )
+              }
             }
           } catch (err) {
-            console.warn('[complexity] detection failed for diamond', err)
+            console.warn('[complexity] check failed for diamond', err)
           }
         } else {
           console.warn(`[complexity] ${job.targetDate}/diamond hit regen limit (${COMPLEXITY_REGEN_LIMIT}), accepting image`)

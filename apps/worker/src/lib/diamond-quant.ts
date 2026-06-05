@@ -15,6 +15,7 @@
 // Keep these constants in lock-step with diamond-painting-puzzle.js.
 
 import { decodeImage, type RgbaImage } from './image'
+import UPNG from 'upng-js'
 
 const DIAMOND_TARGET_CELLS = 15000
 const DIAMOND_NUM_COLORS = 24
@@ -391,6 +392,10 @@ export type DiamondComplexity = {
   largestRegionFraction: number
   bigRegionShare: number
   tooSimple: boolean
+  // The quantized grid (cell -> palette index) + palette (RGB), exposed so the
+  // caller can render the finished-puzzle preview for the vision coherence check.
+  grid: Uint8Array
+  palette: number[][]
 }
 
 export function analyzeDiamondComplexity(image: RgbaImage): DiamondComplexity {
@@ -414,7 +419,29 @@ export function analyzeDiamondComplexity(image: RgbaImage): DiamondComplexity {
     largestRegionFraction > TOO_SIMPLE_LARGEST_FRACTION ||
     (regionCount < TOO_SIMPLE_REGION_COUNT && bigRegionShare > TOO_SIMPLE_BIG_SHARE)
 
-  return { cols, rows, totalCells: total, paletteSize: palette.length, regionCount, largestRegionFraction, bigRegionShare, tooSimple }
+  return { cols, rows, totalCells: total, paletteSize: palette.length, regionCount, largestRegionFraction, bigRegionShare, tooSimple, grid, palette }
+}
+
+// Render the quantized grid to a PNG (each cell its flat palette colour,
+// upscaled scale×). This is the "finished puzzle" image — exactly what the
+// player ends up with — that the Gemini vision check judges for coherence.
+export function renderQuantizedPng(grid: Uint8Array, palette: number[][], cols: number, rows: number, scale = 4): Uint8Array {
+  const w = cols * scale
+  const h = rows * scale
+  const rgba = new Uint8Array(w * h * 4)
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const p = palette[grid[row * cols + col]] ?? [0, 0, 0]
+      for (let dy = 0; dy < scale; dy++) {
+        const y = row * scale + dy
+        for (let dx = 0; dx < scale; dx++) {
+          const off = (y * w + (col * scale + dx)) * 4
+          rgba[off] = p[0]; rgba[off + 1] = p[1]; rgba[off + 2] = p[2]; rgba[off + 3] = 255
+        }
+      }
+    }
+  }
+  return new Uint8Array(UPNG.encode([rgba.buffer], w, h, 0))
 }
 
 // Decode raw PNG/JPEG bytes and return the complexity verdict. Throws if the

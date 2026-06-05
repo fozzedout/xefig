@@ -34,6 +34,7 @@ name = "SEND_EMAIL"
 
 [vars]
 GEMMA_REWRITE_MODEL = "gemini-flash-lite-latest"
+DIAMOND_VISION_MODEL = "gemini-flash-latest"
 CONTACT_EMAIL = "paul.aspinall@gmail.com"
 
 # ─── Beta environment ────────────────────────────────────────────────

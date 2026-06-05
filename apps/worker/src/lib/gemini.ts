@@ -285,3 +285,75 @@ function stripInlineData(raw: unknown): unknown {
     return value
   }))
 }
+
+// ---------------------------------------------------------------------------
+// Vision coherence check — judges the FINISHED-puzzle render (the quantized
+// image) for whether it reads as a clear picture or dissolved into incoherent
+// mosaic/lattice noise. Region-size metrics can't see this (a coherent scene
+// and a confetti mess can share the same region distribution).
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_VISION_MODEL = 'gemini-flash-latest'
+
+export type CoherenceVerdict = { regen: boolean; score: number; reason: string }
+
+export async function judgeDiamondCoherence(
+  apiKey: string,
+  pngBytes: Uint8Array,
+  model: string = DEFAULT_VISION_MODEL,
+): Promise<CoherenceVerdict> {
+  const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
+  const prompt = `This image is the FINISHED appearance of a paint-by-numbers puzzle (flat colour regions). Judge it ONLY on visual coherence:
+- GOOD (high score): reads as a clear, recognisable scene/subject with coherent shapes.
+- BAD (low score, regenerate): the main subject is incoherent visual noise — a busy mosaic / lattice / confetti of tiny disconnected colour patches with no discernible shapes (e.g. a stained-glass or tiled surface that dissolved into static).
+Reply with ONLY a JSON object and nothing else: {"score": <integer 1-10 coherence>, "regen": <true if it looks like an incoherent mess that should be regenerated, else false>, "reason": "<short phrase>"}`
+
+  const requestBody = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: 'image/png', data: base64FromBytes(pngBytes) } },
+        ],
+      },
+    ],
+    generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Gemini coherence judge error ${response.status}: ${body.slice(0, 200)}`)
+  }
+  const raw = (await response.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
+  const text = raw.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') ?? ''
+  const match = text.match(/\{[\s\S]*\}/)
+  let score = 10
+  let regen = false
+  let reason = ''
+  if (match) {
+    try {
+      const v = JSON.parse(match[0]) as { score?: number; regen?: boolean; reason?: string }
+      if (typeof v.score === 'number') score = v.score
+      if (typeof v.regen === 'boolean') regen = v.regen
+      if (typeof v.reason === 'string') reason = v.reason
+    } catch {
+      // leave defaults (treat unparseable as "keep" — never regen on a parse glitch)
+    }
+  }
+  return { regen, score, reason }
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
