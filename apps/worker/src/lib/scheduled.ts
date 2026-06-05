@@ -3,9 +3,12 @@ import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
 import { submitImageBatch, pollImageBatch, type BatchRequest } from './gemini'
 import { makeGemmaRewriter } from './gemma-rewriter'
 import { detectBorder, processPngImage } from './image'
+import { detectTooSimpleDiamond } from './diamond-quant'
 
 const BORDER_PROMPT_ADDENDUM =
   'Critical: the image must be full-bleed. Content extends completely to all four edges — no white frame, no coloured border, no paper texture, no torn or deckled edges, no vignette, no matting.'
+const COMPLEXITY_PROMPT_ADDENDUM =
+  'Critical: pack the whole frame with many distinct, differently-coloured regions and fine detail — multiple subjects, layered foreground/middle/background, varied textures. Avoid large flat areas of a single colour (no big empty sky, water, or wall dominating the frame).'
 import { findNextUnscheduledDate, getPuzzleByDate, getUtcDateKey, isValidDateKey, toCdnUrl, savePuzzleRecord } from './puzzles'
 import {
   ensurePuzzleTables,
@@ -434,8 +437,10 @@ export async function handleBatchPoll(
     // so the pipeline can't spin forever on a stubborn model.
     const BORDER_REGEN_LIMIT = 2
     const NO_IMAGE_REGEN_LIMIT = 3
+    const COMPLEXITY_REGEN_LIMIT = 2
     const failures = job.validationFailures ?? {}
     const noImageFailures = job.noImageFailures ?? {}
+    const complexityFailures = job.complexityFailures ?? {}
     let saved = 0
     let borderFlagged = 0
     for (const image of result.images) {
@@ -461,7 +466,31 @@ export async function handleBatchPoll(
         )
       }
 
-      if (skipForBorder) continue
+      // Diamond only: a too-simple quantization (one giant flat region you
+      // fill in a couple of taps) gets the same "skip temp -> regenerate"
+      // treatment as a bordered image, capped by COMPLEXITY_REGEN_LIMIT.
+      let skipForComplexity = false
+      if (!skipForBorder && image.category === 'diamond') {
+        const cAttempts = complexityFailures[image.category] ?? 0
+        if (cAttempts < COMPLEXITY_REGEN_LIMIT) {
+          try {
+            const verdict = detectTooSimpleDiamond(image.imageBytes)
+            if (verdict.tooSimple) {
+              complexityFailures[image.category] = cAttempts + 1
+              skipForComplexity = true
+              console.warn(
+                `[complexity] ${job.targetDate}/diamond too simple (largest ${(verdict.largestRegionFraction * 100).toFixed(0)}%, ${verdict.regionCount} regions, big65 ${(verdict.bigRegionShare * 100).toFixed(0)}%) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
+              )
+            }
+          } catch (err) {
+            console.warn('[complexity] detection failed for diamond', err)
+          }
+        } else {
+          console.warn(`[complexity] ${job.targetDate}/diamond hit regen limit (${COMPLEXITY_REGEN_LIMIT}), accepting image`)
+        }
+      }
+
+      if (skipForBorder || skipForComplexity) continue
 
       const tempKey = `temp/${job.targetDate}/${image.category}.png`
       await env.assets.put(tempKey, image.imageBytes, {
@@ -470,6 +499,7 @@ export async function handleBatchPoll(
       saved++
     }
     job.validationFailures = failures
+    job.complexityFailures = complexityFailures
 
     // Track per-category NO_IMAGE responses (Gemini accepted the prompt
     // but the model produced no image — finishReason='NO_IMAGE' or a
@@ -581,7 +611,10 @@ async function processRemainingCategories(env: Bindings, job: PendingBatchJob): 
         // Border-flagged regens need the extra nudge; other "missing temp"
         // situations (e.g. R2 hiccup) get the plain prompt back.
         const borderedBefore = (job.validationFailures?.[category] ?? 0) > 0
-        const prompt = borderedBefore ? `${details.prompt}\n\n${BORDER_PROMPT_ADDENDUM}` : details.prompt
+        const tooSimpleBefore = (job.complexityFailures?.[category] ?? 0) > 0
+        let prompt = details.prompt
+        if (borderedBefore) prompt += `\n\n${BORDER_PROMPT_ADDENDUM}`
+        if (tooSimpleBefore) prompt += `\n\n${COMPLEXITY_PROMPT_ADDENDUM}`
         const { batchName: newBatch } = await submitImageBatch(env.GOOGLE_AI_API_KEY, [
           { category, prompt },
         ])

@@ -9,7 +9,7 @@ import encodeWebp, { init as initWebpEncoder } from '@jsquash/webp/encode'
 const WEBP_QUALITY = 78
 const THUMBNAIL_WIDTH = 400
 
-type RgbaImage = {
+export type RgbaImage = {
   width: number
   height: number
   data: Uint8Array
@@ -41,7 +41,7 @@ function isPng(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47
 }
 
-function decodeImage(bytes: Uint8Array): RgbaImage {
+export function decodeImage(bytes: Uint8Array): RgbaImage {
   if (isPng(bytes)) return decodePng(bytes)
   if (isJpeg(bytes)) return decodeJpeg(bytes)
   throw new Error(`Unsupported image format (magic: 0x${bytes[0]?.toString(16)}${bytes[1]?.toString(16)})`)
