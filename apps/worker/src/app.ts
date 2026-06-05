@@ -290,7 +290,11 @@ export function createApp() {
     }
 
     const password = typeof body?.password === 'string' ? body.password.trim() : ''
-    if (!password || password !== configuredPassword) {
+    // Accept either the admin password or the separate bot key (automated
+    // access). Both mint the same full-admin session.
+    const botKey = (c.env.ADMIN_BOT_KEY || '').trim()
+    const valid = !!password && (password === configuredPassword || (!!botKey && password === botKey))
+    if (!valid) {
       deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
       return c.json({ error: 'Invalid admin password.' }, 401)
     }

@@ -5,6 +5,9 @@ export type Bindings = {
   STATIC_ASSETS: Fetcher
   SEND_EMAIL: { send: (message: unknown) => Promise<void> }
   ADMIN_PASSWORD?: string
+  // Alternate admin credential for automated/bot access — accepted by the
+  // session login alongside ADMIN_PASSWORD, grants the same full session.
+  ADMIN_BOT_KEY?: string
   ADMIN_SESSION_SECRET?: string
   GOOGLE_AI_API_KEY?: string
   GOOGLE_AI_FREE_API_KEY?: string
