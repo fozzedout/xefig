@@ -28,6 +28,16 @@ const MIN_BOARD_RATIO = 9 / 16
 const MAX_BOARD_RATIO = 16 / 10
 const MAX_SIDEBAR_BOARD_RATIO = 2.1
 
+// Tray piece target sizes (longest canvas dimension in px) — the carousel
+// scales every piece down so its longest side hits this. In portrait the
+// tray sits *above* the board, and setupLayout pins the (initially empty)
+// carousel track to one row of this height so the board-sizing measurement
+// reflects the height the tray will have once pieces mount. A mounted piece
+// never exceeds this, so it's an exact upper bound: the board lands flush
+// under the tray rather than clipping the bottom row or leaving a gap.
+const TRAY_PIECE_TARGET_PORTRAIT = 92
+const TRAY_PIECE_TARGET_SIDEBAR = 112
+
 export class JigsawPuzzle {
   constructor({ container, imageUrl, thumbnailUrl, difficulty = 'easy', gridOverride, snapDistance = 10, onComplete, onProgress, onLoadProgress, boardColorIndex } = {}) {
     if (!container) {
@@ -232,32 +242,12 @@ export class JigsawPuzzle {
   }
 
   setupLayout() {
-    const { width, height, crop } = this.calculateBoardSize()
-    this.boardWidth = width
-    this.boardHeight = height
-    this.imageCrop = crop
+    const trayPieceTarget = this.usesSidebarTray() ? TRAY_PIECE_TARGET_SIDEBAR : TRAY_PIECE_TARGET_PORTRAIT
 
-    this.pieceWidth = this.boardWidth / this.cols
-    this.pieceHeight = this.boardHeight / this.rows
-    this.knobSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.28
-    this.bleed = Math.ceil(this.knobSize * 1.2)
-
-    // Snap tolerance scales with piece size — the constructor default
-    // is a floor (10px) for very small pieces, but larger pieces (e.g.
-    // 6×4 tutorial grids) need a wider catch zone or they read as
-    // "the piece is sitting in place but won't snap". 18% of the
-    // shorter dimension is roughly the size of the inner knob, which
-    // is the visual cue players use to judge fit. Recomputed on every
-    // setupLayout so resize doesn't lock in a stale value.
-    const baseSnap = Math.min(this.pieceWidth, this.pieceHeight) * 0.18
-    this.snapDistance = Math.max(this.snapDistanceFloor, baseSnap)
-    this.pieceCanvasWidth = Math.ceil(this.pieceWidth + this.bleed * 2)
-    this.pieceCanvasHeight = Math.ceil(this.pieceHeight + this.bleed * 2)
-
-    const maxPieceDimension = Math.max(this.pieceCanvasWidth, this.pieceCanvasHeight)
-    const trayPieceTarget = this.usesSidebarTray() ? 112 : 92
-    this.carouselScale = Math.min(1, trayPieceTarget / maxPieceDimension)
-
+    // Build the chrome (tray, tools, stage shell) BEFORE sizing the board.
+    // The portrait board sits flush under the tray, positioned at the tray's
+    // measured bottom edge (see getViewLayout / calculateBoardSize), so the
+    // tray has to be in the live DOM first for that measurement to be real.
     this.root = document.createElement('section')
     this.root.className = 'jigsaw-root'
 
@@ -266,12 +256,9 @@ export class JigsawPuzzle {
 
     this.stageContent = document.createElement('div')
     this.stageContent.className = 'jigsaw-stage-content'
-    this.stageContent.style.width = `${this.boardWidth}px`
-    this.stageContent.style.height = `${this.boardHeight}px`
 
     this.ghostCanvas = document.createElement('canvas')
     this.ghostCanvas.className = 'jigsaw-ghost'
-    configureHiDpiCanvas(this.ghostCanvas, this.boardWidth, this.boardHeight, this.renderScale)
 
     this.referenceImage = document.createElement('img')
     this.referenceImage.className = 'jigsaw-reference puzzle-reference-overlay'
@@ -337,6 +324,11 @@ export class JigsawPuzzle {
 
     this.carouselTrack = document.createElement('div')
     this.carouselTrack.className = 'jigsaw-carousel-track'
+    // Pin the (still empty) track to one full tray-piece row so the carousel
+    // measures at the height it'll have once pieces mount — a mounted piece
+    // never exceeds trayPieceTarget, so the board lands flush under the tray
+    // instead of clipping the bottom row or leaving a gap.
+    this.carouselTrack.style.minHeight = `${trayPieceTarget}px`
 
     this.stageContent.append(this.ghostCanvas, this.referenceImage, this.pieceLayer, this.referenceFrame)
     this.stage.append(this.stageContent)
@@ -351,6 +343,37 @@ export class JigsawPuzzle {
       this.floatingControlsOriginalParent = floatingControls.parentElement
       this.root.append(floatingControls)
     }
+
+    // The tray is now laid out — size the board against the REAL reserved
+    // space (calculateBoardSize measures the tray's bottom edge), then
+    // derive piece geometry from the resulting board dimensions.
+    const { width, height, crop } = this.calculateBoardSize()
+    this.boardWidth = width
+    this.boardHeight = height
+    this.imageCrop = crop
+    this.stageContent.style.width = `${this.boardWidth}px`
+    this.stageContent.style.height = `${this.boardHeight}px`
+    configureHiDpiCanvas(this.ghostCanvas, this.boardWidth, this.boardHeight, this.renderScale)
+
+    this.pieceWidth = this.boardWidth / this.cols
+    this.pieceHeight = this.boardHeight / this.rows
+    this.knobSize = Math.min(this.pieceWidth, this.pieceHeight) * 0.28
+    this.bleed = Math.ceil(this.knobSize * 1.2)
+
+    // Snap tolerance scales with piece size — the constructor default
+    // is a floor (10px) for very small pieces, but larger pieces (e.g.
+    // 6×4 tutorial grids) need a wider catch zone or they read as
+    // "the piece is sitting in place but won't snap". 18% of the
+    // shorter dimension is roughly the size of the inner knob, which
+    // is the visual cue players use to judge fit. Recomputed on every
+    // setupLayout so resize doesn't lock in a stale value.
+    const baseSnap = Math.min(this.pieceWidth, this.pieceHeight) * 0.18
+    this.snapDistance = Math.max(this.snapDistanceFloor, baseSnap)
+    this.pieceCanvasWidth = Math.ceil(this.pieceWidth + this.bleed * 2)
+    this.pieceCanvasHeight = Math.ceil(this.pieceHeight + this.bleed * 2)
+
+    const maxPieceDimension = Math.max(this.pieceCanvasWidth, this.pieceCanvasHeight)
+    this.carouselScale = Math.min(1, trayPieceTarget / maxPieceDimension)
 
     this.stage.addEventListener('pointerdown', this.handleStagePointerDown)
     this.stage.addEventListener('pointermove', this.handleStagePointerMove)
@@ -369,7 +392,6 @@ export class JigsawPuzzle {
     const viewportHeight = window.innerHeight || this.container.clientHeight || 0
     const containerWidth = Math.min(this.container.clientWidth || viewportWidth - 16, viewportWidth)
     const containerHeight = this.container.clientHeight || viewportHeight
-    const saiTop = this.getSafeAreaInset('top')
     const saiBottom = this.getSafeAreaInset('bottom')
     const saiLeft = this.getSafeAreaInset('left')
 
@@ -386,12 +408,19 @@ export class JigsawPuzzle {
       var availableWidth = Math.max(280, containerWidth - sideTrayReserve - leftInset)
       var availableHeight = Math.max(220, containerHeight)
     } else {
-      // Portrait: tray at top with sai-top padding PLUS the ~48px strip
-      // reserved above the tray for the back/highlight/edges/menu buttons
-      // (see .game-shell--jigsaw .jigsaw-root padding-top in style.css).
-      const topTrayReserve = Math.round(13 + saiTop + 82 + 48)
+      // Portrait: tray at top, board flush beneath it at the carousel's
+      // bottom edge (see getViewLayout). MEASURE that edge rather than
+      // predicting it from CSS paddings — setupLayout has already put the
+      // tray in the live DOM and pinned it to one tray-piece row, so this
+      // reflects the populated height. No rem→px math, no hardcoded
+      // paddings, and it can't drift when the stylesheet changes.
+      // Undercounting the reserve here is exactly what clipped the bottom
+      // row off-screen.
+      const carouselBottom = this.carousel
+        ? this.carousel.getBoundingClientRect().bottom
+        : 0
       var availableWidth = Math.max(280, containerWidth)
-      var availableHeight = Math.max(220, containerHeight - topTrayReserve - saiBottom)
+      var availableHeight = Math.max(220, viewportHeight - carouselBottom - saiBottom)
     }
     const maxWidth = availableWidth
     const maxHeight = availableHeight

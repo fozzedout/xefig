@@ -223,24 +223,41 @@ export class DiamondPaintingPuzzle {
     }
   }
 
-  fitZoom() {
+  // The slice of the board frame NOT covered by the palette — where the
+  // painting can sit fully visible. The palette is an absolutely-positioned
+  // overlay, so getViewport()'s size still includes the space behind it;
+  // fitZoom and the centred clampPan branches frame the grid in THIS box so
+  // the overview isn't tucked under (and, for tall/wide grids, partly hidden
+  // behind) the palette.
+  getContentBox() {
     const vp = this.getViewport()
-    this.zoom = this.getFitZoom(vp)
+    const ins = this.getPaletteInsets()
+    return {
+      x: ins.left,
+      y: ins.top,
+      w: Math.max(120, vp.w - ins.left - ins.right),
+      h: Math.max(120, vp.h - ins.top - ins.bottom),
+    }
+  }
+
+  fitZoom() {
+    const box = this.getContentBox()
+    this.zoom = this.getFitZoom(box)
     const fullW = this.cols * CELL_PX
     const fullH = this.rows * CELL_PX
-    this.panX = (vp.w - fullW * this.zoom) / 2
-    this.panY = (vp.h - fullH * this.zoom) / 2
+    this.panX = box.x + (box.w - fullW * this.zoom) / 2
+    this.panY = box.y + (box.h - fullH * this.zoom) / 2
     this.applyTransform()
   }
 
-  getFitZoom(vp = this.getViewport()) {
+  getFitZoom(box = this.getContentBox()) {
     const fullW = this.cols * CELL_PX
     const fullH = this.rows * CELL_PX
-    return Math.min(vp.w / fullW, vp.h / fullH, 1)
+    return Math.min(box.w / fullW, box.h / fullH, 1)
   }
 
-  getMinZoom(vp = this.getViewport()) {
-    return Math.min(MIN_ZOOM, this.getFitZoom(vp))
+  getMinZoom() {
+    return Math.min(MIN_ZOOM, this.getFitZoom())
   }
 
   // Returns the inset (in root-relative px) occupied by the palette on
@@ -530,6 +547,15 @@ export class DiamondPaintingPuzzle {
     const fullW = this.cols * CELL_PX * this.zoom
     const fullH = this.rows * CELL_PX * this.zoom
 
+    // Visible region = board frame minus the palette overlay. Centre the
+    // grid here when it fits (so the overview clears the palette instead of
+    // hiding behind it); when zoomed in past it, the slack terms below let
+    // cells be panned out from under the palette / safe area.
+    const boxX = ins.left
+    const boxY = ins.top
+    const boxW = Math.max(120, vp.w - ins.left - ins.right)
+    const boxH = Math.max(120, vp.h - ins.top - ins.bottom)
+
     // Let the user pan cells out from under the top safe area (notch /
     // dynamic island) in portrait — iOS blocks taps in that strip when
     // content is flush with the screen edge.
@@ -538,15 +564,15 @@ export class DiamondPaintingPuzzle {
     const rightSlack = ins.right + (fullW > vp.w ? safe.right : 0)
     const bottomSlack = ins.bottom + (fullH > vp.h ? safe.bottom : 0)
 
-    if (fullW <= vp.w) {
-      this.panX = (vp.w - fullW) / 2
+    if (fullW <= boxW) {
+      this.panX = boxX + (boxW - fullW) / 2
     } else {
       // Extend toward whichever side the palette hugs so cells hidden
       // beneath it can be panned into the open region.
       this.panX = clamp(this.panX, vp.w - fullW - rightSlack, 0 + leftSlack)
     }
-    if (fullH <= vp.h) {
-      this.panY = (vp.h - fullH) / 2
+    if (fullH <= boxH) {
+      this.panY = boxY + (boxH - fullH) / 2
     } else {
       this.panY = clamp(this.panY, vp.h - fullH - bottomSlack, 0 + topSlack)
     }

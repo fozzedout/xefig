@@ -209,12 +209,28 @@ test('diamond board can zoom back out to a fully visible fitted view', async ({ 
   await zoomOutDiamondBoard(page)
 
   const metrics = await readDiamondViewportMetrics(page)
+  const paletteInset = await page.evaluate(() => {
+    const frame = document.querySelector('.diamond-board-frame')
+    const palette = document.querySelector('.diamond-palette-bar')
+    if (!frame || !palette) return { right: 0, bottom: 0 }
+    const f = frame.getBoundingClientRect()
+    const p = palette.getBoundingClientRect()
+    if (p.width === 0 || p.height === 0) return { right: 0, bottom: 0 }
+    if (p.width >= f.width - 2) return { right: 0, bottom: p.height }
+    if (p.height >= f.height - 2) return { right: p.width, bottom: 0 }
+    return { right: 0, bottom: 0 }
+  })
 
   expect(metrics).not.toBeNull()
   expect(metrics.contentWidth).toBeLessThanOrEqual(metrics.viewportWidth + 2)
   expect(metrics.contentHeight).toBeLessThanOrEqual(metrics.viewportHeight + 2)
-  expect(Math.abs(metrics.leftGap - metrics.rightGap)).toBeLessThanOrEqual(2)
-  expect(Math.abs(metrics.topGap - metrics.bottomGap)).toBeLessThanOrEqual(2)
+  // Fit-zoom frames the grid in the region NOT covered by the palette (the
+  // palette is a bottom/side overlay), so the grid is centred in that visible
+  // box — its gap on the palette side is larger than the opposite gap by the
+  // palette's footprint. This keeps the overview clear of the palette instead
+  // of tucking the edge behind it.
+  expect(Math.abs(metrics.leftGap - (metrics.rightGap - paletteInset.right))).toBeLessThanOrEqual(2)
+  expect(Math.abs(metrics.topGap - (metrics.bottomGap - paletteInset.bottom))).toBeLessThanOrEqual(2)
 })
 
 test('diamond canvas redraws after the page is shown again', async ({ page }) => {
