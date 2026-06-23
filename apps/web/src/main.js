@@ -694,7 +694,20 @@ async function prefetchPlayableImages(puzzlePayload) {
     }
   }
 
-  for (const url of queue) {
+  await prefetchImageUrls(queue)
+}
+
+// Sequentially prime a list of image URLs into the SW cache. Shared by
+// the today (prefetchPlayableImages) and next-day (prefetchNextDayPuzzle)
+// paths so both behave identically: gated on a healthy connection,
+// throttled to one in-flight fetch at a time, low-priority, and capped by
+// an abort timeout. Already-cached and placeholder URLs are skipped, and
+// the list is de-duplicated.
+async function prefetchImageUrls(urls) {
+  const seen = new Set()
+  for (const url of urls) {
+    if (!url || url === sampleImage || seen.has(url)) continue
+    seen.add(url)
     if (!isHealthyNetwork()) return
     if (await isImageCached(url)) continue
     // Just fetch — sw.js intercepts /cdn paths and writes a 200
@@ -7010,22 +7023,37 @@ function msUntilLocalMidnight() {
   return midnight - now
 }
 
-function prefetchNextDayPuzzle() {
+// Prime tomorrow's puzzle images into the SW cache while the connection
+// is good, so the next day is playable even if the user opens the app
+// offline / on a frail link. Images are immutable once published, so once
+// cached they're good forever. Skipped on a constrained connection
+// (save-data / 2g) — speculative next-day bytes aren't worth it there.
+async function prefetchNextDayPuzzle() {
+  if (!isHealthyNetwork()) return
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowDate = getIsoDate(tomorrow)
-  const endpoint = apiUrl(`/api/puzzles/${encodeURIComponent(tomorrowDate)}`)
-  fetch(endpoint).then(r => r.ok ? r.json() : null).then(payload => {
-    if (!payload?.categories) return
-    const modes = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
-    modes.forEach(cat => {
-      const urls = [payload.categories[cat]?.thumbnailUrl, payload.categories[cat]?.imageUrl].filter(Boolean)
-      urls.forEach(u => {
-        const img = new Image()
-        img.src = resolveAssetUrl(u)
-      })
-    })
-  }).catch(() => { })
+  let payload
+  try {
+    payload = await fetchPuzzlePayloadFromApi(apiUrl(`/api/puzzles/${encodeURIComponent(tomorrowDate)}`))
+  } catch {
+    // No puzzle scheduled yet, or the network failed — try again on the
+    // next rollover tick. Best effort.
+    return
+  }
+  if (!payload?.categories) return
+  // Thumbnails first (tiny, make the launcher instant), then full images
+  // (needed for actual offline play). The shared helper handles health
+  // gating, throttling, low priority, and the abort timeout.
+  const modes = ['jigsaw', 'slider', 'swap', 'polygram', 'diamond']
+  const thumbs = []
+  const fulls = []
+  for (const cat of modes) {
+    const entry = payload.categories[cat]
+    if (entry?.thumbnailUrl) thumbs.push(resolveAssetUrl(entry.thumbnailUrl))
+    if (entry?.imageUrl) fulls.push(resolveAssetUrl(entry.imageUrl))
+  }
+  await prefetchImageUrls([...thumbs, ...fulls])
 }
 
 function scheduleDayRollover() {

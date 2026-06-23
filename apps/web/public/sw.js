@@ -175,9 +175,15 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // CDN images: key by the full URL (including ?v=<timestamp>) so a regenerated
-  // image served at a new version is a cache miss and gets re-fetched, rather
-  // than being served forever from the first cached copy.
+  // CDN images: key by the full URL (including ?v=<timestamp>). Puzzle
+  // images are immutable once published and a regenerated image is served
+  // at a new ?v=, i.e. a new URL — so a cache HIT is always the exact,
+  // correct bytes and never goes stale. We therefore serve cache-first
+  // with NO background revalidation: re-fetching an immutable hit just
+  // burns bandwidth, and on a frail mobile uplink those redundant
+  // refreshes pile up and starve the genuinely-uncached images the user
+  // is waiting on. A new version (new ?v=) is a cache miss and is fetched
+  // through the normal path below.
   // Offline fallback: if the network fails and we have no exact-URL match,
   // serve any previously cached version of the same path (ignoreSearch) so
   // users on frail networks still see something they had before a regeneration.
@@ -186,10 +192,6 @@ self.addEventListener('fetch', (event) => {
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request)
         if (cached) {
-          // Refresh in background so a newer ?v= is picked up next time.
-          fetch(request).then((response) => {
-            if (response.status === 200) cache.put(request, cleanResponse(response.clone()))
-          }).catch(() => {})
           return cleanResponse(cached)
         }
         try {
