@@ -86,7 +86,23 @@ const DIAMOND_TEST_LOG_RETAIN = 30
 const TEST_ACTIVE_RUN_KEY = 'xefig:test-run:active'
 const DAILY_PUZZLE_CACHE_KEY = 'xefig:daily-cache'
 const EARLY_PUZZLE_WAIT_MS = 1500
-const PUZZLE_FETCH_TIMEOUT_MS = 8000
+// Metadata fetch budget. The old 8s value was too tight for mobile: a
+// high-RTT / lossy cellular link routinely needs longer just to complete
+// the round trip, and on a fresh day there's no cached payload to fall
+// back to, so an early abort surfaced "Failed to load today's puzzles."
+// even when the network would have delivered given a few more seconds.
+// (image-loader.js learned the same lesson — it moved off 8s long ago.)
+// The JSON is tiny so this is latency-bound, not throughput-bound; 15s is
+// generous, and we retry once on transient failure. Total worst case
+// (1.5s early wait + 15s + retry delay + 15s ≈ 33s) stays under the 45s
+// brick-recovery backstop in index.html.
+const PUZZLE_FETCH_TIMEOUT_MS = 15000
+const PUZZLE_FETCH_RETRIES = 1
+const PUZZLE_FETCH_RETRY_DELAY_MS = 1200
+// Cap on a single speculative prefetch so a stalled full-image download
+// on a frail link can't hold a connection open and starve the actual
+// image the user is waiting on.
+const PREFETCH_IMAGE_TIMEOUT_MS = 25000
 
 const BOARD_COLORS_LIGHT = [
   { name: 'birch', color: '#d6cbb5' },
@@ -681,15 +697,27 @@ async function prefetchPlayableImages(puzzlePayload) {
   for (const url of queue) {
     if (!isHealthyNetwork()) return
     if (await isImageCached(url)) continue
+    // Just fetch — sw.js intercepts /cdn paths and writes a 200
+    // response into the cache. If the SW isn't installed yet, the
+    // browser HTTP cache still picks it up, so the puzzle's
+    // loadImage() short-circuits the same way.
+    //
+    // priority:'low' yields the link to the image the user is actually
+    // waiting on, and the abort timeout stops a stalled speculative
+    // download from holding a connection open indefinitely on a frail
+    // mobile link (which previously left real loads starved). Both are
+    // safely ignored by browsers that don't support them.
+    const controller = typeof AbortController === 'function' ? new AbortController() : null
+    const timeoutId = controller
+      ? window.setTimeout(() => controller.abort(), PREFETCH_IMAGE_TIMEOUT_MS)
+      : null
     try {
-      // Just fetch — sw.js intercepts /cdn paths and writes a 200
-      // response into the cache. If the SW isn't installed yet, the
-      // browser HTTP cache still picks it up, so the puzzle's
-      // loadImage() short-circuits the same way.
-      await fetch(url, { credentials: 'same-origin' })
+      await fetch(url, { credentials: 'same-origin', priority: 'low', signal: controller?.signal })
     } catch {
       // Best effort. If the connection has degraded, bail.
       if (!isHealthyNetwork()) return
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
     }
   }
 }
@@ -1756,6 +1784,19 @@ function timeoutAfter(ms, message) {
   })
 }
 
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+// A puzzle-metadata fetch is worth retrying only when the failure is
+// transient: a timeout / network drop (no HTTP status reached) or a 5xx
+// (the SW's offline fallback returns 503). A 4xx — bad date, or no puzzle
+// scheduled (404) — is deterministic and won't fix itself on retry.
+function isRetriablePuzzleFetchError(error) {
+  const status = error?.status
+  return status == null || status >= 500
+}
+
 async function fetchPuzzlePayloadFromApi(url, timeoutMs = PUZZLE_FETCH_TIMEOUT_MS) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null
@@ -1764,7 +1805,11 @@ async function fetchPuzzlePayloadFromApi(url, timeoutMs = PUZZLE_FETCH_TIMEOUT_M
     const response = await fetch(url, { signal: controller?.signal })
     const payload = await response.json()
     if (!response.ok) {
-      throw new Error(payload.error || 'Puzzle not found.')
+      const error = new Error(payload.error || 'Puzzle not found.')
+      // Carry the status so the caller can tell a transient 5xx from a
+      // deterministic 4xx and only retry the former.
+      error.status = response.status
+      throw error
     }
     return payload
   } catch (error) {
@@ -1805,17 +1850,30 @@ async function fetchPuzzlePayload({ date = null } = {}) {
     }
   }
 
-  const endpoint = `/api/puzzles/${encodeURIComponent(requestDate)}`
-  try {
-    const payload = await fetchPuzzlePayloadFromApi(apiUrl(endpoint))
-    if (isTodayRequest) cacheDailyPayload(payload)
-    return payload
-  } catch (error) {
-    if (cachedToday) {
-      return cachedToday
+  // Retry transient failures (timeout / network drop / 5xx) before
+  // giving up. On a fresh day there's no cached payload to fall back to,
+  // so a single slow mobile request used to brick the launcher; one
+  // retry recovers the common "first attempt timed out on cellular" case.
+  const url = apiUrl(`/api/puzzles/${encodeURIComponent(requestDate)}`)
+  let lastError
+  for (let attempt = 0; attempt <= PUZZLE_FETCH_RETRIES; attempt += 1) {
+    try {
+      const payload = await fetchPuzzlePayloadFromApi(url)
+      if (isTodayRequest) cacheDailyPayload(payload)
+      return payload
+    } catch (error) {
+      lastError = error
+      if (attempt === PUZZLE_FETCH_RETRIES || !isRetriablePuzzleFetchError(error)) {
+        break
+      }
+      await delay(PUZZLE_FETCH_RETRY_DELAY_MS * (attempt + 1))
     }
-    throw error
   }
+
+  if (cachedToday) {
+    return cachedToday
+  }
+  throw lastError
 }
 
 const SLICE_ICONS = {
