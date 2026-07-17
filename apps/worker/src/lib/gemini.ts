@@ -200,6 +200,92 @@ export async function pollImageBatch(
 }
 
 // ---------------------------------------------------------------------------
+// Synchronous (real-time) single-image generation.
+//
+// Batch mode is async/best-effort (Gemini's "within 24h" SLA) and is the right
+// tool for the daily 5-image cron, but it's the WRONG tool for an interactive
+// admin regen of one tile — those should return in seconds. This hits the same
+// image model via :generateContent (NOT :batchGenerateContent), mirroring the
+// per-request body submitImageBatch builds, and returns the image bytes inline
+// in a single request/response.
+// ---------------------------------------------------------------------------
+
+export type SyncImageResult = { imageBytes: Uint8Array; mimeType: string }
+
+export async function generateImageSync(
+  apiKey: string,
+  category: PuzzleCategory,
+  prompt: string,
+): Promise<SyncImageResult> {
+  const url = `${GEMINI_API_BASE}/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${apiKey}`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseModalities: ['IMAGE'],
+        imageConfig: {
+          imageSize: category === 'diamond' ? '512' : '2K',
+          aspectRatio: '4:3',
+        },
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Gemini sync image error ${response.status}: ${body.slice(0, 300)}`)
+  }
+
+  const raw = (await response.json()) as {
+    candidates?: Array<{
+      finishReason?: string
+      content?: { parts?: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> }
+    }>
+  }
+  const parts = raw.candidates?.[0]?.content?.parts
+  const imagePart = parts?.find((p) => p.inlineData?.data)
+  if (!imagePart?.inlineData) {
+    const reason = raw.candidates?.[0]?.finishReason ?? 'NO_IMAGE'
+    throw new Error(`Gemini sync image returned no image (finishReason=${reason}).`)
+  }
+
+  return { imageBytes: base64ToBytes(imagePart.inlineData.data), mimeType: imagePart.inlineData.mimeType }
+}
+
+// ---------------------------------------------------------------------------
+// Cancel a running batch AT Gemini (best-effort). Deleting the local D1 row
+// only stops us polling — the job keeps running/billing on Google's side until
+// it finishes or expires. :cancel asks the provider to actually stop it.
+// "best effort": the API doesn't guarantee a wedged job halts, so callers
+// should treat failure as non-fatal and proceed with the local cleanup.
+// ---------------------------------------------------------------------------
+
+export async function cancelImageBatch(apiKey: string, batchName: string): Promise<void> {
+  const url = `${GEMINI_API_BASE}/${batchName}:cancel?key=${apiKey}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Gemini batch cancel error ${response.status}: ${body.slice(0, 200)}`)
+  }
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binaryString = atob(base64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return bytes
+}
+
+// ---------------------------------------------------------------------------
 // Extract images from batch response — checks both metadata.responses and dest.inlinedResponses
 // ---------------------------------------------------------------------------
 
@@ -249,16 +335,9 @@ function extractImagesFromResponse(raw: BatchJobRawResponse): {
       continue
     }
 
-    const base64 = imagePart.inlineData.data
-    const binaryString = atob(base64)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
-
     images.push({
       category,
-      imageBytes: bytes,
+      imageBytes: base64ToBytes(imagePart.inlineData.data),
       mimeType: imagePart.inlineData.mimeType,
     })
   }

@@ -101,8 +101,92 @@ test('jigsaw portrait board fits within the viewport (no bottom-row cutoff)', as
   expect(Math.abs(geo.boardTop - geo.carouselBottom)).toBeLessThanOrEqual(2)
 })
 
+test('jigsaw portrait sizing reserves classic scrollbar height before tray pieces mount', async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 800 })
+  await page.addInitScript(() => {
+    const findGetter = (proto, prop) => {
+      for (let current = proto; current; current = Object.getPrototypeOf(current)) {
+        const descriptor = Object.getOwnPropertyDescriptor(current, prop)
+        if (descriptor?.get) return descriptor.get
+      }
+      return () => 0
+    }
+
+    const readOffsetHeight = findGetter(HTMLElement.prototype, 'offsetHeight')
+    const readClientHeight = findGetter(HTMLElement.prototype, 'clientHeight')
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('jigsaw-scrollbar-probe')) return 100
+        return readOffsetHeight.call(this)
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        if (this.classList?.contains('jigsaw-scrollbar-probe')) return 84
+        return readClientHeight.call(this)
+      },
+    })
+
+    const readRect = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = function getBoundingClientRectWithLateScrollbar() {
+      const rect = readRect.call(this)
+      if (
+        this.classList?.contains('jigsaw-carousel') &&
+        this.querySelector('.jigsaw-carousel-track')?.children.length > 0
+      ) {
+        return new DOMRect(rect.x, rect.y, rect.width, rect.height + 16)
+      }
+      return rect
+    }
+  })
+
+  await page.route('**/api/puzzles/*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(TODAY_PAYLOAD),
+    })
+  })
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+
+  const slice = page.locator('.slice[data-mode="jigsaw"]')
+  await slice.waitFor()
+  if (!(await slice.evaluate((element) => element.classList.contains('active')))) {
+    await slice.click()
+  }
+  await slice.click()
+
+  await page.locator('.jigsaw-root').waitFor()
+  await expect
+    .poll(async () => page.locator('.jigsaw-stage-content').evaluate((el) => el.getBoundingClientRect().height))
+    .toBeGreaterThan(0)
+
+  const geo = await page.evaluate(() => {
+    const content = document.querySelector('.jigsaw-stage-content')?.getBoundingClientRect()
+    const carousel = document.querySelector('.jigsaw-carousel')?.getBoundingClientRect()
+    if (!content || !carousel) return null
+    return {
+      boardTop: content.top,
+      boardBottom: content.bottom,
+      carouselBottom: carousel.bottom,
+      viewportHeight: window.innerHeight,
+    }
+  })
+
+  expect(geo).not.toBeNull()
+  expect(geo.boardBottom).toBeLessThanOrEqual(geo.viewportHeight + 1)
+  expect(geo.viewportHeight - geo.boardBottom).toBeLessThanOrEqual(4)
+  expect(Math.abs(geo.boardTop - geo.carouselBottom)).toBeLessThanOrEqual(2)
+})
+
 test('jigsaw immersive controls fade when idle and reappear on interaction', async ({ page }) => {
   await page.setViewportSize({ width: 1720, height: 980 })
+  await page.addInitScript(() => {
+    localStorage.setItem('xefig:assistant:lastPlayed:jigsaw', String(Date.now()))
+  })
 
   await page.route('**/api/puzzles/*', async (route) => {
     await route.fulfill({

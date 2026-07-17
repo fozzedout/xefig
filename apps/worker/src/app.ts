@@ -43,6 +43,7 @@ import { ensurePuzzleTables, getScheduledDatesInRange } from './lib/puzzle-db'
 import {
   handleBatchSubmit,
   handleSingleBatchSubmit,
+  handleSyncSingleRegen,
   handleBatchPoll,
   applyProcessedCategoryUpload,
   getBatchJobStatus,
@@ -642,6 +643,58 @@ export function createApp() {
     } catch (error) {
       console.error('Single batch submit failed', error)
       const message = error instanceof Error ? error.message : 'Single batch submit failed.'
+      return c.json({ error: message }, 500)
+    }
+  })
+
+  // Synchronous single-tile regen: generates the image in-request (real-time
+  // :generateContent, not the slow async batch), runs the same border +
+  // diamond gates inline, and writes it straight to R2 + the puzzle record —
+  // so an admin regen of one tile resolves in seconds and is immediately
+  // verifiable. Requires a concrete date (it overwrites that date's tile).
+  app.post('/api/admin/generate-images/single-sync', async (c) => {
+    const token = getCookie(c, ADMIN_SESSION_COOKIE)
+    if (!(await hasAdminSession(c.env, token))) {
+      deleteCookie(c, ADMIN_SESSION_COOKIE, { path: '/' })
+      return c.json({ error: 'Admin session required.' }, 401)
+    }
+
+    if (!c.env.GOOGLE_AI_API_KEY) {
+      return c.json({ error: 'GOOGLE_AI_API_KEY is not configured.' }, 500)
+    }
+
+    try {
+      const body = (await c.req.json()) as {
+        category?: string
+        prompt?: string
+        theme?: string
+        keywords?: string[]
+        date?: string
+      }
+
+      const category = body?.category?.trim() as PuzzleCategory
+      if (!CATEGORIES.includes(category)) {
+        return c.json({ error: 'Invalid category.' }, 400)
+      }
+
+      const prompt = body?.prompt?.trim()
+      if (!prompt) {
+        return c.json({ error: 'Prompt is required.' }, 400)
+      }
+
+      const date = typeof body?.date === 'string' ? body.date.trim() : ''
+      if (!date) {
+        return c.json({ error: 'A target date (YYYY-MM-DD) is required.' }, 400)
+      }
+
+      const theme = body?.theme?.trim() || category
+      const keywords = Array.isArray(body?.keywords) ? body.keywords : []
+
+      const result = await handleSyncSingleRegen(c.env, { category, prompt, theme, keywords, date })
+      return c.json(result, result.ok ? 200 : 500)
+    } catch (error) {
+      console.error('Sync single regen failed', error)
+      const message = error instanceof Error ? error.message : 'Sync single regen failed.'
       return c.json({ error: message }, 500)
     }
   })

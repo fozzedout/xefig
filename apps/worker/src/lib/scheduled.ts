@@ -1,6 +1,13 @@
 import { CATEGORIES, type Bindings, type PuzzleAsset, type PuzzleCategory, type PuzzleRecord } from '../types'
 import { generatePromptPacks, generateSingleCategoryPrompt } from './prompts'
-import { submitImageBatch, pollImageBatch, judgeDiamondCoherence, type BatchRequest } from './gemini'
+import {
+  submitImageBatch,
+  pollImageBatch,
+  judgeDiamondCoherence,
+  generateImageSync,
+  cancelImageBatch,
+  type BatchRequest,
+} from './gemini'
 import { makeGemmaRewriter } from './gemma-rewriter'
 import { detectBorder, processPngImage } from './image'
 import { detectTooSimpleDiamond, renderQuantizedPng } from './diamond-quant'
@@ -29,10 +36,19 @@ export async function isPipelinePaused(db: D1Database): Promise<boolean> {
   return value === '1'
 }
 
-// A batch normally starts within minutes; if Gemini has queued it but
-// completed ZERO of its requests after this many hours it's wedged, not slow,
-// so we drop it and resubmit the same date instead of waiting out the 24h SLA.
-const STUCK_NO_PROGRESS_HOURS = 6
+// A batch normally starts within minutes and a healthy single image finishes
+// in ~15 min; if Gemini has queued a batch but completed ZERO of its requests
+// well past the time it should have, it's wedged (a documented
+// BATCH_STATE_RUNNING failure mode), not slow — drop it and resubmit rather
+// than waiting out the 24h SLA. The threshold scales with the batch's image
+// count: a full 5-image daily pack gets ~6h, but a single-tile admin regen is
+// declared dead at ~2h. Flat 6h was far too lenient for one image (an hour
+// already means "probably never").
+const STUCK_PER_IMAGE_HOURS = 1
+const STUCK_BUFFER_HOURS = 1
+function stuckThresholdHours(imageCount: number): number {
+  return Math.max(1, imageCount) * STUCK_PER_IMAGE_HOURS + STUCK_BUFFER_HOURS
+}
 // Per-date count of consecutive stuck-and-resubmitted batches (reset when the
 // puzzle finally saves). Only alert once a *resubmit* also sticks — a one-off
 // Gemini hiccup self-heals silently.
@@ -61,6 +77,41 @@ async function clearStuckRetry(db: D1Database, date: string): Promise<void> {
     delete map[date]
     await setAppSetting(db, STUCK_RETRY_KEY, JSON.stringify(map))
   }
+}
+
+// Shared diamond gate: does this generated diamond image need regenerating?
+// Two failure modes — (1) too SIMPLE (one giant flat region, a couple of taps
+// to finish), caught cheaply by region metrics; (2) too BUSY/incoherent (the
+// quantization dissolves into mosaic/lattice noise), invisible to region stats
+// so judged by Gemini vision on the rendered "finished puzzle". Used by BOTH
+// the async batch poll loop and the synchronous admin regen so the two paths
+// stay in lock-step. Fails safe: any error -> no regen (accept the image).
+async function diamondNeedsRegen(
+  env: Bindings,
+  imageBytes: Uint8Array,
+): Promise<{ regen: boolean; reason: string }> {
+  try {
+    const analysis = detectTooSimpleDiamond(imageBytes)
+    if (analysis.tooSimple) {
+      return {
+        regen: true,
+        reason: `too simple (largest ${(analysis.largestRegionFraction * 100).toFixed(0)}%, ${analysis.regionCount} regions, big65 ${(analysis.bigRegionShare * 100).toFixed(0)}%)`,
+      }
+    }
+    if (env.GOOGLE_AI_API_KEY) {
+      // Metrics pass — but does the quantized result actually look like a
+      // coherent picture, or did it dissolve into mosaic/lattice noise?
+      // Region stats can't tell; ask Gemini vision about the render.
+      const png = renderQuantizedPng(analysis.grid, analysis.palette, analysis.cols, analysis.rows)
+      const verdict = await judgeDiamondCoherence(env.GOOGLE_AI_API_KEY, png, env.DIAMOND_VISION_MODEL || undefined)
+      if (verdict.regen) {
+        return { regen: true, reason: `looks incoherent (vision ${verdict.score}/10: ${verdict.reason})` }
+      }
+    }
+  } catch (err) {
+    console.warn('[complexity] diamond gate check failed', err)
+  }
+  return { regen: false, reason: '' }
 }
 
 export type BatchSubmitResult = {
@@ -329,6 +380,173 @@ export async function handleSingleBatchSubmit(
 }
 
 // ---------------------------------------------------------------------------
+// Synchronous single-tile regen (interactive admin path).
+//
+// Unlike handleSingleBatchSubmit (which enqueues a slow async batch), this
+// generates the image in-request via :generateContent, runs the SAME border +
+// diamond gates inline (regenerating up to the same limits), encodes WebP, and
+// writes it straight into R2 + the puzzle record — so an admin regen of one
+// tile resolves in seconds and is immediately verifiable, instead of waiting
+// hours on a batch that may never complete.
+// ---------------------------------------------------------------------------
+
+export type SyncRegenResult = {
+  ok: boolean
+  message: string
+  date?: string
+  category?: PuzzleCategory
+  theme?: string
+  attempts?: number
+  gate?: string
+  imageUrl?: string
+}
+
+export async function handleSyncSingleRegen(
+  env: Bindings,
+  opts: {
+    category: PuzzleCategory
+    prompt: string
+    theme: string
+    keywords: string[]
+    date: string
+  },
+): Promise<SyncRegenResult> {
+  if (!env.GOOGLE_AI_API_KEY) {
+    return { ok: false, message: 'GOOGLE_AI_API_KEY not configured.' }
+  }
+  if (!isValidDateKey(opts.date)) {
+    return { ok: false, message: 'Invalid date format. Use YYYY-MM-DD.' }
+  }
+
+  await ensurePuzzleTables(env.DB)
+
+  // Cancel any batch already queued for this date+category so the slow async
+  // job can't later overwrite what we're about to generate synchronously.
+  const queued = await getAllPendingBatchJobs(env.DB)
+  for (const job of queued) {
+    if (job.targetDate !== opts.date) continue
+    const cats = job.requestedCategories ?? CATEGORIES
+    if (!cats.includes(opts.category)) continue
+    await cancelBatchJob(env, { batchName: job.batchName })
+  }
+
+  // Generate -> gate -> regenerate, capped like the batch path. Border and
+  // diamond-complexity gates each force a fresh-prompt regen up to the cap;
+  // a single counter bounds total attempts so a stubborn subject can't spin.
+  const MAX_ATTEMPTS = 3
+  let prompt = opts.prompt
+  let theme = opts.theme
+  let keywords = opts.keywords
+  let imageBytes: Uint8Array | null = null
+  let usedAttempts = 0
+  let gateReason = 'passed'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    usedAttempts = attempt
+    const gen = await generateImageSync(env.GOOGLE_AI_API_KEY, opts.category, prompt)
+
+    let needsRegen = false
+    let reason = ''
+    try {
+      const border = detectBorder(gen.imageBytes)
+      if (border.hasBorder) {
+        needsRegen = true
+        reason = `bordered (${border.flaggedEdges.join(',')})`
+      }
+    } catch (err) {
+      console.warn('[sync-regen] border detection failed', err)
+    }
+
+    if (!needsRegen && opts.category === 'diamond') {
+      const gate = await diamondNeedsRegen(env, gen.imageBytes)
+      if (gate.regen) {
+        needsRegen = true
+        reason = gate.reason
+      }
+    }
+
+    if (!needsRegen) {
+      imageBytes = gen.imageBytes
+      gateReason = 'passed'
+      break
+    }
+
+    gateReason = reason
+    if (attempt < MAX_ATTEMPTS) {
+      console.warn(
+        `[sync-regen] ${opts.date}/${opts.category} ${reason} — regenerating (attempt ${attempt}/${MAX_ATTEMPTS})`,
+      )
+      // Fresh prompt for the next attempt, with the matching nudge.
+      const details = await generateSingleCategoryPrompt(env.DB, opts.category, makeGemmaRewriter(env) ?? undefined)
+      prompt = details.prompt
+      prompt += reason.startsWith('bordered') ? `\n\n${BORDER_PROMPT_ADDENDUM}` : `\n\n${COMPLEXITY_PROMPT_ADDENDUM}`
+      theme = details.theme
+      keywords = details.keywords
+    } else {
+      // Exhausted — accept the last image (mirrors the batch path's "hit
+      // regen limit, accept" so we never leave the tile blank).
+      imageBytes = gen.imageBytes
+      console.warn(`[sync-regen] ${opts.date}/${opts.category} hit regen limit (${MAX_ATTEMPTS}), accepting image (${reason})`)
+    }
+  }
+
+  if (!imageBytes) {
+    return { ok: false, message: 'Generation produced no usable image.', date: opts.date, category: opts.category }
+  }
+
+  // Encode WebP + thumbnail and write to R2.
+  const encoded = await processPngImage(imageBytes)
+  await Promise.all([
+    env.assets.put(`puzzles/${opts.date}/${opts.category}.${encoded.extension}`, encoded.image, {
+      httpMetadata: { contentType: encoded.contentType },
+    }),
+    env.assets.put(`puzzles/${opts.date}/${opts.category}_thumb.${encoded.extension}`, encoded.thumbnail, {
+      httpMetadata: { contentType: encoded.contentType },
+    }),
+    env.assets.delete(`temp/${opts.date}/${opts.category}.png`),
+  ])
+
+  // Merge the regenerated tile into the existing puzzle record (mirrors
+  // finalizeRecord's single-category merge), bumping the cache-buster.
+  const now = new Date().toISOString()
+  const cacheBuster = `?v=${Date.now()}`
+  const existing = await getPuzzleByDate(env.DB, opts.date)
+  const categories = (existing?.categories ?? {}) as Record<PuzzleCategory, PuzzleAsset>
+  const imageKey = `puzzles/${opts.date}/${opts.category}.webp`
+  const thumbKey = `puzzles/${opts.date}/${opts.category}_thumb.webp`
+  categories[opts.category] = {
+    imageKey,
+    imageUrl: toCdnUrl(imageKey) + cacheBuster,
+    contentType: 'image/webp',
+    fileName: `${opts.category}.webp`,
+    theme,
+    tags: keywords,
+    thumbnailKey: thumbKey,
+    thumbnailUrl: toCdnUrl(thumbKey) + cacheBuster,
+  }
+  const record: PuzzleRecord = {
+    date: opts.date,
+    difficulty: existing?.difficulty ?? 'adaptive',
+    categories,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  }
+  await savePuzzleRecord(env.DB, record)
+  await clearStuckRetry(env.DB, opts.date)
+
+  return {
+    ok: true,
+    message: `Synchronously regenerated ${opts.category} for ${opts.date} in ${usedAttempts} attempt(s) (gate: ${gateReason}).`,
+    date: opts.date,
+    category: opts.category,
+    theme,
+    attempts: usedAttempts,
+    gate: gateReason,
+    imageUrl: toCdnUrl(imageKey) + cacheBuster,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Phase 2: Poll / fetch / process (periodic cron, one step per invocation)
 // ---------------------------------------------------------------------------
 
@@ -387,7 +605,9 @@ export async function handleBatchPoll(
       // (a healthy batch starts within minutes). Drop it and resubmit the same
       // date immediately rather than waiting out the 24h SLA. Only escalate to
       // an email once a resubmit ALSO sticks — a one-off hiccup self-heals.
-      if (succeeded === 0 && ageHours > STUCK_NO_PROGRESS_HOURS) {
+      // The threshold scales with image count (1 img ~2h, 5 imgs ~6h).
+      const imageCount = (job.requestedCategories ?? CATEGORIES).length
+      if (succeeded === 0 && ageHours > stuckThresholdHours(imageCount)) {
         const retryCount = await bumpStuckRetry(env.DB, job.targetDate)
         await deleteBatchJob(env.DB, job.batchName)
         const resub = await handleBatchSubmit(env, { date: job.targetDate, force: true })
@@ -473,30 +693,13 @@ export async function handleBatchPoll(
       if (!skipForBorder && image.category === 'diamond') {
         const cAttempts = complexityFailures[image.category] ?? 0
         if (cAttempts < COMPLEXITY_REGEN_LIMIT) {
-          try {
-            const analysis = detectTooSimpleDiamond(image.imageBytes)
-            if (analysis.tooSimple) {
-              complexityFailures[image.category] = cAttempts + 1
-              skipForComplexity = true
-              console.warn(
-                `[complexity] ${job.targetDate}/diamond too simple (largest ${(analysis.largestRegionFraction * 100).toFixed(0)}%, ${analysis.regionCount} regions, big65 ${(analysis.bigRegionShare * 100).toFixed(0)}%) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
-              )
-            } else if (env.GOOGLE_AI_API_KEY) {
-              // Metrics pass — but does the quantized result actually look like a
-              // coherent picture, or did it dissolve into mosaic/lattice noise?
-              // Region stats can't tell; ask Gemini vision about the render.
-              const png = renderQuantizedPng(analysis.grid, analysis.palette, analysis.cols, analysis.rows)
-              const verdict = await judgeDiamondCoherence(env.GOOGLE_AI_API_KEY, png, env.DIAMOND_VISION_MODEL || undefined)
-              if (verdict.regen) {
-                complexityFailures[image.category] = cAttempts + 1
-                skipForComplexity = true
-                console.warn(
-                  `[complexity] ${job.targetDate}/diamond looks incoherent (vision ${verdict.score}/10: ${verdict.reason}) — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
-                )
-              }
-            }
-          } catch (err) {
-            console.warn('[complexity] check failed for diamond', err)
+          const gate = await diamondNeedsRegen(env, image.imageBytes)
+          if (gate.regen) {
+            complexityFailures[image.category] = cAttempts + 1
+            skipForComplexity = true
+            console.warn(
+              `[complexity] ${job.targetDate}/diamond ${gate.reason} — skipping temp for regen (attempt ${cAttempts + 1}/${COMPLEXITY_REGEN_LIMIT})`,
+            )
           }
         } else {
           console.warn(`[complexity] ${job.targetDate}/diamond hit regen limit (${COMPLEXITY_REGEN_LIMIT}), accepting image`)
@@ -914,6 +1117,16 @@ export async function cancelBatchJob(
     if (!existing) {
       return { ok: false, message: `No batch job found with id ${opts.batchName}.` }
     }
+    // Best-effort: ask Gemini to actually stop a still-running job (deleting
+    // only the local row leaves it running/billing on Google's side). Swallow
+    // failures — cancel is best-effort and the local cleanup must still happen.
+    if (env.GOOGLE_AI_API_KEY && existing.phase === 'submitted') {
+      try {
+        await cancelImageBatch(env.GOOGLE_AI_API_KEY, opts.batchName)
+      } catch (err) {
+        console.warn(`[cancel] Gemini-side cancel failed for ${opts.batchName}`, err)
+      }
+    }
     await deleteBatchJob(env.DB, opts.batchName)
     for (const category of existing.requestedCategories ?? CATEGORIES) {
       try {
@@ -931,6 +1144,13 @@ export async function cancelBatchJob(
       return { ok: false, message: `No batch job queued for ${opts.targetDate}.` }
     }
     for (const job of existingJobs) {
+      if (env.GOOGLE_AI_API_KEY && job.phase === 'submitted') {
+        try {
+          await cancelImageBatch(env.GOOGLE_AI_API_KEY, job.batchName)
+        } catch (err) {
+          console.warn(`[cancel] Gemini-side cancel failed for ${job.batchName}`, err)
+        }
+      }
       await deleteBatchJob(env.DB, job.batchName)
       for (const category of job.requestedCategories ?? CATEGORIES) {
         try {

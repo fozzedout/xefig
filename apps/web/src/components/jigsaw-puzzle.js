@@ -416,11 +416,16 @@ export class JigsawPuzzle {
       // paddings, and it can't drift when the stylesheet changes.
       // Undercounting the reserve here is exactly what clipped the bottom
       // row off-screen.
+      //
+      // Classic desktop scrollbars appear only after pieces mount and the
+      // tray overflows horizontally. getViewLayout later measures that larger
+      // carousel bottom, so reserve the scrollbar thickness here up front.
       const carouselBottom = this.carousel
         ? this.carousel.getBoundingClientRect().bottom
         : 0
+      const scrollbarReserve = this.getScrollbarThickness('horizontal')
       var availableWidth = Math.max(280, containerWidth)
-      var availableHeight = Math.max(220, viewportHeight - carouselBottom - saiBottom)
+      var availableHeight = Math.max(220, viewportHeight - carouselBottom - saiBottom - scrollbarReserve)
     }
     const maxWidth = availableWidth
     const maxHeight = availableHeight
@@ -455,6 +460,21 @@ export class JigsawPuzzle {
     const val = el.offsetHeight
     el.remove()
     return val
+  }
+
+  getScrollbarThickness(axis) {
+    const el = document.createElement('div')
+    el.className = 'jigsaw-scrollbar-probe'
+    el.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden;pointer-events:none'
+    const inner = document.createElement('div')
+    inner.style.cssText = 'width:200px;height:200px'
+    el.append(inner)
+    document.body.append(el)
+    const thickness = axis === 'horizontal'
+      ? el.offsetHeight - el.clientHeight
+      : el.offsetWidth - el.clientWidth
+    el.remove()
+    return Math.max(0, thickness)
   }
 
 
