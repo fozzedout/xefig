@@ -27,7 +27,8 @@
       // so the page renders in the correct theme on first paint (no
       // light→dark or dark→light flash). Reads the user's saved
       // preference; resolves "auto" via prefers-color-scheme. Sets
-      // data-theme on <html> which all theming CSS keys off.
+      // data-theme on <html> which all theming CSS keys off; pre-set the
+      // dark stage for direct demo game loads before the first paint.
       (function(){
         try{
           var pref = localStorage.getItem('xefig:theme:v1') || 'auto';
@@ -36,6 +37,7 @@
             resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
           document.documentElement.setAttribute('data-theme', resolved);
+          if (new URLSearchParams(location.search).has('demo')) document.documentElement.setAttribute('data-stage', 'dark');
           var meta = document.getElementById('meta-theme-color');
           if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0f' : '#f4f7fb');
         }catch(e){

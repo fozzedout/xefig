@@ -2584,6 +2584,7 @@ function renderLauncher() {
       // date and then synthesise a click on the requested mode slice
       // — so the launcher is the only entry point that touches this.
       const demo = await loadDemoConfig()
+      if (!(demo?.area && demo.modeSlug)) syncStageAttr()
       // Desktop shell: a selected curated area pins the launcher to its
       // date; otherwise load today (or the ?demo harness date). Then sync
       // the rail's highlight to the play page + current area.
@@ -2631,6 +2632,7 @@ function renderLauncher() {
         requestAnimationFrame(() => {
           const slice = container.querySelector(`.slice[data-mode="${demo.modeSlug}"]`)
           if (!slice) {
+            syncStageAttr()
             console.warn('[demo] no slice for mode', demo.modeSlug)
           } else {
             // The launcher's click handler is two-stage: a click on an
@@ -2687,6 +2689,7 @@ function renderLauncher() {
         setTimeout(triggerPrefetch, 800)
       }
     } catch {
+      syncStageAttr()
       container.innerHTML = `
         <div style="flex:1;display:grid;place-items:center;color:rgba(232,230,224,0.5);font-size:0.9rem;">
           Failed to load today's puzzles.
@@ -7296,6 +7299,12 @@ const NAV_HTML = `
 `
 
 let currentPage = 'play'
+// data-stage="dark" on <html> denotes the dark game view; #status-tint uses it for colour.
+function setCurrentPage(name) { currentPage = name; syncStageAttr() }
+function syncStageAttr() {
+  if (currentPage === 'game') document.documentElement.setAttribute('data-stage', 'dark')
+  else document.documentElement.removeAttribute('data-stage')
+}
 let archiveRendered = false
 let settingsRendered = false
 let dayRolloverDate = getIsoDate(new Date())
@@ -7396,7 +7405,7 @@ function initAppShell() {
 
   function switchPage(pageName) {
     if (pageName === currentPage) return
-    currentPage = pageName
+    setCurrentPage(pageName)
 
     // If coming back from game, clean up
     if (puzzle) destroyPuzzle()
@@ -7435,7 +7444,7 @@ function initAppShell() {
 }
 
 function showGamePage() {
-  currentPage = 'game'
+  setCurrentPage('game')
   document.querySelector('#topNav').classList.add('hidden')
   // Desktop shell: puzzles play full-bleed — hide the rail (it returns on
   // exit, when switchPage clears shell-game).

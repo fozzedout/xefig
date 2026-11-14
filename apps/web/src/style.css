@@ -118,22 +118,49 @@ body {
   background: #0a0a0f;
 }
 
-/* Status-bar tint strip (see index.html). Colour mirrors html/body and the
-   meta theme-color written by the theme bootstrap / applyTheme():
-   #0a0a0f dark, var(--bg) = #f4f7fb light. z-index sits above every
-   full-screen overlay (max 10000) so it is always the sampled element and
-   no translucent or blurred surface shows under the status bar. Hidden by
-   default (Safari still samples it; nothing paints on desktop). */
+/* Status-bar tint strip (see index.html). Colour follows the surface beneath:
+   theme background on normal pages, #0a0a0f for data-stage="dark" games.
+   setCurrentPage sets the stage; the head bootstrap pre-sets it for ?demo=
+   direct loads. The strip sits above overlays so Safari samples its opaque,
+   solid colour. Hidden by default (Safari still samples it on desktop). */
 #status-tint {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 11px;
   z-index: 100000;
-  background-color: #0a0a0f;
+  --status-base: #0a0a0f;
+  background-color: var(--status-base);
+  transition: --status-dim 0.2s ease;
   pointer-events: none;
   visibility: hidden;
 }
-:root[data-theme="light"] #status-tint { background-color: var(--bg); }
+:root[data-theme="light"] #status-tint { --status-base: var(--bg); }
+:root[data-stage="dark"] #status-tint { --status-base: #0a0a0f; }
+
+@property --status-dim { syntax: '<number>'; inherits: false; initial-value: 0; }
+
+/* The strip sits above scrims, so paint their composited colour opaquely
+   instead of showing an undimmed band. Add any new full-screen scrim to
+   this list to avoid that cosmetic band. On close the colour snaps back
+   immediately as this rule stops matching, while the overlay fades out for
+   0.2s: a known cosmetic limitation. Higher scrim alphas win. */
+:root:has(.completion-overlay.is-visible) #status-tint { --status-dim: 0.5; }
+:root:has(.more-sheet-overlay.is-visible) #status-tint,
+:root:has(.install-guide-overlay.is-visible) #status-tint { --status-dim: 0.55; }
+:root:has(.day-detail-overlay.open) #status-tint,
+:root:has(.year-picker.open) #status-tint { --status-dim: 0.6; }
+:root:has(.unfinished-overlay.is-visible) #status-tint { --status-dim: 0.62; }
+:root:has(.sync-conflict-overlay) #status-tint { --status-dim: 0.7; }
+
+:root:has(.completion-overlay.is-visible) #status-tint,
+:root:has(.more-sheet-overlay.is-visible) #status-tint,
+:root:has(.install-guide-overlay.is-visible) #status-tint,
+:root:has(.day-detail-overlay.open) #status-tint,
+:root:has(.year-picker.open) #status-tint,
+:root:has(.unfinished-overlay.is-visible) #status-tint,
+:root:has(.sync-conflict-overlay) #status-tint {
+  background-color: color-mix(in srgb, var(--status-base), #000 calc(var(--status-dim) * 100%));
+}
 
 /* Touch portrait (phones): paint it and cover the whole top inset so the
    strip under the status bar is solid theme colour. Landscape stays hidden:
