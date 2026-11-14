@@ -78,6 +78,8 @@
     </script>
   </head>
   <body>
+    <!-- Status-bar tint strip (iOS 26). Safari samples the background-color of a fixed element at the very top (>=80% wide, >4px tall) for its status bar; backdrop-filter and gradients are ignored. Lives outside #app because initAppShell() replaces #app's contents. Styles: #status-tint in src/style.css. -->
+    <div id="status-tint" aria-hidden="true"></div>
     <div id="app">
       <!-- Pre-rendered shell: replaced by initAppShell() once the module loads.
            Background + text track prefers-color-scheme so the flash before

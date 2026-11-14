@@ -118,6 +118,30 @@ body {
   background: #0a0a0f;
 }
 
+/* Status-bar tint strip (see index.html). Colour mirrors html/body and the
+   meta theme-color written by the theme bootstrap / applyTheme():
+   #0a0a0f dark, var(--bg) = #f4f7fb light. z-index sits above every
+   full-screen overlay (max 10000) so it is always the sampled element and
+   no translucent or blurred surface shows under the status bar. Hidden by
+   default (Safari still samples it; nothing paints on desktop). */
+#status-tint {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 11px;
+  z-index: 100000;
+  background-color: #0a0a0f;
+  pointer-events: none;
+  visibility: hidden;
+}
+:root[data-theme="light"] #status-tint { background-color: var(--bg); }
+
+/* Touch portrait (phones): paint it and cover the whole top inset so the
+   strip under the status bar is solid theme colour. Landscape stays hidden:
+   iPhone hides the status bar there and the games use the top edge. */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  #status-tint { visibility: visible; height: max(11px, var(--sai-top)); }
+}
+
 .eyebrow {
   margin: 0;
   font-size: 0.74rem;
